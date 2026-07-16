@@ -1,0 +1,27 @@
+kind = "web"
+previewPath = "/"
+title = "BSCH - نظام إدارة الحالات الطبية"
+version = "1.0.0"
+id = "artifacts/bsch"
+router = "path"
+
+[[services]]
+name = "web"
+paths = [ "/" ]
+localPort = 18429
+
+[services.development]
+run = "pnpm --filter @workspace/bsch run dev"
+
+[services.production]
+build = [ "pnpm", "--filter", "@workspace/bsch", "run", "build" ]
+serve = "static"
+publicDir = "artifacts/bsch/dist/public"
+
+[[services.production.rewrites]]
+from = "/*"
+to = "/index.html"
+
+[services.env]
+PORT = "18429"
+BASE_PATH = "/"

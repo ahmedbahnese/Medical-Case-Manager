@@ -1,6 +1,6 @@
-# [Project name]
+# BSCH — نظام إدارة الحالات الطبية
 
-_Replace the heading above with the project's name, and this line with one sentence describing what this app does for users._
+نظام متكامل لإدارة حالات المرضى في غرف الحضانة والعناية المركزة بمستشفى الأطفال المتخصص بالبحيرة.
 
 ## Run & Operate
 

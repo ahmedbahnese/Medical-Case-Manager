@@ -3,20 +3,32 @@ info:
   # Do not change the title, if the title changes, the import paths will be broken
   title: Api
   version: 0.1.0
-  description: API specification
+  description: BSCH Medical Case Management System API
 servers:
   - url: /api
     description: Base API path
 tags:
   - name: health
     description: Health operations
+  - name: auth
+    description: Authentication
+  - name: departments
+    description: Medical departments
+  - name: cases
+    description: Medical cases
+  - name: waiting
+    description: Waiting cases
+  - name: dashboard
+    description: Dashboard statistics
+  - name: backups
+    description: Data backups
+
 paths:
   /healthz:
     get:
       operationId: healthCheck
       tags: [health]
       summary: Health check
-      description: Returns server health status
       responses:
         "200":
           description: Healthy
@@ -24,6 +36,400 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/HealthStatus"
+
+  /auth/me:
+    get:
+      operationId: getMe
+      tags: [auth]
+      summary: Get current session info
+      responses:
+        "200":
+          description: Session info
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/SessionInfo"
+
+  /auth/founder-login:
+    post:
+      operationId: founderLogin
+      tags: [auth]
+      summary: Founder login with password
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/FounderLoginInput"
+      responses:
+        "200":
+          description: Login successful
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/SessionInfo"
+        "401":
+          description: Invalid password
+
+  /auth/logout:
+    post:
+      operationId: logout
+      tags: [auth]
+      summary: Logout
+      responses:
+        "200":
+          description: Logged out
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+                required: [success]
+
+  /departments:
+    get:
+      operationId: getDepartments
+      tags: [departments]
+      summary: List all departments
+      responses:
+        "200":
+          description: List of departments
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/Department"
+
+  /departments/{id}:
+    get:
+      operationId: getDepartment
+      tags: [departments]
+      summary: Get department with its active cases count
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+      responses:
+        "200":
+          description: Department detail
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/DepartmentDetail"
+        "404":
+          description: Not found
+
+  /cases:
+    get:
+      operationId: getCases
+      tags: [cases]
+      summary: Search and list medical cases
+      parameters:
+        - name: departmentId
+          in: query
+          schema:
+            type: ["integer", "null"]
+        - name: patientName
+          in: query
+          schema:
+            type: ["string", "null"]
+        - name: nationalId
+          in: query
+          schema:
+            type: ["string", "null"]
+        - name: fileNumber
+          in: query
+          schema:
+            type: ["string", "null"]
+        - name: status
+          in: query
+          schema:
+            type: ["string", "null"]
+            enum: [active, recovering, discharged, critical, null]
+        - name: artificialRespiration
+          in: query
+          schema:
+            type: ["string", "null"]
+            enum: [high_frequency, vent, cpap, standby, no, null]
+      responses:
+        "200":
+          description: List of cases
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/MedicalCase"
+
+    post:
+      operationId: createCase
+      tags: [cases]
+      summary: Create a new medical case
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/CaseInput"
+      responses:
+        "201":
+          description: Case created
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/MedicalCase"
+
+  /cases/respiration:
+    get:
+      operationId: getCasesOnRespiration
+      tags: [cases]
+      summary: Get all cases currently on artificial respiration
+      responses:
+        "200":
+          description: Cases on artificial respiration
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/MedicalCase"
+
+  /cases/bulk-import:
+    post:
+      operationId: bulkImportCases
+      tags: [cases]
+      summary: AI-assisted bulk import of cases from free text
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/BulkImportInput"
+      responses:
+        "200":
+          description: Imported cases
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  parsed:
+                    type: array
+                    items:
+                      $ref: "#/components/schemas/ParsedCaseItem"
+                  imported:
+                    type: integer
+                required: [parsed, imported]
+
+  /cases/{id}:
+    get:
+      operationId: getCase
+      tags: [cases]
+      summary: Get a single medical case
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+      responses:
+        "200":
+          description: Case detail
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/MedicalCase"
+        "404":
+          description: Not found
+
+    patch:
+      operationId: updateCase
+      tags: [cases]
+      summary: Update a medical case
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/CaseUpdate"
+      responses:
+        "200":
+          description: Updated case
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/MedicalCase"
+
+    delete:
+      operationId: deleteCase
+      tags: [cases]
+      summary: Delete a medical case
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+      responses:
+        "200":
+          description: Deleted
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+                required: [success]
+
+  /waiting-cases:
+    get:
+      operationId: getWaitingCases
+      tags: [waiting]
+      summary: List waiting cases
+      parameters:
+        - name: section
+          in: query
+          schema:
+            type: ["string", "null"]
+            enum: [servo, reception, null]
+        - name: status
+          in: query
+          schema:
+            type: ["string", "null"]
+            enum: [waiting, admitted, cancelled, null]
+      responses:
+        "200":
+          description: List of waiting cases
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/WaitingCase"
+
+    post:
+      operationId: createWaitingCase
+      tags: [waiting]
+      summary: Create a waiting case
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/WaitingCaseInput"
+      responses:
+        "201":
+          description: Waiting case created
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/WaitingCase"
+
+  /waiting-cases/{id}:
+    patch:
+      operationId: updateWaitingCase
+      tags: [waiting]
+      summary: Update a waiting case
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/WaitingCaseUpdate"
+      responses:
+        "200":
+          description: Updated waiting case
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/WaitingCase"
+
+    delete:
+      operationId: deleteWaitingCase
+      tags: [waiting]
+      summary: Delete a waiting case
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+      responses:
+        "200":
+          description: Deleted
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+                required: [success]
+
+  /dashboard/stats:
+    get:
+      operationId: getDashboardStats
+      tags: [dashboard]
+      summary: Get overall dashboard statistics
+      responses:
+        "200":
+          description: Dashboard statistics
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/DashboardStats"
+
+  /backups:
+    get:
+      operationId: getBackups
+      tags: [backups]
+      summary: List backups
+      responses:
+        "200":
+          description: List of backups
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/Backup"
+
+    post:
+      operationId: createBackup
+      tags: [backups]
+      summary: Create a backup
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/BackupInput"
+      responses:
+        "201":
+          description: Backup created
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Backup"
+
 components:
   schemas:
     HealthStatus:
@@ -31,6 +437,397 @@ components:
       properties:
         status:
           type: string
-      required:
-        - status
+      required: [status]
 
+    SessionInfo:
+      type: object
+      properties:
+        isAuthenticated:
+          type: boolean
+        isFounder:
+          type: boolean
+        name:
+          type: ["string", "null"]
+      required: [isAuthenticated, isFounder]
+
+    FounderLoginInput:
+      type: object
+      properties:
+        password:
+          type: string
+      required: [password]
+
+    Department:
+      type: object
+      properties:
+        id:
+          type: integer
+        name:
+          type: string
+        code:
+          type: string
+        description:
+          type: ["string", "null"]
+        capacity:
+          type: integer
+        departmentType:
+          type: string
+          enum: [intensive_care_high, intensive_care_medium, picu, incubator_a, incubator_b, incubator_c]
+        activeCasesCount:
+          type: integer
+        createdAt:
+          type: string
+          format: date-time
+      required: [id, name, code, capacity, departmentType, activeCasesCount, createdAt]
+
+    DepartmentDetail:
+      type: object
+      properties:
+        id:
+          type: integer
+        name:
+          type: string
+        code:
+          type: string
+        description:
+          type: ["string", "null"]
+        capacity:
+          type: integer
+        departmentType:
+          type: string
+          enum: [intensive_care_high, intensive_care_medium, picu, incubator_a, incubator_b, incubator_c]
+        activeCasesCount:
+          type: integer
+        cases:
+          type: array
+          items:
+            $ref: "#/components/schemas/MedicalCase"
+        createdAt:
+          type: string
+          format: date-time
+      required: [id, name, code, capacity, departmentType, activeCasesCount, cases, createdAt]
+
+    MedicalCase:
+      type: object
+      properties:
+        id:
+          type: integer
+        patientName:
+          type: string
+        departmentId:
+          type: integer
+        departmentName:
+          type: ["string", "null"]
+        age:
+          type: ["string", "null"]
+        diagnosis:
+          type: ["string", "null"]
+        symptoms:
+          type: ["string", "null"]
+        treatment:
+          type: ["string", "null"]
+        notes:
+          type: ["string", "null"]
+        parentName:
+          type: ["string", "null"]
+        parentPhone:
+          type: ["string", "null"]
+        nationalId:
+          type: ["string", "null"]
+        fileNumber:
+          type: ["string", "null"]
+        caseType:
+          type: string
+          enum: [intensive_care_high, intensive_care_medium, picu, incubator]
+        artificialRespiration:
+          type: string
+          enum: [high_frequency, vent, cpap, standby, no]
+        status:
+          type: string
+          enum: [active, recovering, discharged, critical]
+        admissionDate:
+          type: string
+          format: date-time
+        dischargeDate:
+          type: ["string", "null"]
+          format: date-time
+        createdAt:
+          type: string
+          format: date-time
+        updatedAt:
+          type: string
+          format: date-time
+      required: [id, patientName, departmentId, caseType, artificialRespiration, status, admissionDate, createdAt, updatedAt]
+
+    CaseInput:
+      type: object
+      properties:
+        patientName:
+          type: string
+        departmentId:
+          type: integer
+        age:
+          type: string
+        diagnosis:
+          type: string
+        symptoms:
+          type: string
+        treatment:
+          type: string
+        notes:
+          type: string
+        parentName:
+          type: string
+        parentPhone:
+          type: string
+        nationalId:
+          type: string
+        fileNumber:
+          type: string
+        caseType:
+          type: string
+          enum: [intensive_care_high, intensive_care_medium, picu, incubator]
+        artificialRespiration:
+          type: string
+          enum: [high_frequency, vent, cpap, standby, no]
+        status:
+          type: string
+          enum: [active, recovering, discharged, critical]
+      required: [patientName, departmentId]
+
+    CaseUpdate:
+      type: object
+      properties:
+        patientName:
+          type: string
+        departmentId:
+          type: integer
+        age:
+          type: string
+        diagnosis:
+          type: string
+        symptoms:
+          type: string
+        treatment:
+          type: string
+        notes:
+          type: string
+        parentName:
+          type: string
+        parentPhone:
+          type: string
+        nationalId:
+          type: string
+        fileNumber:
+          type: string
+        caseType:
+          type: string
+          enum: [intensive_care_high, intensive_care_medium, picu, incubator]
+        artificialRespiration:
+          type: string
+          enum: [high_frequency, vent, cpap, standby, no]
+        status:
+          type: string
+          enum: [active, recovering, discharged, critical]
+        dischargeDate:
+          type: ["string", "null"]
+          format: date-time
+
+    BulkImportInput:
+      type: object
+      properties:
+        text:
+          type: string
+          description: Free-form Arabic text containing patient data to parse with AI
+        departmentId:
+          type: integer
+          description: Default department to assign if not specified in text
+      required: [text]
+
+    ParsedCaseItem:
+      type: object
+      properties:
+        patientName:
+          type: string
+        age:
+          type: ["string", "null"]
+        diagnosis:
+          type: ["string", "null"]
+        parentPhone:
+          type: ["string", "null"]
+        nationalId:
+          type: ["string", "null"]
+        notes:
+          type: ["string", "null"]
+        artificialRespiration:
+          type: ["string", "null"]
+        departmentId:
+          type: ["integer", "null"]
+      required: [patientName]
+
+    WaitingCase:
+      type: object
+      properties:
+        id:
+          type: integer
+        patientName:
+          type: string
+        age:
+          type: ["string", "null"]
+        diagnosis:
+          type: ["string", "null"]
+        parentPhone:
+          type: ["string", "null"]
+        nationalId:
+          type: ["string", "null"]
+        careType:
+          type: string
+          enum: [intensive_care_high, intensive_care_medium, picu, incubator]
+        centralRoomRequired:
+          type: boolean
+        centralRoomCode:
+          type: ["string", "null"]
+        artificialRespiration:
+          type: string
+          enum: [high_frequency, vent, cpap, standby, no]
+        section:
+          type: string
+          enum: [servo, reception]
+        status:
+          type: string
+          enum: [waiting, admitted, cancelled]
+        createdAt:
+          type: string
+          format: date-time
+        updatedAt:
+          type: string
+          format: date-time
+      required: [id, patientName, careType, centralRoomRequired, artificialRespiration, section, status, createdAt, updatedAt]
+
+    WaitingCaseInput:
+      type: object
+      properties:
+        patientName:
+          type: string
+        age:
+          type: string
+        diagnosis:
+          type: string
+        parentPhone:
+          type: string
+        nationalId:
+          type: string
+        careType:
+          type: string
+          enum: [intensive_care_high, intensive_care_medium, picu, incubator]
+        centralRoomRequired:
+          type: boolean
+        centralRoomCode:
+          type: string
+        artificialRespiration:
+          type: string
+          enum: [high_frequency, vent, cpap, standby, no]
+        section:
+          type: string
+          enum: [servo, reception]
+      required: [patientName, careType]
+
+    WaitingCaseUpdate:
+      type: object
+      properties:
+        patientName:
+          type: string
+        age:
+          type: string
+        diagnosis:
+          type: string
+        parentPhone:
+          type: string
+        nationalId:
+          type: string
+        careType:
+          type: string
+          enum: [intensive_care_high, intensive_care_medium, picu, incubator]
+        centralRoomRequired:
+          type: boolean
+        centralRoomCode:
+          type: string
+        artificialRespiration:
+          type: string
+          enum: [high_frequency, vent, cpap, standby, no]
+        section:
+          type: string
+          enum: [servo, reception]
+        status:
+          type: string
+          enum: [waiting, admitted, cancelled]
+
+    DashboardStats:
+      type: object
+      properties:
+        totalCases:
+          type: integer
+        activeCases:
+          type: integer
+        criticalCases:
+          type: integer
+        waitingCases:
+          type: integer
+        onRespiration:
+          type: integer
+        departmentStats:
+          type: array
+          items:
+            $ref: "#/components/schemas/DepartmentStat"
+        respirationBreakdown:
+          type: array
+          items:
+            $ref: "#/components/schemas/RespirationStat"
+      required: [totalCases, activeCases, criticalCases, waitingCases, onRespiration, departmentStats, respirationBreakdown]
+
+    DepartmentStat:
+      type: object
+      properties:
+        departmentId:
+          type: integer
+        departmentName:
+          type: string
+        capacity:
+          type: integer
+        activeCases:
+          type: integer
+        criticalCases:
+          type: integer
+      required: [departmentId, departmentName, capacity, activeCases, criticalCases]
+
+    RespirationStat:
+      type: object
+      properties:
+        type:
+          type: string
+        count:
+          type: integer
+        label:
+          type: string
+      required: [type, count, label]
+
+    Backup:
+      type: object
+      properties:
+        id:
+          type: integer
+        backupName:
+          type: string
+        recordCount:
+          type: integer
+        createdAt:
+          type: string
+          format: date-time
+      required: [id, backupName, recordCount, createdAt]
+
+    BackupInput:
+      type: object
+      properties:
+        backupName:
+          type: string
+      required: [backupName]
