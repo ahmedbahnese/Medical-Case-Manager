@@ -24,6 +24,13 @@ export const caseStatusEnum = pgEnum("case_status", [
   "critical",
 ]);
 
+export const dischargeReasonEnum = pgEnum("discharge_reason", [
+  "improved",
+  "request",
+  "transferred",
+  "death",
+]);
+
 export const medicalCasesTable = pgTable("medical_cases", {
   id: serial("id").primaryKey(),
   patientName: text("patient_name").notNull(),
@@ -40,6 +47,10 @@ export const medicalCasesTable = pgTable("medical_cases", {
   caseType: caseTypeEnum("case_type").notNull().default("intensive_care_high"),
   artificialRespiration: artificialRespirationEnum("artificial_respiration").notNull().default("no"),
   status: caseStatusEnum("status").notNull().default("active"),
+  mobe: text("mobe"),
+  ventilationStartDate: timestamp("ventilation_start_date"),
+  ventilationEndDate: timestamp("ventilation_end_date"),
+  dischargeReason: dischargeReasonEnum("discharge_reason"),
   admissionDate: timestamp("admission_date").defaultNow().notNull(),
   dischargeDate: timestamp("discharge_date"),
   createdAt: timestamp("created_at").defaultNow().notNull(),

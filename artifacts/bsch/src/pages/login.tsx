@@ -6,14 +6,12 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
-import { useToast } from "@/components/ui/use-toast";
+import { toast } from "sonner";
 
 export default function Login() {
   const [password, setPassword] = useState("");
   const [, setLocation] = useLocation();
   const login = useFounderLogin();
-  const { toast } = useToast();
-
   const handleLogin = (e: React.FormEvent) => {
     e.preventDefault();
     if (!password) return;
@@ -25,11 +23,7 @@ export default function Login() {
           setLocation("/dashboard");
         },
         onError: () => {
-          toast({
-            title: "خطأ في تسجيل الدخول",
-            description: "كلمة المرور غير صحيحة",
-            variant: "destructive"
-          });
+          toast.error("كلمة المرور غير صحيحة");
         }
       }
     );

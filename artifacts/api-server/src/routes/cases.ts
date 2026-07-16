@@ -10,10 +10,10 @@ import {
   DeleteCaseParams,
   BulkImportCasesBody,
 } from "@workspace/api-zod";
+import { logAction } from "./audit-logs";
 
 const router: IRouter = Router();
 
-// Helper to join with department name
 async function enrichCaseWithDepartment(c: typeof medicalCasesTable.$inferSelect) {
   const [dept] = await db
     .select({ name: departmentsTable.name })
@@ -96,8 +96,12 @@ router.post("/cases", async (req, res): Promise<void> => {
     return;
   }
 
-  const { patientName, departmentId, age, diagnosis, symptoms, treatment, notes,
-    parentName, parentPhone, nationalId, fileNumber, caseType, artificialRespiration, status } = parsed.data;
+  const {
+    patientName, departmentId, age, diagnosis, symptoms, treatment, notes,
+    parentName, parentPhone, nationalId, fileNumber, caseType, artificialRespiration, status
+  } = parsed.data;
+
+  const extraData = req.body as any;
 
   const [newCase] = await db.insert(medicalCasesTable).values({
     patientName,
@@ -114,7 +118,13 @@ router.post("/cases", async (req, res): Promise<void> => {
     caseType: (caseType as any) ?? "intensive_care_high",
     artificialRespiration: (artificialRespiration as any) ?? "no",
     status: (status as any) ?? "active",
+    mobe: extraData.mobe ?? null,
+    ventilationStartDate: extraData.ventilationStartDate ? new Date(extraData.ventilationStartDate) : null,
+    ventilationEndDate: extraData.ventilationEndDate ? new Date(extraData.ventilationEndDate) : null,
+    admissionDate: extraData.admissionDate ? new Date(extraData.admissionDate) : new Date(),
   }).returning();
+
+  await logAction("إضافة حالة", "case", newCase.id, patientName, `تم إضافة حالة جديدة للقسم رقم ${departmentId}`);
 
   const enriched = await enrichCaseWithDepartment(newCase);
   res.status(201).json(enriched);
@@ -128,11 +138,8 @@ router.post("/cases/bulk-import", async (req, res): Promise<void> => {
   }
 
   const { text, departmentId } = parsed.data;
-
-  // Parse Arabic text — extract case blocks separated by common delimiters
   const parsedCases = parseArabicCasesText(text, departmentId ?? null);
 
-  // If confirm=true in the body, actually save the cases
   const toSave: typeof parsedCases = (parsed.data as any).confirm === true ? parsedCases : [];
   let importedCount = 0;
 
@@ -169,25 +176,32 @@ function parseArabicCasesText(text: string, defaultDeptId: number | null | undef
     departmentId: number | null;
   }> = [];
 
-  // Split on line breaks, numbered lists, or dashes
   const lines = text.split(/\n+/).map((l) => l.trim()).filter(Boolean);
 
   let currentCase: (typeof results)[0] | null = null;
 
   for (const line of lines) {
-    // Detect start of a new case: a name-like line (no colon or special prefix)
-    const nameMatch = line.match(/^(?:\d+[.)]\s*)?([^\d:،,]{3,40})(?:$|[،,])/);
-    const phoneMatch = line.match(/(?:هاتف|تليفون|رقم|موبايل)[:\s]*([0-9+\-\s]{8,15})/i);
-    const ageMatch = line.match(/(?:العمر|عمره|عمرها|سن)[:\s]*([^\n,،]{1,20})/i);
-    const diagMatch = line.match(/(?:التشخيص|تشخيص|الحالة|مرض)[:\s]*([^\n]{3,100})/i);
+    // Check for structured data first before trying name detection
+    const phoneMatch = line.match(/(?:هاتف|تليفون|رقم|موبايل|تلفون)[:\s]*([0-9+\-\s]{8,15})/i);
+    const ageMatch = line.match(/(?:العمر|عمره|عمرها|سن|عمر)[:\s]*([^\n,،]{1,20})/i);
+    const diagMatch = line.match(/(?:التشخيص|تشخيص|الحالة|مرض|dx)[:\s]*([^\n]{3,150})/i);
     const natIdMatch = line.match(/(?:قومي|رقم قومي|هوية)[:\s]*(\d{10,14})/i);
-    const respMatch = line.match(/(?:تنفس|تنفس صناعي)[:\s]*([^\n،,]{3,30})/i);
+    const respMatchHF = /(?:تردد عالي|عالي التردد|HFO|HFOV|HF\b)/i.test(line);
+    const respMatchVent = /(?:فنت|تهوية آلية|Vent\b|MV\b|PCV)/i.test(line);
+    const respMatchCpap = /(?:CPAP|HFNC|سي باب)/i.test(line);
+    const respMatchStandby = /(?:استعداد|O2|أوكسجين)/i.test(line);
+    const hasResp = respMatchHF || respMatchVent || respMatchCpap || respMatchStandby;
 
-    if (nameMatch && !phoneMatch && !ageMatch && !diagMatch) {
-      // Save previous case
+    // Name line: numbered list item or line without structured markers
+    const isNameLine = /^(?:\d+[\.\-\)]\s*)?[\u0600-\u06FF\s]{3,}/.test(line)
+      && !phoneMatch && !ageMatch && !diagMatch && !natIdMatch && !hasResp
+      && line.length < 60;
+
+    if (isNameLine) {
       if (currentCase) results.push(currentCase);
+      const cleanName = line.replace(/^\d+[\.\-\)]\s*/, "").trim();
       currentCase = {
-        patientName: nameMatch[1].trim(),
+        patientName: cleanName,
         age: null,
         diagnosis: null,
         parentPhone: null,
@@ -203,25 +217,23 @@ function parseArabicCasesText(text: string, defaultDeptId: number | null | undef
       if (ageMatch) currentCase.age = ageMatch[1].trim();
       if (diagMatch) currentCase.diagnosis = diagMatch[1].trim();
       if (natIdMatch) currentCase.nationalId = natIdMatch[1].trim();
-      if (respMatch) {
-        const r = respMatch[1].toLowerCase();
-        if (r.includes("عالي") || r.includes("تردد")) currentCase.artificialRespiration = "high_frequency";
-        else if (r.includes("فنت") || r.includes("vent")) currentCase.artificialRespiration = "vent";
-        else if (r.includes("سي باب") || r.includes("cpap")) currentCase.artificialRespiration = "cpap";
-        else if (r.includes("استعداد")) currentCase.artificialRespiration = "standby";
-        else currentCase.artificialRespiration = "no";
+      if (hasResp && !currentCase.artificialRespiration) {
+        if (respMatchHF) currentCase.artificialRespiration = "high_frequency";
+        else if (respMatchVent) currentCase.artificialRespiration = "vent";
+        else if (respMatchCpap) currentCase.artificialRespiration = "cpap";
+        else if (respMatchStandby) currentCase.artificialRespiration = "standby";
       }
     }
   }
 
   if (currentCase) results.push(currentCase);
 
-  // Fallback: if no cases were parsed but text has content, treat whole text as one patient name
+  // Fallback: treat whole block as one patient
   if (results.length === 0 && text.trim().length > 0) {
     const firstLine = lines[0];
     if (firstLine) {
       results.push({
-        patientName: firstLine.replace(/^\d+[.)]\s*/, "").trim(),
+        patientName: firstLine.replace(/^\d+[\.\-\)]\s*/, "").trim(),
         age: null,
         diagnosis: null,
         parentPhone: null,
@@ -272,7 +284,34 @@ router.patch("/cases/:id", async (req, res): Promise<void> => {
     return;
   }
 
-  const updates: Record<string, unknown> = { ...body.data, updatedAt: new Date() };
+  const extraData = req.body as any;
+  const updates: Record<string, unknown> = {
+    ...body.data,
+    updatedAt: new Date(),
+  };
+
+  // Handle extra fields not in the Zod schema
+  if (extraData.mobe !== undefined) updates.mobe = extraData.mobe;
+  if (extraData.ventilationStartDate !== undefined) {
+    updates.ventilationStartDate = extraData.ventilationStartDate ? new Date(extraData.ventilationStartDate) : null;
+  }
+  if (extraData.ventilationEndDate !== undefined) {
+    updates.ventilationEndDate = extraData.ventilationEndDate ? new Date(extraData.ventilationEndDate) : null;
+  }
+  if (extraData.dischargeReason !== undefined) updates.dischargeReason = extraData.dischargeReason;
+  if (extraData.admissionDate !== undefined) {
+    updates.admissionDate = extraData.admissionDate ? new Date(extraData.admissionDate) : undefined;
+  }
+  if (extraData.departmentId !== undefined) {
+    updates.departmentId = parseInt(extraData.departmentId, 10);
+  }
+
+  // If discharging, set dischargeDate automatically
+  if (body.data.status === "discharged" && !extraData.dischargeDate) {
+    updates.dischargeDate = new Date();
+  } else if (extraData.dischargeDate !== undefined) {
+    updates.dischargeDate = extraData.dischargeDate ? new Date(extraData.dischargeDate) : null;
+  }
 
   const [updated] = await db
     .update(medicalCasesTable)
@@ -284,6 +323,9 @@ router.patch("/cases/:id", async (req, res): Promise<void> => {
     res.status(404).json({ error: "الحالة غير موجودة" });
     return;
   }
+
+  const action = body.data.status === "discharged" ? "تسجيل خروج" : "تعديل حالة";
+  await logAction(action, "case", updated.id, updated.patientName, JSON.stringify(body.data));
 
   const enriched = await enrichCaseWithDepartment(updated);
   res.json(enriched);
@@ -306,6 +348,8 @@ router.delete("/cases/:id", async (req, res): Promise<void> => {
     res.status(404).json({ error: "الحالة غير موجودة" });
     return;
   }
+
+  await logAction("حذف حالة", "case", deleted.id, deleted.patientName, "تم حذف الملف نهائياً");
 
   res.json({ success: true });
 });

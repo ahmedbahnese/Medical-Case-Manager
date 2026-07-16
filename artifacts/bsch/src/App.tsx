@@ -1,5 +1,4 @@
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
-import { Toaster } from '@/components/ui/toaster';
 import { Route, Switch, Router as WouterRouter, useLocation, Redirect } from 'wouter';
 import { useGetMe } from '@workspace/api-client-react';
 
@@ -16,6 +15,10 @@ import Search from '@/pages/search';
 import PrintReports from '@/pages/print-reports';
 import Backup from '@/pages/backup';
 import OccupancyReport from '@/pages/occupancy-report';
+import IncidentReport from '@/pages/incident-report';
+import Settings from '@/pages/settings';
+import DischargeHistory from '@/pages/discharge-history';
+import AuditLog from '@/pages/audit-log';
 
 const queryClient = new QueryClient();
 
@@ -48,7 +51,6 @@ function Router() {
 
   if (isLoading) return <div className="h-screen bg-background" />;
 
-  // Redirect to dashboard if logged in and on root
   if (user?.isAuthenticated && location === '/') {
     return <Redirect to="/dashboard" />;
   }
@@ -57,18 +59,30 @@ function Router() {
     <Switch>
       <Route path="/" component={Login} />
 
-      {/* Protected Routes */}
+      {/* Core */}
       <Route path="/dashboard"><ProtectedRoute component={Dashboard} /></Route>
       <Route path="/departments/:id"><ProtectedRoute component={DepartmentDetail} /></Route>
       <Route path="/add-case"><ProtectedRoute component={AddCase} /></Route>
       <Route path="/case/:id"><ProtectedRoute component={CaseDetail} /></Route>
       <Route path="/waiting-cases"><ProtectedRoute component={WaitingCases} /></Route>
       <Route path="/artificial-respiration"><ProtectedRoute component={RespirationList} /></Route>
+
+      {/* Import */}
       <Route path="/bulk-import"><ProtectedRoute component={BulkImport} /></Route>
-      <Route path="/advanced-search"><ProtectedRoute component={Search} /></Route>
-      <Route path="/print-reports"><ProtectedRoute component={PrintReports} /></Route>
-      <Route path="/backup"><ProtectedRoute component={Backup} /></Route>
+
+      {/* Reports */}
       <Route path="/occupancy-report"><ProtectedRoute component={OccupancyReport} /></Route>
+      <Route path="/print-reports"><ProtectedRoute component={PrintReports} /></Route>
+      <Route path="/incident-report"><ProtectedRoute component={IncidentReport} /></Route>
+
+      {/* Search & History */}
+      <Route path="/advanced-search"><ProtectedRoute component={Search} /></Route>
+      <Route path="/discharge-history"><ProtectedRoute component={DischargeHistory} /></Route>
+      <Route path="/audit-log"><ProtectedRoute component={AuditLog} /></Route>
+
+      {/* System */}
+      <Route path="/backup"><ProtectedRoute component={Backup} /></Route>
+      <Route path="/settings"><ProtectedRoute component={Settings} /></Route>
 
       <Route><ProtectedRoute component={NotFound} /></Route>
     </Switch>
@@ -81,7 +95,6 @@ function App() {
       <WouterRouter base={import.meta.env.BASE_URL.replace(/\/$/, '')}>
         <Router />
       </WouterRouter>
-      <Toaster />
     </QueryClientProvider>
   );
 }

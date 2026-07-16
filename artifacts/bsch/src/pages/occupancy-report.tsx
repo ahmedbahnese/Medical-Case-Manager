@@ -1,362 +1,212 @@
-import { useState, useEffect } from "react";
-import { useGetDashboardStats } from "@workspace/api-client-react";
-import { ClipboardList, Printer, RefreshCw } from "lucide-react";
+import { useState } from "react";
+import { format } from "date-fns";
+import { ar } from "date-fns/locale";
+import {
+  useGetDashboardStats,
+  useGetDepartments,
+  useGetCases,
+  GetCasesParams,
+} from "@workspace/api-client-react";
+import { Printer, ZoomIn, ZoomOut } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { Label } from "@/components/ui/label";
+import { Slider } from "@/components/ui/slider";
+import { Card, CardContent } from "@/components/ui/card";
+import { LABELS, translate, calcStayLabel } from "@/lib/constants";
 
-// Fixed report rows — beds come from DB, equipment is manual
-const REPORT_ROWS: { name: string; total: number; dbKey?: string }[] = [
-  { name: "حضانة حديث الولادة",    total: 43, dbKey: "incubator" },
-  { name: "حضانات البيكو",         total: 12, dbKey: "picu" },
-  { name: "أجهزة تنفس الحضانات",   total: 9 },
-  { name: "أجهزة تنفس البيكو",     total: 4 },
-  { name: "عالي التردد",           total: 4 },
-  { name: "أسرة العناية المركزة",  total: 10, dbKey: "icu_high" },
-  { name: "أسرة العناية المتوسطة", total: 6,  dbKey: "icu_med" },
-  { name: "أجهزة تنفس العناية",   total: 10 },
-  { name: "أسرة القسم الداخلي",    total: 24 },
-];
+const DAYS_AR = ["الأحد", "الاثنين", "الثلاثاء", "الأربعاء", "الخميس", "الجمعة", "السبت"];
 
-const SHIFTS = [
-  { key: "morning", label: "الفترة الصباحية",     short: "صباح" },
-  { key: "noon",    label: "المسائية ٤م",          short: "٤ م" },
-  { key: "night",   label: "المسائية ١١م",         short: "١١ م" },
-];
-
-type RowData = { occupied: string; standby: string; broken: string };
-type ShiftData = Record<number, RowData>;
-type AllData = Record<string, ShiftData>;
-
-const emptyRow = (): RowData => ({ occupied: "", standby: "", broken: "" });
-const emptyShift = (): ShiftData =>
-  Object.fromEntries(REPORT_ROWS.map((_, i) => [i, emptyRow()]));
-
-const STORAGE_KEY = "bsch_occupancy_report";
-
-function loadSaved(): AllData {
-  try {
-    const raw = localStorage.getItem(STORAGE_KEY);
-    if (raw) return JSON.parse(raw);
-  } catch { /**/ }
-  return Object.fromEntries(SHIFTS.map(s => [s.key, emptyShift()]));
-}
-
-function saveData(data: AllData) {
-  try { localStorage.setItem(STORAGE_KEY, JSON.stringify(data)); } catch { /**/ }
-}
-
-function todayAr() {
-  return new Date().toLocaleDateString("ar-EG", { day: "2-digit", month: "2-digit", year: "numeric" });
-}
-
-// ─────────────────────────────────────────────────────────────────────────────
-// Print-only table component
-// ─────────────────────────────────────────────────────────────────────────────
-function PrintShiftTable({
-  shift, data, dbOccupied,
-}: { shift: typeof SHIFTS[0]; data: ShiftData; dbOccupied: Record<string, number> }) {
-  return (
-    <div className="print-shift-block" style={{ pageBreakInside: "avoid" }}>
-      {/* Sub-header */}
-      <div className="text-center mb-1">
-        <p className="font-bold text-sm border border-black inline-block px-6 py-0.5">
-          بيان الخدمات الطارئة عن {shift.label}
-        </p>
-      </div>
-
-      <table className="w-full border-collapse text-xs" style={{ direction: "rtl" }}>
-        <thead>
-          <tr style={{ background: "#e8d5f5" }}>
-            <th className="border border-black p-1 text-right font-bold">الأقسام</th>
-            <th className="border border-black p-1 text-center font-bold w-16">الإجمالي</th>
-            <th className="border border-black p-1 text-center font-bold w-16">مشغول</th>
-            <th className="border border-black p-1 text-center font-bold w-24">فارغ + استاند باي</th>
-            <th className="border border-black p-1 text-center font-bold w-16">معطل</th>
-          </tr>
-        </thead>
-        <tbody>
-          {REPORT_ROWS.map((row, i) => {
-            const d = data[i] ?? emptyRow();
-            // Determine occupied value: DB-supplied or manual input
-            const occ = row.dbKey
-              ? (d.occupied !== "" ? Number(d.occupied) : (dbOccupied[row.dbKey] ?? 0))
-              : (d.occupied !== "" ? Number(d.occupied) : 0);
-            const sb = d.standby !== "" ? Number(d.standby) : 0;
-            const br = d.broken !== "" ? Number(d.broken) : 0;
-            const free = row.total - occ - sb - br;
-
-            // Format the free+standby cell
-            const freePart = free > 0 ? String(free) : "—";
-            const sbPart = sb > 0 ? `${sb}+` : "";
-            const freeStandby = sb > 0 || free > 0
-              ? (sbPart + (free > 0 ? freePart : ""))
-              : "—";
-
-            return (
-              <tr key={i} style={i % 2 === 0 ? {} : { background: "#faf5ff" }}>
-                <td className="border border-black p-1 font-medium">{row.name}</td>
-                <td className="border border-black p-1 text-center font-bold">{row.total}</td>
-                <td className="border border-black p-1 text-center font-bold">{occ || "—"}</td>
-                <td className="border border-black p-1 text-center">{freeStandby}</td>
-                <td className="border border-black p-1 text-center">{br > 0 ? br : "—"}</td>
-              </tr>
-            );
-          })}
-        </tbody>
-      </table>
-    </div>
-  );
-}
-
-// ─────────────────────────────────────────────────────────────────────────────
-// Input table for one shift
-// ─────────────────────────────────────────────────────────────────────────────
-function ShiftInputTable({
-  shiftKey, data, onChange, dbOccupied,
-}: {
-  shiftKey: string;
-  data: ShiftData;
-  onChange: (rowIdx: number, field: keyof RowData, val: string) => void;
-  dbOccupied: Record<string, number>;
-}) {
-  return (
-    <div className="overflow-x-auto">
-      <table className="w-full text-sm border-collapse">
-        <thead>
-          <tr className="bg-muted/40">
-            <th className="border p-2 text-right">القسم / الجهاز</th>
-            <th className="border p-2 text-center w-16">الإجمالي</th>
-            <th className="border p-2 text-center w-28">مشغول</th>
-            <th className="border p-2 text-center w-28">استاند باي</th>
-            <th className="border p-2 text-center w-28">معطل</th>
-            <th className="border p-2 text-center w-16">شاغر</th>
-          </tr>
-        </thead>
-        <tbody>
-          {REPORT_ROWS.map((row, i) => {
-            const d = data[i] ?? emptyRow();
-            const dbVal = row.dbKey ? (dbOccupied[row.dbKey] ?? null) : null;
-            const occNum = d.occupied !== "" ? Number(d.occupied) : (dbVal ?? 0);
-            const sbNum  = d.standby  !== "" ? Number(d.standby)  : 0;
-            const brNum  = d.broken   !== "" ? Number(d.broken)   : 0;
-            const free = Math.max(0, row.total - occNum - sbNum - brNum);
-
-            return (
-              <tr key={i} className={i % 2 === 0 ? "" : "bg-muted/10"}>
-                <td className="border p-2 font-medium">{row.name}</td>
-                <td className="border p-2 text-center font-bold text-primary">{row.total}</td>
-
-                {/* Occupied */}
-                <td className="border p-1">
-                  <Input
-                    type="number" min={0} max={row.total}
-                    value={d.occupied}
-                    onChange={e => onChange(i, "occupied", e.target.value)}
-                    className="h-8 text-center text-sm"
-                    placeholder={dbVal != null ? String(dbVal) : "0"}
-                  />
-                  {dbVal != null && d.occupied === "" && (
-                    <p className="text-xs text-muted-foreground text-center mt-0.5">من DB: {dbVal}</p>
-                  )}
-                </td>
-
-                {/* Standby */}
-                <td className="border p-1">
-                  <Input
-                    type="number" min={0} max={row.total}
-                    value={d.standby}
-                    onChange={e => onChange(i, "standby", e.target.value)}
-                    className="h-8 text-center text-sm"
-                    placeholder="0"
-                  />
-                </td>
-
-                {/* Broken */}
-                <td className="border p-1">
-                  <Input
-                    type="number" min={0} max={row.total}
-                    value={d.broken}
-                    onChange={e => onChange(i, "broken", e.target.value)}
-                    className="h-8 text-center text-sm"
-                    placeholder="0"
-                  />
-                </td>
-
-                {/* Free (calculated) */}
-                <td className="border p-2 text-center font-bold">
-                  <span className={free === 0 ? "text-destructive" : "text-primary"}>
-                    {free}
-                  </span>
-                </td>
-              </tr>
-            );
-          })}
-        </tbody>
-      </table>
-    </div>
-  );
-}
-
-// ─────────────────────────────────────────────────────────────────────────────
-// Main page
-// ─────────────────────────────────────────────────────────────────────────────
 export default function OccupancyReport() {
+  const now = new Date();
+  const [reportDate, setReportDate] = useState(now.toISOString().slice(0, 10));
+  const [reportTime, setReportTime] = useState(format(now, "hh:mm"));
+  const [reportAmPm, setReportAmPm] = useState<"ص" | "م">(parseInt(format(now, "HH")) < 12 ? "ص" : "م");
+  const [fontSize, setFontSize] = useState([11]);
+
   const { data: stats } = useGetDashboardStats();
-  const [allData, setAllData] = useState<AllData>(loadSaved);
+  const { data: departments } = useGetDepartments();
+  const { data: allCases } = useGetCases({ status: "active" } as GetCasesParams);
 
-  // Derive DB-based occupied counts from dashboard stats
-  const dbOccupied: Record<string, number> = {};
-  if (stats) {
-    const ds = stats.departmentStats;
-    dbOccupied["icu_high"]  = ds.find(d => d.departmentName === "عناية كبيرة")?.activeCases ?? 0;
-    dbOccupied["icu_med"]   = ds.find(d => d.departmentName === "عناية متوسطة")?.activeCases ?? 0;
-    dbOccupied["picu"]      = ds.find(d => d.departmentName === "بيكيو")?.activeCases ?? 0;
-    dbOccupied["incubator"] =
-      (ds.find(d => d.departmentName === "حضانة أ")?.activeCases ?? 0) +
-      (ds.find(d => d.departmentName === "حضانة ب")?.activeCases ?? 0) +
-      (ds.find(d => d.departmentName === "حضانة ج")?.activeCases ?? 0);
-  }
+  const dateObj = new Date(reportDate + "T12:00:00");
+  const dayName = DAYS_AR[dateObj.getDay()];
+  const formatted = `${dateObj.getDate()}/${dateObj.getMonth() + 1}/${dateObj.getFullYear()}`;
 
-  // Persist data on change
-  useEffect(() => { saveData(allData); }, [allData]);
+  const totalCapacity = departments?.reduce((s, d) => s + d.capacity, 0) ?? 0;
+  const activeCases = allCases?.length ?? 0;
+  const occupancyPct = totalCapacity > 0 ? Math.round((activeCases / totalCapacity) * 100) : 0;
 
-  const handleChange = (shiftKey: string, rowIdx: number, field: keyof RowData, val: string) => {
-    setAllData(prev => ({
-      ...prev,
-      [shiftKey]: {
-        ...prev[shiftKey],
-        [rowIdx]: { ...(prev[shiftKey]?.[rowIdx] ?? emptyRow()), [field]: val },
-      },
-    }));
-  };
-
-  const resetAll = () => {
-    const fresh = Object.fromEntries(SHIFTS.map(s => [s.key, emptyShift()]));
-    setAllData(fresh);
-    saveData(fresh);
-  };
+  const onVent = (allCases ?? []).filter(c => c.artificialRespiration !== "no").length;
+  const critical = (allCases ?? []).filter(c => c.status === "critical").length;
 
   return (
-    <div className="space-y-6 max-w-5xl mx-auto">
-      {/* ── Screen header ── */}
-      <div className="flex items-center justify-between no-print">
-        <div className="flex items-center gap-3">
-          <div className="bg-primary/20 p-2 rounded-lg">
-            <ClipboardList className="h-6 w-6 text-primary" />
-          </div>
+    <div className="space-y-4">
+      {/* Controls - no-print */}
+      <div className="no-print space-y-4">
+        <div className="flex items-center justify-between flex-wrap gap-3">
           <div>
-            <h1 className="text-2xl font-bold">بيان الإشغال اليومي</h1>
-            <p className="text-muted-foreground text-sm">
-              بيان الخدمات الطارئة — {todayAr()}
-            </p>
+            <h1 className="text-2xl font-bold">بيان الإشغال</h1>
+            <p className="text-muted-foreground text-sm">تقرير الإشغال الكامل للمستشفى</p>
           </div>
-        </div>
-        <div className="flex gap-2">
-          <Button variant="outline" size="sm" className="gap-2" onClick={resetAll}>
-            <RefreshCw className="h-4 w-4" /> مسح البيانات
-          </Button>
           <Button className="gap-2" onClick={() => window.print()}>
-            <Printer className="h-5 w-5" /> طباعة البيان
+            <Printer className="h-4 w-4" /> طباعة البيان
           </Button>
         </div>
-      </div>
 
-      {/* ── Input Tabs (screen only) ── */}
-      <div className="no-print">
-        <Tabs defaultValue="morning">
-          <TabsList className="grid w-full grid-cols-3 mb-4">
-            {SHIFTS.map(s => (
-              <TabsTrigger key={s.key} value={s.key}>{s.label}</TabsTrigger>
-            ))}
-          </TabsList>
-          {SHIFTS.map(s => (
-            <TabsContent key={s.key} value={s.key}>
-              <Card>
-                <CardHeader className="pb-3">
-                  <CardTitle className="text-base">بيانات {s.label}</CardTitle>
-                  <p className="text-xs text-muted-foreground">
-                    قيم المشغول المأخوذة من قاعدة البيانات تظهر تحت الخانة باللون الرمادي. يمكنك تجاوزها بالكتابة يدوياً.
-                  </p>
-                </CardHeader>
-                <CardContent className="p-0 pb-4">
-                  <ShiftInputTable
-                    shiftKey={s.key}
-                    data={allData[s.key] ?? emptyShift()}
-                    onChange={(r, f, v) => handleChange(s.key, r, f, v)}
-                    dbOccupied={dbOccupied}
-                  />
-                </CardContent>
-              </Card>
-            </TabsContent>
-          ))}
-        </Tabs>
-      </div>
-
-      {/* ── PRINT VIEW ── */}
-      <div className="print-only hidden print:block" dir="rtl">
-        {/* Hospital header */}
-        <div className="text-center mb-3 border-b-2 border-black pb-2">
-          <p className="font-bold text-lg">مستشفى الأطفال التخصصي بالبحيرة</p>
-          <p className="text-sm font-bold">****************************</p>
-          <p className="text-sm">
-            من يوم:&nbsp;&nbsp;&nbsp;{todayAr()}&nbsp;&nbsp;&nbsp;الموافق:&nbsp;&nbsp;&nbsp;{todayAr()}
-          </p>
-        </div>
-
-        {/* 3 shift tables */}
-        <div className="space-y-4">
-          {SHIFTS.map(s => (
-            <PrintShiftTable
-              key={s.key}
-              shift={s}
-              data={allData[s.key] ?? emptyShift()}
-              dbOccupied={dbOccupied}
-            />
-          ))}
-        </div>
-
-        {/* Signature lines */}
-        <div className="mt-6 flex justify-between text-xs">
-          <div className="text-center">
-            <div className="w-40 border-b border-black mb-1 h-6" />
-            <p className="font-bold">توقيع النبطشية</p>
-          </div>
-          <div className="text-center">
-            <div className="w-40 border-b border-black mb-1 h-6" />
-            <p className="font-bold">الإشراف</p>
-          </div>
-        </div>
-      </div>
-
-      {/* Screen preview (mini) */}
-      <div className="no-print">
         <Card>
-          <CardHeader>
-            <CardTitle className="text-sm text-muted-foreground">معاينة البيان المطبوع</CardTitle>
-          </CardHeader>
-          <CardContent className="p-0 overflow-x-auto">
-            <div className="scale-[0.7] origin-top-right p-4 bg-white text-black min-w-[700px]" dir="rtl">
-              <div className="text-center mb-2 border-b-2 border-black pb-2">
-                <p className="font-bold text-base">مستشفى الأطفال التخصصي بالبحيرة</p>
-                <p className="text-xs">من يوم: {todayAr()}</p>
+          <CardContent className="pt-5 pb-4">
+            <div className="grid grid-cols-2 md:grid-cols-4 gap-4 items-end">
+              <div className="space-y-1.5">
+                <Label className="text-xs">تاريخ البيان</Label>
+                <Input type="date" value={reportDate} onChange={e => setReportDate(e.target.value)} className="h-8 text-sm" />
               </div>
-              <div className="space-y-3">
-                {SHIFTS.map(s => (
-                  <PrintShiftTable
-                    key={s.key}
-                    shift={s}
-                    data={allData[s.key] ?? emptyShift()}
-                    dbOccupied={dbOccupied}
-                  />
-                ))}
+              <div className="space-y-1.5">
+                <Label className="text-xs">الوقت</Label>
+                <div className="flex gap-1">
+                  <Input value={reportTime} onChange={e => setReportTime(e.target.value)}
+                    className="h-8 text-sm flex-1" placeholder="07:00" />
+                  <button
+                    className="h-8 px-2 border rounded-md text-sm hover:bg-muted"
+                    onClick={() => setReportAmPm(v => v === "ص" ? "م" : "ص")}
+                  >
+                    {reportAmPm}
+                  </button>
+                </div>
+              </div>
+              <div className="space-y-1.5 col-span-2">
+                <Label className="text-xs">حجم الخط ({fontSize[0]}px)</Label>
+                <div className="flex items-center gap-3">
+                  <ZoomOut className="h-4 w-4 text-muted-foreground" />
+                  <Slider value={fontSize} onValueChange={setFontSize} min={7} max={16} step={1} className="flex-1" />
+                  <ZoomIn className="h-4 w-4 text-muted-foreground" />
+                </div>
               </div>
             </div>
           </CardContent>
         </Card>
       </div>
 
+      {/* Printable Report */}
+      <div
+        className="bg-white text-black rounded-lg overflow-hidden shadow-lg print:shadow-none"
+        style={{ fontSize: fontSize[0], direction: "rtl", fontFamily: "Arial, sans-serif" }}
+      >
+        {/* Header */}
+        <div className="text-center border-b-2 border-black py-4 px-6">
+          <h2 style={{ fontSize: fontSize[0] + 4 }} className="font-bold">مستشفى الأطفال التخصصي بالبحيرة</h2>
+          <h3 className="font-bold mt-1">بيان الإشغال</h3>
+          <p className="mt-1">
+            يوم {dayName} الموافق {formatted} — الساعة: {reportTime} {reportAmPm}
+          </p>
+        </div>
+
+        <div className="p-4 space-y-4">
+          {/* Summary Stats */}
+          <div className="grid grid-cols-4 gap-3 text-center">
+            {[
+              { label: "إجمالي الحالات", value: activeCases, border: "border-blue-500" },
+              { label: "نسبة الإشغال", value: `${occupancyPct}%`, border: "border-orange-500" },
+              { label: "على التنفس", value: onVent, border: "border-teal-500" },
+              { label: "حالات حرجة", value: critical, border: "border-red-500" },
+            ].map(s => (
+              <div key={s.label} className={`border-2 ${s.border} rounded p-2`}>
+                <div className="font-bold text-lg">{s.value}</div>
+                <div className="text-xs">{s.label}</div>
+              </div>
+            ))}
+          </div>
+
+          {/* Per-Department Table */}
+          <div>
+            <h3 className="font-bold border-b border-black pb-1 mb-2">توزيع الإشغال على الأقسام</h3>
+            <table className="w-full border-collapse">
+              <thead>
+                <tr className="bg-gray-100">
+                  {["م", "القسم", "السعة", "نشط", "فاضي", "نسبة", "حرج", "تنفس"].map(h => (
+                    <th key={h} className="border border-gray-400 p-1 text-right font-bold">{h}</th>
+                  ))}
+                </tr>
+              </thead>
+              <tbody>
+                {departments?.map((d, i) => {
+                  const dStat = stats?.departmentStats.find(s => s.departmentId === d.id);
+                  const active = dStat?.activeCases ?? 0;
+                  const crit = dStat?.criticalCases ?? 0;
+                  const ventCount = (allCases ?? []).filter(c => c.departmentId === d.id && c.artificialRespiration !== "no").length;
+                  const pct = Math.round((active / d.capacity) * 100);
+                  return (
+                    <tr key={d.id} className={i % 2 === 0 ? "" : "bg-gray-50"}>
+                      <td className="border border-gray-300 p-1 text-center">{i + 1}</td>
+                      <td className="border border-gray-300 p-1 font-medium">{d.name}</td>
+                      <td className="border border-gray-300 p-1 text-center">{d.capacity}</td>
+                      <td className="border border-gray-300 p-1 text-center font-bold">{active}</td>
+                      <td className="border border-gray-300 p-1 text-center">{d.capacity - active}</td>
+                      <td className={`border border-gray-300 p-1 text-center font-bold ${pct >= 100 ? "bg-red-100 text-red-700" : pct >= 80 ? "bg-yellow-100" : ""}`}>
+                        {pct}%
+                      </td>
+                      <td className="border border-gray-300 p-1 text-center">{crit}</td>
+                      <td className="border border-gray-300 p-1 text-center">{ventCount}</td>
+                    </tr>
+                  );
+                })}
+              </tbody>
+              <tfoot>
+                <tr className="bg-gray-200 font-bold">
+                  <td colSpan={2} className="border border-gray-400 p-1 text-right">الإجمالي</td>
+                  <td className="border border-gray-400 p-1 text-center">{totalCapacity}</td>
+                  <td className="border border-gray-400 p-1 text-center">{activeCases}</td>
+                  <td className="border border-gray-400 p-1 text-center">{totalCapacity - activeCases}</td>
+                  <td className="border border-gray-400 p-1 text-center">{occupancyPct}%</td>
+                  <td className="border border-gray-400 p-1 text-center">{critical}</td>
+                  <td className="border border-gray-400 p-1 text-center">{onVent}</td>
+                </tr>
+              </tfoot>
+            </table>
+          </div>
+
+          {/* All Active Cases */}
+          <div>
+            <h3 className="font-bold border-b border-black pb-1 mb-2">بيان الحالات النشطة</h3>
+            <table className="w-full border-collapse" style={{ fontSize: fontSize[0] - 1 }}>
+              <thead>
+                <tr className="bg-gray-100">
+                  {["م", "الاسم", "السن", "القسم", "التشخيص", "التنفس الصناعي", "مدة الإقامة", "الحالة", "MOBE"].map(h => (
+                    <th key={h} className="border border-gray-400 p-1 text-right font-bold">{h}</th>
+                  ))}
+                </tr>
+              </thead>
+              <tbody>
+                {(allCases ?? []).map((c, i) => (
+                  <tr key={c.id} className={i % 2 === 0 ? "" : "bg-gray-50"}>
+                    <td className="border border-gray-300 p-1 text-center">{i + 1}</td>
+                    <td className="border border-gray-300 p-1">{c.patientName}</td>
+                    <td className="border border-gray-300 p-1">{c.age ?? "—"}</td>
+                    <td className="border border-gray-300 p-1">{c.departmentName}</td>
+                    <td className="border border-gray-300 p-1 max-w-[120px]">{c.diagnosis ?? "—"}</td>
+                    <td className="border border-gray-300 p-1">
+                      {c.artificialRespiration !== "no" ? translate(c.artificialRespiration, LABELS.ARTIFICIAL_RESPIRATION) : "—"}
+                    </td>
+                    <td className="border border-gray-300 p-1 text-center">{calcStayLabel(c.admissionDate)}</td>
+                    <td className="border border-gray-300 p-1">{translate(c.status, LABELS.STATUS)}</td>
+                    <td className="border border-gray-300 p-1">{(c as any).mobe ?? "—"}</td>
+                  </tr>
+                ))}
+                {(allCases ?? []).length === 0 && (
+                  <tr>
+                    <td colSpan={9} className="border border-gray-300 p-4 text-center text-gray-500">لا توجد حالات نشطة</td>
+                  </tr>
+                )}
+              </tbody>
+            </table>
+          </div>
+        </div>
+
+        {/* Footer */}
+        <div className="text-center border-t border-gray-300 py-3 text-xs space-y-1">
+          <p>نظام إدارة الحالات الطبية BSCH</p>
+          <p>تم الطباعة بتاريخ: {new Date().toLocaleString("ar-EG")}</p>
+        </div>
+      </div>
     </div>
   );
 }

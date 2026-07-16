@@ -1,6 +1,6 @@
 import { Router, type IRouter } from "express";
 import { eq, and, SQL } from "drizzle-orm";
-import { db, waitingCasesTable } from "@workspace/db";
+import { db, waitingCasesTable, medicalCasesTable } from "@workspace/db";
 import {
   GetWaitingCasesQueryParams,
   CreateWaitingCaseBody,
@@ -8,6 +8,7 @@ import {
   UpdateWaitingCaseBody,
   DeleteWaitingCaseParams,
 } from "@workspace/api-zod";
+import { logAction } from "./audit-logs";
 
 const router: IRouter = Router();
 
@@ -56,6 +57,8 @@ router.post("/waiting-cases", async (req, res): Promise<void> => {
     status: "waiting",
   }).returning();
 
+  await logAction("إضافة لقائمة الانتظار", "waiting_case", newCase.id, newCase.patientName, `القسم: ${newCase.section}`);
+
   res.status(201).json(newCase);
 });
 
@@ -73,6 +76,7 @@ router.patch("/waiting-cases/:id", async (req, res): Promise<void> => {
     return;
   }
 
+  const extraData = req.body as any;
   const updates: Record<string, unknown> = { ...body.data, updatedAt: new Date() };
 
   const [updated] = await db
@@ -84,6 +88,35 @@ router.patch("/waiting-cases/:id", async (req, res): Promise<void> => {
   if (!updated) {
     res.status(404).json({ error: "الحالة غير موجودة" });
     return;
+  }
+
+  // If admitting with a specific department, create a medical case
+  if (body.data.status === "admitted" && extraData.admitToDepartmentId) {
+    try {
+      await db.insert(medicalCasesTable).values({
+        patientName: updated.patientName,
+        departmentId: parseInt(extraData.admitToDepartmentId, 10),
+        age: updated.age,
+        diagnosis: updated.diagnosis,
+        parentPhone: updated.parentPhone,
+        nationalId: updated.nationalId,
+        caseType: updated.careType as any,
+        artificialRespiration: updated.artificialRespiration as any,
+        centralRoomRequired: updated.centralRoomRequired,
+        status: "active",
+      } as any);
+    } catch { /* non-critical */ }
+  }
+
+  if (body.data.status) {
+    const statusLabel: Record<string, string> = { admitted: "تم الدخول", cancelled: "إلغاء/تحويل" };
+    await logAction(
+      statusLabel[body.data.status] ?? "تحديث قائمة انتظار",
+      "waiting_case",
+      updated.id,
+      updated.patientName,
+      extraData.exitReason ? `السبب: ${extraData.exitReason}` : null
+    );
   }
 
   res.json(updated);

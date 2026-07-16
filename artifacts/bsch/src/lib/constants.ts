@@ -8,10 +8,10 @@ export const LABELS = {
     incubator_c: "حضانة ج",
   },
   ARTIFICIAL_RESPIRATION: {
-    high_frequency: "تردد عالي",
+    high_frequency: "تردد عالي (HFO)",
     vent: "فنت (VENT)",
-    cpap: "سي باب (CPAP)",
-    standby: "استعداد",
+    cpap: "CPAP / HFNC",
+    standby: "O₂ / Mask",
     no: "لا يوجد",
   },
   STATUS: {
@@ -21,16 +21,61 @@ export const LABELS = {
     critical: "حرج",
   },
   WAITING_SECTION: {
-    servo: "سيرفو",
-    reception: "استقبال",
+    servo: "سيرفو (تحويلات)",
+    reception: "استقبال / طوارئ",
   },
   WAITING_STATUS: {
     waiting: "في الانتظار",
     admitted: "تم الدخول",
-    cancelled: "ملغي",
-  }
+    cancelled: "ملغي / محول",
+  },
+  DISCHARGE_REASON: {
+    improved: "تحسن",
+    request: "بناءً على الطلب",
+    transferred: "تحويل لمستشفى أخرى",
+    death: "وفاة",
+  },
+  CARE_TYPES: {
+    intensive_care_high: "عناية كبيرة",
+    intensive_care_medium: "عناية متوسطة",
+    picu: "بيكيو (PICU)",
+    incubator: "حضانة",
+  },
+};
+
+export function translate(key: string, dict: Record<string, string>): string {
+  return dict[key] || key;
 }
 
-export function translate(key: string, dict: Record<string, string>) {
-  return dict[key] || key;
+export function calcStayDays(admissionDate: string | Date | null | undefined): number {
+  if (!admissionDate) return 0;
+  const from = new Date(admissionDate);
+  const now = new Date();
+  return Math.floor((now.getTime() - from.getTime()) / 86400000);
+}
+
+export function calcStayLabel(admissionDate: string | Date | null | undefined): string {
+  const days = calcStayDays(admissionDate);
+  if (days === 0) return "اليوم";
+  return `${days} يوم`;
+}
+
+export function formatDateAr(date: string | Date | null | undefined): string {
+  if (!date) return "—";
+  return new Date(date).toLocaleDateString("ar-EG", {
+    day: "2-digit",
+    month: "2-digit",
+    year: "numeric",
+  });
+}
+
+export function formatDateTimeAr(date: string | Date | null | undefined): string {
+  if (!date) return "—";
+  return new Date(date).toLocaleString("ar-EG", {
+    day: "2-digit",
+    month: "2-digit",
+    year: "numeric",
+    hour: "2-digit",
+    minute: "2-digit",
+  });
 }

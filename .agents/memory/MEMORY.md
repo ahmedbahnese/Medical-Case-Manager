@@ -1,0 +1,1 @@
+- [BSCH project setup](bsch-setup.md) — workflow env vars, schema additions, new routes, and frontend page inventory.
