@@ -55,63 +55,63 @@
 }
 
 :root {
-  --button-outline: rgba(255, 255, 255, 0.1);
-  --badge-outline: rgba(255, 255, 255, 0.05);
+  --button-outline: rgba(0, 0, 0, 0.08);
+  --badge-outline: rgba(0, 0, 0, 0.05);
 
-  --opaque-button-border-intensity: -8;
+  --opaque-button-border-intensity: 8;
 
-  --elevate-1: rgba(255, 255, 255, 0.03);
-  --elevate-2: rgba(255, 255, 255, 0.08);
+  --elevate-1: rgba(0, 0, 0, 0.02);
+  --elevate-2: rgba(0, 0, 0, 0.05);
 
-  /* Deep Navy background for serious, clinical feel */
-  --background: 222 47% 11%; /* #0f172a */
-  --foreground: 210 40% 98%; /* #f8fafc */
+  /* White background, clean clinical feel */
+  --background: 0 0% 100%; /* #ffffff */
+  --foreground: 222 47% 11%; /* #0f172a dark text */
 
-  --border: 217 33% 20%; /* #1e293b */
-  --card: 222 47% 14%; /* #111c34 slightly lighter than bg */
-  --card-foreground: 210 40% 98%;
-  --card-border: 217 33% 22%;
+  --border: 214 32% 88%; /* #dde1ea */
+  --card: 0 0% 98%; /* #fafafa */
+  --card-foreground: 222 47% 11%;
+  --card-border: 214 32% 88%;
 
-  --popover: 222 47% 14%;
-  --popover-foreground: 210 40% 98%;
-  --popover-border: 217 33% 25%;
+  --popover: 0 0% 100%;
+  --popover-foreground: 222 47% 11%;
+  --popover-border: 214 32% 85%;
 
   /* Teal Primary */
-  --primary: 173 80% 40%; /* #14b8a6 */
-  --primary-foreground: 160 100% 10%; /* dark teal text for contrast */
+  --primary: 173 80% 36%; /* #0fa899 */
+  --primary-foreground: 0 0% 100%; /* white text on teal */
 
-  --secondary: 217 33% 25%;
-  --secondary-foreground: 210 40% 98%;
+  --secondary: 210 40% 94%; /* #e8edf5 */
+  --secondary-foreground: 222 47% 11%;
 
-  --muted: 217 33% 20%;
-  --muted-foreground: 215 20% 65%; /* #94a3b8 */
+  --muted: 210 40% 96%; /* #f1f5f9 */
+  --muted-foreground: 215 16% 47%; /* #64748b */
 
-  --accent: 173 80% 40%;
-  --accent-foreground: 160 100% 10%;
+  --accent: 173 80% 94%; /* very light teal */
+  --accent-foreground: 173 80% 25%;
 
-  --destructive: 350 80% 55%; /* softer red */
-  --destructive-foreground: 210 40% 98%;
+  --destructive: 0 84% 60%;
+  --destructive-foreground: 0 0% 100%;
 
-  --success: 142 70% 45%;
-  --success-foreground: 142 100% 10%;
+  --success: 142 70% 40%;
+  --success-foreground: 0 0% 100%;
 
   --warning: 38 92% 50%;
-  --warning-foreground: 38 100% 10%;
+  --warning-foreground: 0 0% 100%;
 
-  --input: 217 33% 20%;
-  --ring: 173 80% 40%;
+  --input: 214 32% 88%;
+  --ring: 173 80% 36%;
 
   --app-font-sans: 'Noto Sans Arabic', sans-serif;
   --radius: 0.5rem; /* 8px */
 
-  --sidebar: 222 47% 9%;
-  --sidebar-foreground: 210 40% 98%;
-  --sidebar-border: 217 33% 18%;
-  --sidebar-primary: 173 80% 40%;
-  --sidebar-primary-foreground: 160 100% 10%;
-  --sidebar-accent: 217 33% 20%;
-  --sidebar-accent-foreground: 210 40% 98%;
-  --sidebar-ring: 173 80% 40%;
+  --sidebar: 210 40% 96%; /* #f1f5f9 light sidebar */
+  --sidebar-foreground: 222 47% 11%;
+  --sidebar-border: 214 32% 88%;
+  --sidebar-primary: 173 80% 36%;
+  --sidebar-primary-foreground: 0 0% 100%;
+  --sidebar-accent: 210 40% 90%;
+  --sidebar-accent-foreground: 222 47% 11%;
+  --sidebar-ring: 173 80% 36%;
 }
 
 @layer base {

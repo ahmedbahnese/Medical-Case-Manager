@@ -13,7 +13,13 @@ Both workflows must inject env vars manually — the artifact-managed workflows 
 ## DB schema additions (require migration push)
 New fields added to `medical_cases`: `mobe`, `ventilationStartDate`, `ventilationEndDate`, `dischargeReason` (enum).
 New tables: `settings` (key/value), `incident_reports` (with casesJson TEXT), `audit_logs`.
-User must run: `pnpm --filter @workspace/db run push` once DATABASE_URL is set.
+Schema has been pushed. Run `pnpm --filter @workspace/db run push` again after any schema changes.
+
+## Seeded departments (already in DB)
+6 departments seeded: ICU-HIGH, ICU-MED, PICU, INC-A, INC-B, INC-C (Arabic names).
+
+## Founder login password
+Default: `bsch2024` (env var `FOUNDER_PASSWORD`, falls back to `bsch2024`). NOT `@Bahnasy` — that is for the settings page only.
 
 ## Settings password
 Default settings page password: `@Bahnasy` (hardcoded in frontend and checked server-side).
