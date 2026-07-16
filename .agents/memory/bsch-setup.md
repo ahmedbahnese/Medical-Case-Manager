@@ -1,38 +1,55 @@
 ---
 name: BSCH project setup
-description: Key decisions and env requirements for the BSCH medical case management system.
+description: Workflow env vars, schema additions, routes, and feature implementation notes.
 ---
 
-## Workflow env vars (critical)
-Both workflows must inject env vars manually — the artifact-managed workflows are not registered in the platform:
-- **API Server**: `PORT=8080 DATABASE_URL=${DATABASE_URL:-placeholder} pnpm --filter @workspace/api-server run dev`
-- **BSCH Frontend**: `PORT=18429 BASE_PATH=/ pnpm --filter @workspace/bsch run dev`
+## Workflows
+- `artifacts/api-server: API Server` — port 8080, manages DB routes. Must be running first.
+- `artifacts/bsch: web` — port 18429, BASE_PATH=/. Vite dev server.
+- Old workflows "API Server" and "BSCH Frontend" are stale — do NOT start them.
 
-**Why:** The vite.config.ts and api-server/src/index.ts both throw if PORT or BASE_PATH are missing. The artifact.toml has the ports but they aren't injected automatically without the platform artifact registration.
+## Database
+- PostgreSQL via Replit-managed DATABASE_URL
+- Schema: `lib/db/src/schema/` — cases, departments, waiting-cases, settings tables
+- 6 departments seeded: ICU-HIGH (cap 10), ICU-MED (cap 6), PICU (cap 12), INC-A (13), INC-B (13), INC-C (17)
+- Drizzle ORM — push schema with: `pnpm --filter @workspace/db run push`
 
-## DB schema additions (require migration push)
-New fields added to `medical_cases`: `mobe`, `ventilationStartDate`, `ventilationEndDate`, `dischargeReason` (enum).
-New tables: `settings` (key/value), `incident_reports` (with casesJson TEXT), `audit_logs`.
-Schema has been pushed. Run `pnpm --filter @workspace/db run push` again after any schema changes.
+## Auth
+- Login password: `bsch2024` (env FOUNDER_PASSWORD, but now also reads from settings DB)
+- Settings page password: `@Bahnasy` (hardcoded in frontend, SETTINGS_PASSWORD)
+- Cookie-based session (no DB), cookie name: `bsch_session`
+- Auth route now reads login password from settings table first, then env var fallback
 
-## Seeded departments (already in DB)
-6 departments seeded: ICU-HIGH, ICU-MED, PICU, INC-A, INC-B, INC-C (Arabic names).
+## Key File Locations
+- Frontend pages: `artifacts/bsch/src/pages/`
+- API routes: `artifacts/api-server/src/routes/`
+- DB schema: `lib/db/src/schema/`
+- Generated API client: `lib/api-client-react/src/generated/api.ts`
+- Zod schemas: `lib/api-zod/src/generated/api.ts`
+- Constants/helpers: `artifacts/bsch/src/lib/constants.ts`
 
-## Founder login password
-Default: `bsch2024` (env var `FOUNDER_PASSWORD`, falls back to `bsch2024`). NOT `@Bahnasy` — that is for the settings page only.
+## Implemented Features (July 2026)
+- Multi-dept checkbox selection in print-reports.tsx and respiration.tsx
+- Inline editing of ventilationStartDate, ventilationEndDate, artificialRespiration in daily report and respiration report
+- Excel export in both reports
+- "طوارئ" tab rename (was "سيرفو (تحويلات)")
+- Department capacities updated in DB
+- Settings page: login password now saved to DB and used by auth route
+- artificialRespiration labels updated: standby → "استاندباي / بوكس", no → "هواء الغرفة"
+- getBedType() helper: returns "محضن" for incubator types, "سرير" for ICU/PICU
 
-## Settings password
-Default settings page password: `@Bahnasy` (hardcoded in frontend and checked server-side).
+## Pending
+- Smart Import AI — user requested offline AI for text extraction; not implemented
+- Occupancy report — user will send screenshot to match
+- Better page colors (partially done via constants)
 
-## New API routes (plain fetch, not codegen)
-Settings: GET/POST `/api/settings`, POST `/api/settings/verify-password`
-Incident reports: CRUD `/api/incident-reports`
-Audit logs: GET `/api/audit-logs`
-Backups: GET/POST `/api/backups`, GET `/api/backups/:id/download`, DELETE `/api/backups/:id`
+## Schema Notes
+- `artificialRespiration` enum values: high_frequency, vent, cpap, standby, no
+- Extra fields (mobe, ventilationStartDate, ventilationEndDate, dischargeReason, admissionDate) handled via `extraData = req.body as any` in the update route — they bypass Zod but are stored in DB
+- Zod UpdateCaseBody does NOT include mobe/ventilationStart/End — these go through extraData path
+- TypeScript errors in bsch (implicit any, TS6305) are PRE-EXISTING — the app runs fine via Vite/esbuild
 
-**Why:** New endpoints use plain `fetch` via `artifacts/bsch/src/lib/api.ts` to avoid needing a codegen re-run.
-
-## TypeScript notes
-- `typeof fn()` in type positions is invalid — use a named interface instead.
-- Many `TS7006` implicit-any errors in pages are non-blocking (Vite resolves from source).
-- `TS6305` project-reference errors are non-blocking for dev (Vite doesn't need pre-built .d.ts).
+## API Patterns
+- apiGet/apiPost/apiPatch/apiDelete in `artifacts/bsch/src/lib/api.ts`
+- Orval-generated hooks: `useGetCases`, `useGetDepartments`, `useUpdateCase`, etc.
+- Both can be used; plain apiGet is useful when hooks have type restrictions

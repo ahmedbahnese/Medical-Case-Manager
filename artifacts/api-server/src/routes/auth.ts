@@ -1,5 +1,7 @@
 import { Router, type IRouter } from "express";
 import { FounderLoginBody } from "@workspace/api-zod";
+import { db, settingsTable } from "@workspace/db";
+import { eq } from "drizzle-orm";
 
 const router: IRouter = Router();
 
@@ -8,7 +10,7 @@ const COOKIE_OPTIONS = {
   httpOnly: true,
   sameSite: "lax" as const,
   path: "/",
-  maxAge: 24 * 60 * 60 * 1000, // 1 day in ms (for express res.cookie)
+  maxAge: 24 * 60 * 60 * 1000,
 };
 
 function getSessionFromCookieHeader(cookieHeader: string | undefined): string | null {
@@ -19,6 +21,14 @@ function getSessionFromCookieHeader(cookieHeader: string | undefined): string | 
     if (k?.trim() === SESSION_COOKIE) return v?.trim() ?? null;
   }
   return null;
+}
+
+async function getFounderPassword(): Promise<string> {
+  try {
+    const [row] = await db.select().from(settingsTable).where(eq(settingsTable.key, "login_password"));
+    if (row?.value) return row.value;
+  } catch {}
+  return process.env.FOUNDER_PASSWORD ?? "bsch2024";
 }
 
 router.get("/auth/me", async (req, res): Promise<void> => {
@@ -37,7 +47,7 @@ router.post("/auth/founder-login", async (req, res): Promise<void> => {
     return;
   }
 
-  const founderPassword = process.env.FOUNDER_PASSWORD ?? "bsch2024";
+  const founderPassword = await getFounderPassword();
   if (parsed.data.password !== founderPassword) {
     res.status(401).json({ error: "كلمة المرور غير صحيحة" });
     return;

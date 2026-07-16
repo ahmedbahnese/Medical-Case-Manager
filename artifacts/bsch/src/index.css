@@ -137,16 +137,20 @@
   .print-only {
     display: block !important;
   }
+  .print-area {
+    display: block !important;
+  }
+  aside, header, nav {
+    display: none !important;
+  }
   * {
     color: black !important;
     -webkit-print-color-adjust: exact !important;
     print-color-adjust: exact !important;
   }
-  /* Fix layout for print */
   .print-break-inside-avoid {
     break-inside: avoid;
   }
-  /* Occupancy report shift tables */
   .print-shift-block {
     break-inside: avoid;
     margin-bottom: 12px;

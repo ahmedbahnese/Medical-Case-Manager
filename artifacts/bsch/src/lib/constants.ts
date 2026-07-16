@@ -10,9 +10,9 @@ export const LABELS = {
   ARTIFICIAL_RESPIRATION: {
     high_frequency: "تردد عالي (HFO)",
     vent: "فنت (VENT)",
-    cpap: "CPAP / HFNC",
-    standby: "O₂ / Mask",
-    no: "لا يوجد",
+    cpap: "سباب (CPAP/HFNC)",
+    standby: "استاندباي / بوكس",
+    no: "هواء الغرفة",
   },
   STATUS: {
     active: "نشط",
@@ -21,8 +21,8 @@ export const LABELS = {
     critical: "حرج",
   },
   WAITING_SECTION: {
-    servo: "سيرفو (تحويلات)",
-    reception: "استقبال / طوارئ",
+    servo: "طوارئ",
+    reception: "استقبال",
   },
   WAITING_STATUS: {
     waiting: "في الانتظار",
@@ -42,6 +42,13 @@ export const LABELS = {
     incubator: "حضانة",
   },
 };
+
+// Incubator department types for bed/incubator detection
+export const INCUBATOR_TYPES = new Set(["incubator_a", "incubator_b", "incubator_c"]);
+
+export function getBedType(departmentType: string): "محضن" | "سرير" {
+  return INCUBATOR_TYPES.has(departmentType) ? "محضن" : "سرير";
+}
 
 export function translate(key: string, dict: Record<string, string>): string {
   return dict[key] || key;
@@ -78,4 +85,14 @@ export function formatDateTimeAr(date: string | Date | null | undefined): string
     hour: "2-digit",
     minute: "2-digit",
   });
+}
+
+export function toInputDate(date: string | Date | null | undefined): string {
+  if (!date) return "";
+  try {
+    const d = new Date(date);
+    return d.toISOString().slice(0, 10);
+  } catch {
+    return "";
+  }
 }

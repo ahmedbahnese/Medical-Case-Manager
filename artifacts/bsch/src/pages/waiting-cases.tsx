@@ -22,6 +22,11 @@ import { ConfirmDialog } from "@/components/confirm-dialog";
 
 type Section = "reception" | "servo";
 
+const SECTION_LABELS: Record<Section, string> = {
+  servo: "طوارئ",
+  reception: "استقبال",
+};
+
 const EXIT_REASONS = [
   { value: "improved", label: "تحسن / دخل القسم" },
   { value: "request", label: "خروج حسب الطلب" },
@@ -81,7 +86,7 @@ function AddWaitingCaseDialog({ section, onClose, onSuccess }: { section: Sectio
         <DialogHeader>
           <DialogTitle>إضافة حالة انتظار — {translate(section, LABELS.WAITING_SECTION)}</DialogTitle>
         </DialogHeader>
-        <div className="space-y-4 max-h-[65vh] overflow-y-auto py-2 px-1">
+        <div className="space-y-4 max-h-[70vh] overflow-y-auto py-2 px-1 pr-2">
           <div className="grid grid-cols-2 gap-3">
             <div className="col-span-2 space-y-1">
               <Label>اسم المريض *</Label>
@@ -268,8 +273,8 @@ export default function WaitingCases() {
 
       <Tabs defaultValue="reception" onValueChange={(v) => setSection(v as Section)} className="w-full">
         <TabsList className="grid w-full max-w-md grid-cols-2 h-11">
-          <TabsTrigger value="reception">استقبال / طوارئ</TabsTrigger>
-          <TabsTrigger value="servo">سيرفو (تحويلات)</TabsTrigger>
+          <TabsTrigger value="reception">استقبال</TabsTrigger>
+          <TabsTrigger value="servo">طوارئ</TabsTrigger>
         </TabsList>
 
         <div className="mt-6">
