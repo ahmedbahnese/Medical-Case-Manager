@@ -4,15 +4,16 @@ import { useGetMe, useLogout } from "@workspace/api-client-react";
 import { cn } from "@/lib/utils";
 import { 
   Activity, 
-  Bed, 
   Users, 
   ListPlus, 
   Search, 
   Printer, 
   Database,
-  Menu,
   LogOut,
-  Wind
+  Wind,
+  Bot,
+  ClipboardList,
+  Clock
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 
@@ -24,22 +25,22 @@ export function Layout({ children }: { children: ReactNode }) {
   if (isLoading) return <div className="h-screen bg-background" />;
 
   const navigation = [
-    { name: "لوحة التحكم", href: "/dashboard", icon: Activity },
-    { name: "إضافة حالة", href: "/add-case", icon: ListPlus },
-    { name: "قوائم الانتظار", href: "/waiting-cases", icon: Users },
-    { name: "التنفس الصناعي", href: "/artificial-respiration", icon: Wind },
-    { name: "بحث متقدم", href: "/advanced-search", icon: Search },
-    { name: "طباعة تقارير", href: "/print-reports", icon: Printer },
-    { name: "نسخ احتياطي", href: "/backup", icon: Database },
+    { name: "لوحة التحكم",      href: "/dashboard",            icon: Activity },
+    { name: "إضافة حالة",       href: "/add-case",             icon: ListPlus },
+    { name: "قوائم الانتظار",    href: "/waiting-cases",        icon: Users },
+    { name: "التنفس الصناعي",   href: "/artificial-respiration",icon: Wind },
+    { name: "الاستيراد الذكي",   href: "/bulk-import",          icon: Bot },
+    { name: "بحث متقدم",        href: "/advanced-search",      icon: Search },
+    { name: "بيان الإشغال",      href: "/occupancy-report",     icon: ClipboardList },
+    { name: "طباعة تقارير",      href: "/print-reports",        icon: Printer },
+    { name: "نسخ احتياطي",       href: "/backup",               icon: Database },
   ];
 
   const handleLogout = () => {
     logout.mutate(undefined, {
-      onSuccess: () => {
-        window.location.href = "/";
-      }
+      onSuccess: () => { window.location.href = "/"; }
     });
-  }
+  };
 
   return (
     <div className="min-h-screen bg-background flex flex-col md:flex-row w-full font-sans">
@@ -71,7 +72,7 @@ export function Layout({ children }: { children: ReactNode }) {
                 <Icon className="h-5 w-5" />
                 {item.name}
               </Link>
-            )
+            );
           })}
         </nav>
 
@@ -98,14 +99,13 @@ export function Layout({ children }: { children: ReactNode }) {
           <Activity className="h-6 w-6 text-primary" />
           <h1 className="font-bold text-lg">BSCH</h1>
         </div>
-        {/* Simple mobile menu could go here, for now just show logout */}
         <Button variant="ghost" size="icon" onClick={handleLogout} className="text-sidebar-foreground/80">
           <LogOut className="h-5 w-5" />
         </Button>
       </header>
 
-      {/* Mobile Nav links basic implementation */}
-      <nav className="md:hidden flex overflow-x-auto p-2 bg-sidebar/50 border-b border-sidebar-border no-print gap-2">
+      {/* Mobile Nav */}
+      <nav className="md:hidden flex overflow-x-auto p-2 bg-sidebar/50 border-b border-sidebar-border no-print gap-1">
         {navigation.map((item) => {
           const isActive = location === item.href || location.startsWith(`${item.href}/`);
           return (
@@ -121,7 +121,7 @@ export function Layout({ children }: { children: ReactNode }) {
             >
               {item.name}
             </Link>
-          )
+          );
         })}
       </nav>
 

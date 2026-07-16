@@ -129,16 +129,30 @@
     display: none !important;
   }
   body {
-    @apply bg-white text-black;
+    background: white !important;
+    color: black !important;
+    font-family: 'Noto Sans Arabic', Arial, sans-serif !important;
+    direction: rtl !important;
   }
   .print-only {
     display: block !important;
   }
   * {
     color: black !important;
+    -webkit-print-color-adjust: exact !important;
+    print-color-adjust: exact !important;
   }
   /* Fix layout for print */
   .print-break-inside-avoid {
     break-inside: avoid;
+  }
+  /* Occupancy report shift tables */
+  .print-shift-block {
+    break-inside: avoid;
+    margin-bottom: 12px;
+  }
+  @page {
+    size: A4 portrait;
+    margin: 1.5cm 1cm;
   }
 }

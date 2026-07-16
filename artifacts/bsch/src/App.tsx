@@ -15,6 +15,7 @@ import BulkImport from '@/pages/bulk-import';
 import Search from '@/pages/search';
 import PrintReports from '@/pages/print-reports';
 import Backup from '@/pages/backup';
+import OccupancyReport from '@/pages/occupancy-report';
 
 const queryClient = new QueryClient();
 
@@ -67,6 +68,7 @@ function Router() {
       <Route path="/advanced-search"><ProtectedRoute component={Search} /></Route>
       <Route path="/print-reports"><ProtectedRoute component={PrintReports} /></Route>
       <Route path="/backup"><ProtectedRoute component={Backup} /></Route>
+      <Route path="/occupancy-report"><ProtectedRoute component={OccupancyReport} /></Route>
 
       <Route><ProtectedRoute component={NotFound} /></Route>
     </Switch>
