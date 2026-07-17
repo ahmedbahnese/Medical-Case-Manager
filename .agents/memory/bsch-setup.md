@@ -1,63 +1,53 @@
 ---
 name: BSCH project setup
-description: Key setup details, workflow env vars, schema changes, and current feature inventory for the BSCH medical case management system.
+description: Key facts about the BSCH medical case management monorepo — build env, schema, routes, and page inventory.
 ---
 
-## Workflows
-- Active API server: `artifacts/api-server: API Server` on port 8080
-- Active frontend: `artifacts/bsch: web` on port 18429
-- Old manual "API Server" and "BSCH Frontend" workflows are stale duplicates — do NOT start them
+## Build
 
-## Auth
-- Login password: `bsch2024` (env `FOUNDER_PASSWORD`; also stored in settings DB; auth route reads DB first)
-- Settings page password: `@Bahnasy` (hardcoded in settings.tsx)
+- Frontend (`artifacts/bsch`): Vite; requires `PORT` AND `BASE_PATH` env vars at build time:
+  `PORT=18429 BASE_PATH=/ pnpm --filter @workspace/bsch run build`
+- API server (`artifacts/api-server`): esbuild via `build.mjs`, no extra env vars needed.
+- `api-client-react` has no `build` script — it's used as a source reference via project references.
 
-## DB Changes Made
-- 6 departments seeded: ICU-HIGH (cap 10), ICU-MED (cap 6), PICU (cap 12), INC-A (13), INC-B (13), INC-C (17)
-- `artificial_respiration` enum extended: now `high_frequency, vent, cpap, hfnc, standby, box, no` (7 values)
-- `supervisors` key added to settings table
+## Managed workflows
 
-## Key Architecture
-- Frontend: `artifacts/bsch/src/` — React 19 + Vite 7 + Tailwind CSS 4 + shadcn/ui
-- Backend: `artifacts/api-server/src/` — Express 5 + TypeScript
-- DB ORM: `lib/db/src/schema/` — Drizzle + PostgreSQL
-- API hooks: `lib/api-client-react/src/generated/` (Orval)
-- Zod schemas: `lib/api-zod/src/generated/api.ts` (Orval-generated)
-- API helpers: `artifacts/bsch/src/lib/api.ts`
+- `artifacts/bsch: web` — the correct frontend workflow (port 18429)
+- `API Server` — the correct API workflow (port 8080)
+- The old `BSCH Frontend` and `artifacts/api-server: API Server` workflows fail with port conflicts; ignore them.
 
-## Settings Context
-- `artifacts/bsch/src/contexts/settings-context.tsx` — loads from `/api/settings?_=timestamp` (cache-busted)
-- Exports: `useAppSettings()` → settings object, `useSettingsActions()` → { refreshSettings }
-- Wrapped in App.tsx via `<SettingsProvider>`
-- Also caches to localStorage for instant display on page load
+## Word export
 
-## Constants
-- `artifacts/bsch/src/lib/constants.ts` — LABELS object, INCUBATOR_TYPES (includes picu), getBedType(), deptTypeToCaseType(), formatDateAr(), calcStayLabel()
-- INCUBATOR_TYPES includes: incubator_a, incubator_b, incubator_c, picu, incubator
+All Word export uses the HTML-blob-as-.doc trick (opens in Word natively for Arabic RTL).
+Shared utility: `artifacts/bsch/src/lib/word-export.ts` → `exportWordDoc(htmlBody, filename)`.
 
-## Respiration Options (7 total, in order)
-high_frequency (تردد عالي HFO) | vent (فنت VENT) | cpap (سباب CPAP) | standby (استاندباي) | hfnc (HFNC) | box (بوكس / نيزل كانيولا) | no (هواء الغرفة)
+## Print / CSS
 
-## Add Case Fix
-- `incubator_a/b/c` departmentType must be mapped to `"incubator"` caseType before submitting
-- Fixed in add-case.tsx with inline ternary: `deptType.startsWith("incubator") ? "incubator" : deptType`
-- Also available as `deptTypeToCaseType()` in constants.ts
+- `.no-print` hides elements on print; `.print-area hidden` becomes visible on print.
+- Main interactive cards (table views in respiration.tsx etc.) must have `no-print` so print uses only the dedicated `print-area` div.
+- Sidebar dark-navy theme: `--sidebar: 222 47% 13%` with light text `--sidebar-foreground: 210 40% 92%`.
 
-## Pages Inventory
-- dashboard.tsx — dept grid directly (6 dept cards), KPI strip, group dialog
-- department.tsx — case table + Excel/Word/print export, print header
-- add-case.tsx — multi-step form, fixed caseType mapping
-- case-detail.tsx — inline editing with UpdateCaseBody
-- waiting-cases.tsx — full-page redesign: inline add form, table view, admit creates active case
-- respiration.tsx — ventilation report with inline editing, Excel export, font slider
-- print-reports.tsx — multi-dept report, inline mode editing, Excel export
-- occupancy-report.tsx — 3-shift bayan: columns = الأقسام|الإجمالي|مشغول|فارغ|استاندباي|معطل, activeShift logic, waiting cases per shift
-- settings.tsx — hospital name, logo, supervisors list, login pw, theme color picker
+## Page inventory
 
-## API Notes
-- `UpdateCaseBody` does NOT include mobe/ventilationStartDate/ventilationEndDate/dischargeReason — these go via `extraData = req.body as any`
-- `/api/settings` GET returns all non-password keys; POST requires `password: "@Bahnasy"` + key + value
-- `/api/cases` accepts filter `{ status: "active" }` as query param
+| Page | Key state |
+|---|---|
+| `dashboard.tsx` | KPI strip has `no-print`; GroupCasesDialog shows 10-col table (no status) |
+| `waiting-cases.tsx` | EditWaitingCaseDialog, selection checkboxes, Word export; servo fix via `useQueryClient().invalidateQueries()` |
+| `respiration.tsx` | Main Card has `no-print`; Word + Excel export |
+| `occupancy-report.tsx` | Word export button added |
+| `print-reports.tsx` | `includeServo`/`includeReception` state controls waiting list in print + Word |
+| `bulk-import.tsx` | Parser in `artifacts/api-server/src/routes/cases.ts` → `parseArabicCasesText` |
 
-## Outstanding (not yet done)
-- Point 9 (Smart Import with offline LLM): very large feature, not implemented
+## Smart import parser fixes (cases.ts)
+
+- Arabic digit prefixes (١٢٣): use `[\u0660-\u0669\d]+` in strip regex
+- HFNC separated from CPAP: `respHFNC = /\bHFNC\b/i`, maps to `"hfnc"`
+- Same-line age: `inlinAgeMatch = /^(.{3,40})[،,]\s*(.{2,20})$/` splits name + age
+
+## GitHub remote
+
+`origin` = `https://github.com/ahmedbahnese/Medical-Case-Manager`. Push requires user to configure GitHub credentials — auto-push from agent timed out.
+
+## Pre-existing TS errors
+
+`TS6305` (api-client-react not built) and several `TS7006`/`TS2345` in respiration.tsx, print-reports.tsx exist in the original code; Vite dev mode ignores them. Production build succeeds despite them.
