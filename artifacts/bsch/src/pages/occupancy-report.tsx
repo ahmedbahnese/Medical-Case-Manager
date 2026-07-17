@@ -1,6 +1,7 @@
 import { useState, useCallback } from "react";
 import { useGetDepartments, useGetCases, useGetWaitingCases } from "@workspace/api-client-react";
-import { Printer, FileSpreadsheet, ZoomIn, ZoomOut } from "lucide-react";
+import { Printer, FileSpreadsheet, ZoomIn, ZoomOut, FileText } from "lucide-react";
+import { exportWordDoc } from "@/lib/word-export";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -127,6 +128,45 @@ function ShiftTable({ shift, shiftIndex, activeShift, data, onChange, fontSize, 
   );
 }
 
+function exportWord(shifts: ShiftData[], activeShift: ShiftIdx, hospitalName: string, reportDate: string, dayName: string, supervisor: string, waitingServo: any[], waitingReception: any[], includeServo: boolean, includeReception: boolean) {
+  let html = `
+    <div class="header">
+      <p>مديرية الصحة بالبحيرة</p>
+      <h2>${hospitalName}</h2>
+      <h3>بيان الخدمة الطارئة</h3>
+      <p>عن يوم ${dayName} الموافق ${reportDate}</p>
+    </div>`;
+  SHIFTS.forEach((shift, si) => {
+    if (si > activeShift) return;
+    const sd = shifts[si];
+    html += `<h4 style="text-align:center;border:1px solid #000;padding:4px;background:#e8e8e8">${shift.label}</h4>
+    <table border="1">
+      <tr style="background:#d9e1f2"><th>الأقسام</th><th>الإجمالي</th><th>مشغول</th><th>فارغ</th><th>استاندباي</th><th>معطل</th></tr>`;
+    REPORT_ROWS.forEach(r => {
+      const d = sd[r.key as RowKey];
+      html += `<tr><td>${r.label}</td>
+        <td style="text-align:center">${d.total}</td>
+        <td style="text-align:center">${d.occupied}</td>
+        <td style="text-align:center">${makeFree(d)}</td>
+        <td style="text-align:center">${d.standby}</td>
+        <td style="text-align:center">${d.broken}</td></tr>`;
+    });
+    if (includeServo && (waitingServo?.length ?? 0) > 0) {
+      const wrows = waitingServo.map((c, i) => `<tr style="${i%2===0?'':'background:#f5f5f5'}">
+        <td style="text-align:center">${i+1}</td><td>${c.patientName}</td><td>${c.age ?? "—"}</td><td>${c.diagnosis ?? "—"}</td></tr>`).join("");
+      html += `</table><p><strong>سيرفو (${waitingServo.length} حالة)</strong></p><table border="1"><tr style="background:#d9e1f2"><th>م</th><th>الاسم</th><th>السن</th><th>التشخيص</th></tr>${wrows}`;
+    }
+    if (includeReception && (waitingReception?.length ?? 0) > 0) {
+      const wrows = waitingReception.map((c, i) => `<tr style="${i%2===0?'':'background:#f5f5f5'}">
+        <td style="text-align:center">${i+1}</td><td>${c.patientName}</td><td>${c.age ?? "—"}</td><td>${c.diagnosis ?? "—"}</td></tr>`).join("");
+      html += `</table><p><strong>استقبال (${waitingReception.length} حالة)</strong></p><table border="1"><tr style="background:#d9e1f2"><th>م</th><th>الاسم</th><th>السن</th><th>التشخيص</th></tr>${wrows}`;
+    }
+    html += '</table><br/>';
+  });
+  if (supervisor) html += `<p style="margin-top:20pt"><strong>الإشراف:</strong> ${supervisor}</p>`;
+  exportWordDoc(html, `occupancy-${reportDate}.doc`);
+}
+
 function exportExcel(shifts: ShiftData[], activeShift: ShiftIdx, hospitalName: string, reportDate: string, dayName: string, supervisor: string) {
   const allRows: any[][] = [[hospitalName], [`بيان الخدمة الطارئة — ${dayName} ${reportDate}`], []];
   SHIFTS.forEach((s, si) => {
@@ -229,6 +269,9 @@ export default function OccupancyReport() {
           <div className="flex gap-2 flex-wrap">
             <Button variant="outline" size="sm" className="gap-1" onClick={() => exportExcel(shifts, activeShift, hospital_name, formatted, dayName, supervisor)}>
               <FileSpreadsheet className="h-4 w-4" /> Excel
+            </Button>
+            <Button variant="outline" size="sm" className="gap-1" onClick={() => exportWord(shifts, activeShift, hospital_name, formatted, dayName, supervisor, waitingServo ?? [], waitingReception ?? [], includeServo, includeReception)}>
+              <FileText className="h-4 w-4" /> Word
             </Button>
             <Button size="sm" className="gap-1" onClick={() => window.print()}>
               <Printer className="h-4 w-4" /> طباعة

@@ -3,7 +3,8 @@ import { format } from "date-fns";
 import {
   useGetCases, useGetDepartments, useGetWaitingCases, useUpdateCase,
 } from "@workspace/api-client-react";
-import { Printer, ZoomIn, ZoomOut, FileSpreadsheet } from "lucide-react";
+import { Printer, ZoomIn, ZoomOut, FileSpreadsheet, FileText } from "lucide-react";
+import { exportWordDoc } from "@/lib/word-export";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -184,6 +185,8 @@ export default function PrintReports() {
   const [selectedDeptIds, setSelectedDeptIds] = useState<Set<number>>(new Set());
   // Track inline edits locally so table reflects changes without full refetch
   const [localEdits, setLocalEdits] = useState<Record<number, Record<string, any>>>({});
+  const [includeServo, setIncludeServo] = useState(false);
+  const [includeReception, setIncludeReception] = useState(false);
 
   const { data: departments } = useGetDepartments();
   const { data: allCases, refetch } = useGetCases({ status: "active" } as any);
@@ -237,6 +240,57 @@ export default function PrintReports() {
 
   const handlePrint = () => window.print();
 
+  const handleExportWord = () => {
+    const deptTypeMap2 = new Map(depts.map((d: any) => [d.id as number, (d.departmentType ?? "") as string]));
+    const fa = (v: unknown) => formatDateAr((v as string) ?? null);
+    const rows = filteredCases.map((c: any, i: number) => {
+      const deptType = deptTypeMap2.get(c.departmentId as number) ?? "";
+      const bedType = getBedType(deptType);
+      return `<tr style="${i%2===0?'':'background:#f5f5f5'}">
+        <td style="text-align:center">${i+1}</td>
+        <td><strong>${c.patientName}</strong></td>
+        <td>${c.age ?? "—"}</td>
+        <td>${c.diagnosis ?? "—"}</td>
+        <td>${fa(c.admissionDate)}</td>
+        <td>${calcStayLabel(c.admissionDate as string)}</td>
+        <td>${bedType}</td>
+        <td>${fa(c.ventilationStartDate)}</td>
+        <td>${fa(c.ventilationEndDate)}</td>
+        <td>${translate(c.artificialRespiration, LABELS.ARTIFICIAL_RESPIRATION)}</td>
+      </tr>`;
+    }).join("");
+    let html = `
+      <div class="header">
+        <h2>مستشفى الأطفال التخصصي بالبحيرة — BSCH</h2>
+        <h3>بيان الحالات اليومي</h3>
+        <p>القسم: ${selectedDeptNames}</p>
+        <p>يوم ${dayName} الموافق ${formatted} — الساعة ${reportTime} ${reportAmPm} — عدد الحالات: ${filteredCases.length}</p>
+      </div>
+      <table border="1">
+        <tr style="background:#d9e1f2"><th>م</th><th>الاسم</th><th>السن</th><th>التشخيص</th>
+        <th>تاريخ الدخول</th><th>مدة الإقامة</th><th>سرير/محضن</th>
+        <th>ت. التنفس</th><th>ت. الفصل</th><th>مود</th></tr>
+        ${rows}
+      </table>`;
+    if (includeServo && (waitingServo?.length ?? 0) > 0) {
+      const wrows = (waitingServo as any[]).map((c, i) => `<tr style="${i%2===0?'':'background:#f5f5f5'}">
+        <td style="text-align:center">${i+1}</td><td>${c.patientName}</td><td>${c.age ?? "—"}</td>
+        <td>${c.diagnosis ?? "—"}</td><td>${translate(c.artificialRespiration, LABELS.ARTIFICIAL_RESPIRATION)}</td>
+        <td>${translate(c.careType, LABELS.CARE_TYPES)}</td></tr>`).join("");
+      html += `<h4>سيرفو — قائمة الانتظار (${waitingServo!.length} حالة)</h4>
+        <table border="1"><tr style="background:#d9e1f2"><th>م</th><th>الاسم</th><th>السن</th><th>التشخيص</th><th>التنفس</th><th>نوع الرعاية</th></tr>${wrows}</table>`;
+    }
+    if (includeReception && (waitingReception?.length ?? 0) > 0) {
+      const wrows = (waitingReception as any[]).map((c, i) => `<tr style="${i%2===0?'':'background:#f5f5f5'}">
+        <td style="text-align:center">${i+1}</td><td>${c.patientName}</td><td>${c.age ?? "—"}</td>
+        <td>${c.diagnosis ?? "—"}</td><td>${translate(c.artificialRespiration, LABELS.ARTIFICIAL_RESPIRATION)}</td>
+        <td>${translate(c.careType, LABELS.CARE_TYPES)}</td></tr>`).join("");
+      html += `<h4>استقبال — قائمة الانتظار (${waitingReception!.length} حالة)</h4>
+        <table border="1"><tr style="background:#d9e1f2"><th>م</th><th>الاسم</th><th>السن</th><th>التشخيص</th><th>التنفس</th><th>نوع الرعاية</th></tr>${wrows}</table>`;
+    }
+    exportWordDoc(html, `daily-report-${reportDate}.doc`);
+  };
+
   return (
     <div className="space-y-4">
 
@@ -249,7 +303,10 @@ export default function PrintReports() {
           </div>
           <div className="flex gap-2 flex-wrap">
             <Button variant="outline" className="gap-2" onClick={() => exportExcel(filteredCases, depts, selectedDeptIds, reportDate, reportTime, reportAmPm)}>
-              <FileSpreadsheet className="h-4 w-4" /> تصدير Excel
+              <FileSpreadsheet className="h-4 w-4" /> Excel
+            </Button>
+            <Button variant="outline" className="gap-2" onClick={handleExportWord}>
+              <FileText className="h-4 w-4" /> Word
             </Button>
             <Button className="gap-2" onClick={handlePrint}>
               <Printer className="h-4 w-4" /> طباعة
@@ -338,6 +395,32 @@ export default function PrintReports() {
         {selectedDeptIds.size === 0 && (
           <div className="text-center py-8 text-muted-foreground">اختر قسماً أو أكثر لعرض بيان الحالات</div>
         )}
+
+        {/* Waiting List Selection */}
+        <Card>
+          <CardHeader className="pb-2 pt-4">
+            <div className="flex items-center justify-between">
+              <CardTitle className="text-base">قوائم الانتظار في التقرير</CardTitle>
+              <span className="text-xs text-muted-foreground">اختياري — تضمين في الطباعة</span>
+            </div>
+          </CardHeader>
+          <CardContent className="pb-4">
+            <div className="flex gap-6">
+              <div className="flex items-center gap-2">
+                <Checkbox id="incl-servo" checked={includeServo} onCheckedChange={v => setIncludeServo(!!v)} />
+                <label htmlFor="incl-servo" className="text-sm cursor-pointer">
+                  سيرفو <span className="text-muted-foreground text-xs">({waitingServo?.length ?? 0} حالة)</span>
+                </label>
+              </div>
+              <div className="flex items-center gap-2">
+                <Checkbox id="incl-recep" checked={includeReception} onCheckedChange={v => setIncludeReception(!!v)} />
+                <label htmlFor="incl-recep" className="text-sm cursor-pointer">
+                  استقبال <span className="text-muted-foreground text-xs">({waitingReception?.length ?? 0} حالة)</span>
+                </label>
+              </div>
+            </div>
+          </CardContent>
+        </Card>
       </div>
 
       {/* ===== Printable Report ===== */}
@@ -399,10 +482,10 @@ export default function PrintReports() {
           )}
 
           {/* Waiting Lists */}
-          {((waitingServo?.length ?? 0) > 0 || (waitingReception?.length ?? 0) > 0) && (
+          {((includeServo && (waitingServo?.length ?? 0) > 0) || (includeReception && (waitingReception?.length ?? 0) > 0)) && (
             <div className="mt-4 border-t-2 border-black pt-3">
               <h4 className="font-bold text-sm mb-2">قوائم الانتظار</h4>
-              {(waitingServo?.length ?? 0) > 0 && (
+              {includeServo && (waitingServo?.length ?? 0) > 0 && (
                 <div className="mb-3">
                   <p className="font-semibold mb-1">طوارئ — {waitingServo!.length} حالة</p>
                   <table className="w-full border-collapse" style={{ fontSize: fontSize[0] - 1 }}>
@@ -428,7 +511,7 @@ export default function PrintReports() {
                   </table>
                 </div>
               )}
-              {(waitingReception?.length ?? 0) > 0 && (
+              {includeReception && (waitingReception?.length ?? 0) > 0 && (
                 <div>
                   <p className="font-semibold mb-1">استقبال — {waitingReception!.length} حالة</p>
                   <table className="w-full border-collapse" style={{ fontSize: fontSize[0] - 1 }}>

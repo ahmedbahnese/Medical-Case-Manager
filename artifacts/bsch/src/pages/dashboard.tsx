@@ -1,6 +1,7 @@
 import { useState } from "react";
 import { Link, useLocation } from "wouter";
 import { useGetDashboardStats, useGetDepartments, useGetCases } from "@workspace/api-client-react";
+import { exportWordDoc } from "@/lib/word-export";
 import {
   Users, Activity, AlertTriangle, Clock, Wind, ArrowLeft, Plus,
   Download, FileSpreadsheet, Printer, ChevronDown, ChevronUp, ZoomIn, ZoomOut, Bed
@@ -14,12 +15,17 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/u
 import { Slider } from "@/components/ui/slider";
 import { useAppSettings } from "@/contexts/settings-context";
 
-function exportCSV(cases: any[]) {
-  const headers = ["م", "الاسم", "السن", "التشخيص", "تاريخ الدخول", "مدة الإقامة", "الوضع", "ت. التنفس"];
+function exportCSV(cases: any[], depts: any[]) {
+  const deptMap = new Map(depts.map(d => [d.id, d.departmentType as string]));
+  const getBed = (id: number) => ["incubator_a","incubator_b","incubator_c","picu"].includes(deptMap.get(id) ?? "") ? "محضن" : "سرير";
+  const headers = ["م", "الاسم", "السن", "التشخيص", "تاريخ الدخول", "مدة الإقامة", "سرير/محضن", "ت. التنفس", "ت. التوصيل", "مود"];
   const rows = cases.map((c, i) => [
     i + 1, c.patientName, c.age ?? "", c.diagnosis ?? "",
     formatDateAr(c.admissionDate), calcStayLabel(c.admissionDate),
-    translate(c.status, LABELS.STATUS), translate(c.artificialRespiration, LABELS.ARTIFICIAL_RESPIRATION)
+    getBed(c.departmentId),
+    formatDateAr(c.ventilationStartDate),
+    translate(c.artificialRespiration, LABELS.ARTIFICIAL_RESPIRATION),
+    c.mobe ?? ""
   ]);
   const csv = [headers, ...rows].map(r => r.map(v => `"${String(v).replace(/"/g, '""')}"`).join(",")).join("\n");
   const blob = new Blob(["\uFEFF" + csv], { type: "text/csv;charset=utf-8;" });
@@ -31,8 +37,40 @@ function GroupCasesDialog({ deptIds, groupLabel, open, onClose }: {
   deptIds: number[]; groupLabel: string; open: boolean; onClose: () => void; groupKey: string;
 }) {
   const { data: cases, isLoading } = useGetCases({ status: "active" } as any);
+  const { data: depts } = useGetDepartments();
   const [fontSize, setFontSize] = useState([12]);
   const displayCases = (cases ?? []).filter((c: any) => deptIds.includes(c.departmentId));
+
+  const getBed = (deptId: number) => {
+    const dt = (depts ?? []).find((d: any) => d.id === deptId)?.departmentType ?? "";
+    return ["incubator_a","incubator_b","incubator_c","picu"].includes(dt) ? "محضن" : "سرير";
+  };
+
+  const handleExportWord = () => {
+    const now = new Date();
+    const rows = displayCases.map((c: any, i: number) => `
+      <tr style="${i%2===0?'':'background:#f5f5f5'}">
+        <td style="text-align:center">${i+1}</td>
+        <td><strong>${c.patientName}</strong></td>
+        <td>${c.age ?? "—"}</td>
+        <td>${c.diagnosis ?? "—"}</td>
+        <td>${formatDateAr(c.admissionDate)}</td>
+        <td>${calcStayLabel(c.admissionDate)}</td>
+        <td>${getBed(c.departmentId)}</td>
+        <td>${formatDateAr((c as any).ventilationStartDate)}</td>
+        <td>${translate(c.artificialRespiration, LABELS.ARTIFICIAL_RESPIRATION)}</td>
+        <td>${(c as any).mobe ?? "—"}</td>
+      </tr>`).join("");
+    const html = `
+      <div class="header"><h2>بيان حالات ${groupLabel}</h2>
+      <p>${now.toLocaleDateString("ar-EG")} — عدد الحالات: ${displayCases.length}</p></div>
+      <table border="1"><tr style="background:#d9e1f2">
+        <th>م</th><th>الاسم</th><th>السن</th><th>التشخيص</th>
+        <th>تاريخ الدخول</th><th>مدة الإقامة</th><th>سرير/محضن</th>
+        <th>ت.التوصيل</th><th>التنفس</th><th>مود</th>
+      </tr>${rows}</table>`;
+    exportWordDoc(html, `cases-${groupLabel}-${now.toISOString().slice(0,10)}.doc`);
+  };
 
   return (
     <Dialog open={open} onOpenChange={onClose}>
@@ -45,8 +83,11 @@ function GroupCasesDialog({ deptIds, groupLabel, open, onClose }: {
               <Slider value={fontSize} onValueChange={setFontSize} min={9} max={16} step={1}
                 className="w-28" />
               <ZoomIn className="h-4 w-4 text-muted-foreground" />
-              <Button size="sm" variant="outline" className="gap-1" onClick={() => exportCSV(displayCases)}>
+              <Button size="sm" variant="outline" className="gap-1" onClick={() => exportCSV(displayCases, depts ?? [])}>
                 <FileSpreadsheet className="h-4 w-4" /> Excel
+              </Button>
+              <Button size="sm" variant="outline" className="gap-1" onClick={handleExportWord}>
+                <Bed className="h-4 w-4" /> Word
               </Button>
               <Button size="sm" variant="outline" className="gap-1" onClick={() => window.print()}>
                 <Printer className="h-4 w-4" /> طباعة
@@ -61,7 +102,7 @@ function GroupCasesDialog({ deptIds, groupLabel, open, onClose }: {
             <table className="w-full border-collapse text-sm" style={{ fontSize: fontSize[0] }}>
               <thead className="sticky top-0 bg-muted">
                 <tr>
-                  {["م", "الاسم", "السن", "التشخيص", "تاريخ الدخول", "مدة الإقامة", "الوضع", "ت. التنفس"].map(h => (
+                  {["م", "الاسم", "السن", "التشخيص", "تاريخ الدخول", "مدة الإقامة", "سرير/محضن", "ت.التوصيل", "التنفس", "مود"].map(h => (
                     <th key={h} className="border p-2 text-right font-bold">{h}</th>
                   ))}
                 </tr>
@@ -73,18 +114,16 @@ function GroupCasesDialog({ deptIds, groupLabel, open, onClose }: {
                     <td className="border p-2 font-medium">{c.patientName}</td>
                     <td className="border p-2">{c.age ?? "—"}</td>
                     <td className="border p-2">{c.diagnosis ?? "—"}</td>
-                    <td className="border p-2">{formatDateAr(c.admissionDate)}</td>
+                    <td className="border p-2 whitespace-nowrap">{formatDateAr(c.admissionDate)}</td>
                     <td className="border p-2 text-center">{calcStayLabel(c.admissionDate)}</td>
-                    <td className="border p-2">
-                      <Badge variant={c.status === "critical" ? "destructive" : "outline"} className="text-xs">
-                        {translate(c.status, LABELS.STATUS)}
-                      </Badge>
-                    </td>
-                    <td className="border p-2">{translate(c.artificialRespiration, LABELS.ARTIFICIAL_RESPIRATION)}</td>
+                    <td className="border p-2 text-center">{getBed(c.departmentId)}</td>
+                    <td className="border p-2 whitespace-nowrap text-xs">{formatDateAr((c as any).ventilationStartDate)}</td>
+                    <td className="border p-2 text-xs">{translate(c.artificialRespiration, LABELS.ARTIFICIAL_RESPIRATION)}</td>
+                    <td className="border p-2 text-xs">{(c as any).mobe ?? "—"}</td>
                   </tr>
                 ))}
                 {displayCases.length === 0 && (
-                  <tr><td colSpan={8} className="text-center p-8 text-muted-foreground">لا توجد حالات نشطة</td></tr>
+                  <tr><td colSpan={10} className="text-center p-8 text-muted-foreground">لا توجد حالات نشطة</td></tr>
                 )}
               </tbody>
             </table>
@@ -157,7 +196,7 @@ export default function Dashboard() {
       </div>
 
       {/* KPI strip — compact, side by side */}
-      <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
+      <div className="grid grid-cols-2 md:grid-cols-4 gap-3 no-print">
         <Card className="border-t-4 border-t-blue-500 cursor-pointer hover:shadow-md transition-shadow" onClick={() => setLocation("/print-reports")}>
           <CardContent className="p-3 flex items-center gap-3">
             <div className="bg-blue-100 dark:bg-blue-900/30 p-2 rounded-lg shrink-0">

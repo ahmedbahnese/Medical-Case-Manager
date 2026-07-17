@@ -1,7 +1,8 @@
 import { useState, useCallback, useEffect } from "react";
 import { useGetDepartments, useUpdateCase } from "@workspace/api-client-react";
 import { Link } from "wouter";
-import { Wind, ArrowLeft, Activity, Printer, FileSpreadsheet, ZoomIn, ZoomOut } from "lucide-react";
+import { Wind, ArrowLeft, Activity, Printer, FileSpreadsheet, ZoomIn, ZoomOut, FileText } from "lucide-react";
+import { exportWordDoc } from "@/lib/word-export";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
@@ -129,6 +130,41 @@ function InlineModeCell({ caseId, value, onSaved }: {
   );
 }
 
+function exportWord(cases: Case[], depts: {id:number;name:string}[]) {
+  const deptMap = new Map(depts.map((d) => [d.id, d.name]));
+  const fa = (v: unknown) => formatDateAr((v as string) ?? null);
+  const now = new Date();
+  const dateStr = `${now.getDate()}/${now.getMonth()+1}/${now.getFullYear()}`;
+  const rows = cases.map((c, i) => `
+    <tr style="${i%2===0?'':'background:#f5f5f5'}">
+      <td style="text-align:center">${i+1}</td>
+      <td><strong>${c.patientName}</strong></td>
+      <td>${c.age ?? "—"}</td>
+      <td>${c.diagnosis ?? "—"}</td>
+      <td>${fa(c.admissionDate)}</td>
+      <td>${calcDuration(c.admissionDate as string)}</td>
+      <td>${fa(c.ventilationStartDate)}</td>
+      <td>${fa(c.ventilationEndDate)}</td>
+      <td>${translate(c.artificialRespiration ?? "no", LABELS.ARTIFICIAL_RESPIRATION)}</td>
+      <td>${deptMap.get(c.departmentId) ?? "—"}</td>
+    </tr>`).join("");
+  const html = `
+    <div class="header">
+      <h2>مستشفى الأطفال التخصصي بالبحيرة — BSCH</h2>
+      <h3>بيان حالات التنفس الصناعي</h3>
+      <p>${dateStr} — إجمالي: ${cases.length} حالة</p>
+    </div>
+    <table border="1">
+      <tr style="background:#d9e1f2">
+        <th>م</th><th>الاسم</th><th>السن</th><th>التشخيص</th>
+        <th>تاريخ الدخول</th><th>المدة</th><th>ت. التنفس</th>
+        <th>ت. الفصل</th><th>Mode</th><th>القسم</th>
+      </tr>
+      ${rows}
+    </table>`;
+  exportWordDoc(html, `respiration-${now.toISOString().slice(0,10)}.doc`);
+}
+
 function exportExcel(cases: Case[], depts: any[]) {
   const deptMap = new Map(depts.map(d => [d.id, d.name]));
   const now = new Date();
@@ -220,6 +256,9 @@ export default function RespirationList() {
           <Button variant="outline" size="sm" className="gap-1" onClick={() => exportExcel(cases, depts)}>
             <FileSpreadsheet className="h-4 w-4" /> Excel
           </Button>
+          <Button variant="outline" size="sm" className="gap-1" onClick={() => exportWord(cases, depts)}>
+            <FileText className="h-4 w-4" /> Word
+          </Button>
           <Button size="sm" className="gap-1" onClick={() => window.print()}>
             <Printer className="h-4 w-4" /> طباعة
           </Button>
@@ -282,8 +321,8 @@ export default function RespirationList() {
         </div>
       </div>
 
-      {/* Table */}
-      <Card>
+      {/* Table — hidden on print (print-area below handles it) */}
+      <Card className="no-print">
         <CardContent className="p-0 overflow-x-auto">
           {loading ? (
             <div className="p-6 space-y-2">{[1,2,3].map(i=><Skeleton key={i} className="h-10 w-full"/>)}</div>

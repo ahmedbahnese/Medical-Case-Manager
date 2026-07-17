@@ -165,7 +165,7 @@ router.post("/cases/bulk-import", async (req, res): Promise<void> => {
 });
 
 function parseArabicCasesText(text: string, defaultDeptId: number | null | undefined) {
-  const results: Array<{
+  type ParsedCase = {
     patientName: string;
     age: string | null;
     diagnosis: string | null;
@@ -174,35 +174,51 @@ function parseArabicCasesText(text: string, defaultDeptId: number | null | undef
     notes: string | null;
     artificialRespiration: string | null;
     departmentId: number | null;
-  }> = [];
-
+  };
+  const results: ParsedCase[] = [];
   const lines = text.split(/\n+/).map((l) => l.trim()).filter(Boolean);
+  let currentCase: ParsedCase | null = null;
 
-  let currentCase: (typeof results)[0] | null = null;
+  // Strip Arabic/Western digit prefixes (١-, ١., 1-, 1.) from a line
+  const stripPrefix = (l: string) => l.replace(/^[\u0660-\u0669\d]+[\.\-\)،\s]*/, "").trim();
 
   for (const line of lines) {
-    // Check for structured data first before trying name detection
-    const phoneMatch = line.match(/(?:هاتف|تليفون|رقم|موبايل|تلفون)[:\s]*([0-9+\-\s]{8,15})/i);
-    const ageMatch = line.match(/(?:العمر|عمره|عمرها|سن|عمر)[:\s]*([^\n,،]{1,20})/i);
-    const diagMatch = line.match(/(?:التشخيص|تشخيص|الحالة|مرض|dx)[:\s]*([^\n]{3,150})/i);
-    const natIdMatch = line.match(/(?:قومي|رقم قومي|هوية)[:\s]*(\d{10,14})/i);
-    const respMatchHF = /(?:تردد عالي|عالي التردد|HFO|HFOV|HF\b)/i.test(line);
-    const respMatchVent = /(?:فنت|تهوية آلية|Vent\b|MV\b|PCV)/i.test(line);
-    const respMatchCpap = /(?:CPAP|HFNC|سي باب)/i.test(line);
-    const respMatchStandby = /(?:استعداد|O2|أوكسجين)/i.test(line);
-    const hasResp = respMatchHF || respMatchVent || respMatchCpap || respMatchStandby;
+    const stripped = stripPrefix(line);
 
-    // Name line: numbered list item or line without structured markers
-    const isNameLine = /^(?:\d+[\.\-\)]\s*)?[\u0600-\u06FF\s]{3,}/.test(line)
+    // Structured field detection
+    const phoneMatch = line.match(/(?:هاتف|تليفون|رقم|موبايل|تلفون|phone)[:\s]*([0-9+\-\s]{8,15})/i)
+                    ?? line.match(/\b(01[0-9]{9})\b/);
+    const ageMatch = line.match(/(?:العمر|عمره|عمرها|عمر|سن|السن|age)[:\s]*([^\n,،]{1,25})/i);
+    const diagMatch = line.match(/(?:التشخيص|تشخيص|الحالة|مرض|dx|diagnosis)[:\s]*([^\n]{3,150})/i);
+    const natIdMatch = line.match(/(?:قومي|رقم قومي|هوية)[:\s]*(\d{10,14})/i);
+
+    // Respiration — each mode separately (order matters)
+    const respHF     = /(?:تردد عالي|عالي التردد|HFO|HFOV)\b/i.test(line);
+    const respVent   = /(?:فنت|تهوية آلية|\bVent\b|\bMV\b|\bPCV\b)/i.test(line);
+    const respHFNC   = /\bHFNC\b/i.test(line);
+    const respCpap   = /(?:CPAP|سباب|سي باب)/i.test(line);
+    const respBox    = /(?:بوكس|نيزل كانيولا|nasal cannula|\bbox\b)/i.test(line);
+    const respStandby= /(?:استاندباي|استعداد|\bstandby\b)/i.test(line);
+    const hasResp = respHF || respVent || respHFNC || respCpap || respBox || respStandby;
+
+    // Check if line looks like a name (Arabic, length < 70, no structured markers)
+    const looksArabic = /[\u0600-\u06FF]/.test(stripped);
+    const isNameLine = looksArabic
       && !phoneMatch && !ageMatch && !diagMatch && !natIdMatch && !hasResp
-      && line.length < 60;
+      && stripped.length >= 3 && stripped.length < 70;
+
+    // Also detect "Name، age" pattern on same line (e.g. "محمد احمد، 3 أيام")
+    const inlinAgeMatch = isNameLine
+      ? stripped.match(/^(.{3,40})[،,]\s*(.{2,20})$/)
+      : null;
 
     if (isNameLine) {
       if (currentCase) results.push(currentCase);
-      const cleanName = line.replace(/^\d+[\.\-\)]\s*/, "").trim();
+      const cleanName = inlinAgeMatch ? inlinAgeMatch[1].trim() : stripped;
+      const inlineAge = inlinAgeMatch ? inlinAgeMatch[2].trim() : null;
       currentCase = {
         patientName: cleanName,
-        age: null,
+        age: inlineAge,
         diagnosis: null,
         parentPhone: null,
         nationalId: null,
@@ -213,15 +229,17 @@ function parseArabicCasesText(text: string, defaultDeptId: number | null | undef
     }
 
     if (currentCase) {
-      if (phoneMatch) currentCase.parentPhone = phoneMatch[1].trim();
-      if (ageMatch) currentCase.age = ageMatch[1].trim();
-      if (diagMatch) currentCase.diagnosis = diagMatch[1].trim();
-      if (natIdMatch) currentCase.nationalId = natIdMatch[1].trim();
+      if (phoneMatch && !currentCase.parentPhone) currentCase.parentPhone = (phoneMatch[1] ?? phoneMatch[0]).trim();
+      if (ageMatch && !currentCase.age) currentCase.age = ageMatch[1].trim();
+      if (diagMatch && !currentCase.diagnosis) currentCase.diagnosis = diagMatch[1].trim();
+      if (natIdMatch && !currentCase.nationalId) currentCase.nationalId = natIdMatch[1].trim();
       if (hasResp && !currentCase.artificialRespiration) {
-        if (respMatchHF) currentCase.artificialRespiration = "high_frequency";
-        else if (respMatchVent) currentCase.artificialRespiration = "vent";
-        else if (respMatchCpap) currentCase.artificialRespiration = "cpap";
-        else if (respMatchStandby) currentCase.artificialRespiration = "standby";
+        if (respHF)      currentCase.artificialRespiration = "high_frequency";
+        else if (respVent)    currentCase.artificialRespiration = "vent";
+        else if (respHFNC)   currentCase.artificialRespiration = "hfnc";
+        else if (respCpap)   currentCase.artificialRespiration = "cpap";
+        else if (respBox)    currentCase.artificialRespiration = "box";
+        else if (respStandby) currentCase.artificialRespiration = "standby";
       }
     }
   }
@@ -233,14 +251,10 @@ function parseArabicCasesText(text: string, defaultDeptId: number | null | undef
     const firstLine = lines[0];
     if (firstLine) {
       results.push({
-        patientName: firstLine.replace(/^\d+[\.\-\)]\s*/, "").trim(),
-        age: null,
-        diagnosis: null,
-        parentPhone: null,
-        nationalId: null,
-        notes: text.trim(),
-        artificialRespiration: null,
-        departmentId: defaultDeptId ?? null,
+        patientName: stripPrefix(firstLine),
+        age: null, diagnosis: null, parentPhone: null,
+        nationalId: null, notes: text.trim(),
+        artificialRespiration: null, departmentId: defaultDeptId ?? null,
       });
     }
   }
