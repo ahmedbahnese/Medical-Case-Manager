@@ -23,11 +23,13 @@ const DEPT_GROUPS = [
 ];
 
 const RESP_OPTIONS = [
-  { value: "no", label: "هواء الغرفة" },
-  { value: "standby", label: "استاندباي / بوكس" },
-  { value: "cpap", label: "سباب (CPAP/HFNC)" },
-  { value: "vent", label: "فنت (VENT)" },
   { value: "high_frequency", label: "تردد عالي (HFO)" },
+  { value: "vent",           label: "فنت (VENT)" },
+  { value: "cpap",           label: "سباب (CPAP)" },
+  { value: "standby",        label: "استاندباي" },
+  { value: "hfnc",           label: "HFNC" },
+  { value: "box",            label: "بوكس / نيزل كانيولا" },
+  { value: "no",             label: "هواء الغرفة" },
 ];
 
 function exportExcel(cases: any[], depts: any[], selectedIds: Set<number>, reportDate: string, reportTime: string, reportAmPm: string) {

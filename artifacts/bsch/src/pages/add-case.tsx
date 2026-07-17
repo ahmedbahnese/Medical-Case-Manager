@@ -29,7 +29,7 @@ const formSchema = z.object({
   treatment: z.string().optional(),
   notes: z.string().optional(),
   mobe: z.string().optional(),
-  artificialRespiration: z.enum(["high_frequency", "vent", "cpap", "standby", "no"]).default("no"),
+  artificialRespiration: z.enum(["high_frequency", "vent", "cpap", "hfnc", "standby", "box", "no"]).default("no"),
   status: z.enum(["active", "recovering", "critical"]).default("active"),
   admissionDate: z.string().optional(),
   ventilationStartDate: z.string().optional(),
@@ -79,7 +79,7 @@ function ManualEntryForm() {
       {
         data: {
           ...submitData,
-          caseType: (selectedDept?.departmentType as CaseInputCaseType) ?? "intensive_care_high",
+          caseType: (selectedDept?.departmentType?.startsWith("incubator") ? "incubator" : (selectedDept?.departmentType ?? "intensive_care_high")) as CaseInputCaseType,
           artificialRespiration: submitData.artificialRespiration as CaseInputArtificialRespiration,
           status: submitData.status as CaseInputStatus,
           admissionDate: submitData.admissionDate ? new Date(submitData.admissionDate).toISOString() : undefined,

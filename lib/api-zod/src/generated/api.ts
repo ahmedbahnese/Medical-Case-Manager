@@ -94,7 +94,7 @@ export const GetDepartmentResponse = zod.object({
   "nationalId": zod.string().nullish(),
   "fileNumber": zod.string().nullish(),
   "caseType": zod.enum(['intensive_care_high', 'intensive_care_medium', 'picu', 'incubator']),
-  "artificialRespiration": zod.enum(['high_frequency', 'vent', 'cpap', 'standby', 'no']),
+  "artificialRespiration": zod.enum(['high_frequency', 'vent', 'cpap', 'hfnc', 'standby', 'box', 'no']),
   "status": zod.enum(['active', 'recovering', 'discharged', 'critical']),
   "admissionDate": zod.coerce.date(),
   "dischargeDate": zod.coerce.date().nullish(),
@@ -114,7 +114,7 @@ export const GetCasesQueryParams = zod.object({
   "nationalId": zod.coerce.string().nullish(),
   "fileNumber": zod.coerce.string().nullish(),
   "status": zod.union([zod.literal('active'),zod.literal('recovering'),zod.literal('discharged'),zod.literal('critical'),zod.literal(null)]).nullish(),
-  "artificialRespiration": zod.union([zod.literal('high_frequency'),zod.literal('vent'),zod.literal('cpap'),zod.literal('standby'),zod.literal('no'),zod.literal(null)]).nullish()
+  "artificialRespiration": zod.union([zod.literal('high_frequency'),zod.literal('vent'),zod.literal('cpap'),zod.literal('hfnc'),zod.literal('standby'),zod.literal('box'),zod.literal('no'),zod.literal(null)]).nullish()
 })
 
 export const GetCasesResponseItem = zod.object({
@@ -132,7 +132,7 @@ export const GetCasesResponseItem = zod.object({
   "nationalId": zod.string().nullish(),
   "fileNumber": zod.string().nullish(),
   "caseType": zod.enum(['intensive_care_high', 'intensive_care_medium', 'picu', 'incubator']),
-  "artificialRespiration": zod.enum(['high_frequency', 'vent', 'cpap', 'standby', 'no']),
+  "artificialRespiration": zod.enum(['high_frequency', 'vent', 'cpap', 'hfnc', 'standby', 'box', 'no']),
   "status": zod.enum(['active', 'recovering', 'discharged', 'critical']),
   "admissionDate": zod.coerce.date(),
   "dischargeDate": zod.coerce.date().nullish(),
@@ -158,7 +158,7 @@ export const CreateCaseBody = zod.object({
   "nationalId": zod.string().optional(),
   "fileNumber": zod.string().optional(),
   "caseType": zod.enum(['intensive_care_high', 'intensive_care_medium', 'picu', 'incubator']).optional(),
-  "artificialRespiration": zod.enum(['high_frequency', 'vent', 'cpap', 'standby', 'no']).optional(),
+  "artificialRespiration": zod.enum(['high_frequency', 'vent', 'cpap', 'hfnc', 'standby', 'box', 'no']).optional(),
   "status": zod.enum(['active', 'recovering', 'discharged', 'critical']).optional()
 })
 
@@ -177,7 +177,7 @@ export const CreateCaseResponse = zod.object({
   "nationalId": zod.string().nullish(),
   "fileNumber": zod.string().nullish(),
   "caseType": zod.enum(['intensive_care_high', 'intensive_care_medium', 'picu', 'incubator']),
-  "artificialRespiration": zod.enum(['high_frequency', 'vent', 'cpap', 'standby', 'no']),
+  "artificialRespiration": zod.enum(['high_frequency', 'vent', 'cpap', 'hfnc', 'standby', 'box', 'no']),
   "status": zod.enum(['active', 'recovering', 'discharged', 'critical']),
   "admissionDate": zod.coerce.date(),
   "dischargeDate": zod.coerce.date().nullish(),
@@ -204,7 +204,7 @@ export const GetCasesOnRespirationResponseItem = zod.object({
   "nationalId": zod.string().nullish(),
   "fileNumber": zod.string().nullish(),
   "caseType": zod.enum(['intensive_care_high', 'intensive_care_medium', 'picu', 'incubator']),
-  "artificialRespiration": zod.enum(['high_frequency', 'vent', 'cpap', 'standby', 'no']),
+  "artificialRespiration": zod.enum(['high_frequency', 'vent', 'cpap', 'hfnc', 'standby', 'box', 'no']),
   "status": zod.enum(['active', 'recovering', 'discharged', 'critical']),
   "admissionDate": zod.coerce.date(),
   "dischargeDate": zod.coerce.date().nullish(),
@@ -259,7 +259,7 @@ export const GetCaseResponse = zod.object({
   "nationalId": zod.string().nullish(),
   "fileNumber": zod.string().nullish(),
   "caseType": zod.enum(['intensive_care_high', 'intensive_care_medium', 'picu', 'incubator']),
-  "artificialRespiration": zod.enum(['high_frequency', 'vent', 'cpap', 'standby', 'no']),
+  "artificialRespiration": zod.enum(['high_frequency', 'vent', 'cpap', 'hfnc', 'standby', 'box', 'no']),
   "status": zod.enum(['active', 'recovering', 'discharged', 'critical']),
   "admissionDate": zod.coerce.date(),
   "dischargeDate": zod.coerce.date().nullish(),
@@ -288,7 +288,7 @@ export const UpdateCaseBody = zod.object({
   "nationalId": zod.string().optional(),
   "fileNumber": zod.string().optional(),
   "caseType": zod.enum(['intensive_care_high', 'intensive_care_medium', 'picu', 'incubator']).optional(),
-  "artificialRespiration": zod.enum(['high_frequency', 'vent', 'cpap', 'standby', 'no']).optional(),
+  "artificialRespiration": zod.enum(['high_frequency', 'vent', 'cpap', 'hfnc', 'standby', 'box', 'no']).optional(),
   "status": zod.enum(['active', 'recovering', 'discharged', 'critical']).optional(),
   "dischargeDate": zod.coerce.date().nullish()
 })
@@ -308,7 +308,7 @@ export const UpdateCaseResponse = zod.object({
   "nationalId": zod.string().nullish(),
   "fileNumber": zod.string().nullish(),
   "caseType": zod.enum(['intensive_care_high', 'intensive_care_medium', 'picu', 'incubator']),
-  "artificialRespiration": zod.enum(['high_frequency', 'vent', 'cpap', 'standby', 'no']),
+  "artificialRespiration": zod.enum(['high_frequency', 'vent', 'cpap', 'hfnc', 'standby', 'box', 'no']),
   "status": zod.enum(['active', 'recovering', 'discharged', 'critical']),
   "admissionDate": zod.coerce.date(),
   "dischargeDate": zod.coerce.date().nullish(),
@@ -347,7 +347,7 @@ export const GetWaitingCasesResponseItem = zod.object({
   "careType": zod.enum(['intensive_care_high', 'intensive_care_medium', 'picu', 'incubator']),
   "centralRoomRequired": zod.boolean(),
   "centralRoomCode": zod.string().nullish(),
-  "artificialRespiration": zod.enum(['high_frequency', 'vent', 'cpap', 'standby', 'no']),
+  "artificialRespiration": zod.enum(['high_frequency', 'vent', 'cpap', 'hfnc', 'standby', 'box', 'no']),
   "section": zod.enum(['servo', 'reception']),
   "status": zod.enum(['waiting', 'admitted', 'cancelled']),
   "createdAt": zod.coerce.date(),
@@ -368,7 +368,7 @@ export const CreateWaitingCaseBody = zod.object({
   "careType": zod.enum(['intensive_care_high', 'intensive_care_medium', 'picu', 'incubator']),
   "centralRoomRequired": zod.boolean().optional(),
   "centralRoomCode": zod.string().optional(),
-  "artificialRespiration": zod.enum(['high_frequency', 'vent', 'cpap', 'standby', 'no']).optional(),
+  "artificialRespiration": zod.enum(['high_frequency', 'vent', 'cpap', 'hfnc', 'standby', 'box', 'no']).optional(),
   "section": zod.enum(['servo', 'reception']).optional()
 })
 
@@ -382,7 +382,7 @@ export const CreateWaitingCaseResponse = zod.object({
   "careType": zod.enum(['intensive_care_high', 'intensive_care_medium', 'picu', 'incubator']),
   "centralRoomRequired": zod.boolean(),
   "centralRoomCode": zod.string().nullish(),
-  "artificialRespiration": zod.enum(['high_frequency', 'vent', 'cpap', 'standby', 'no']),
+  "artificialRespiration": zod.enum(['high_frequency', 'vent', 'cpap', 'hfnc', 'standby', 'box', 'no']),
   "section": zod.enum(['servo', 'reception']),
   "status": zod.enum(['waiting', 'admitted', 'cancelled']),
   "createdAt": zod.coerce.date(),
@@ -406,7 +406,7 @@ export const UpdateWaitingCaseBody = zod.object({
   "careType": zod.enum(['intensive_care_high', 'intensive_care_medium', 'picu', 'incubator']).optional(),
   "centralRoomRequired": zod.boolean().optional(),
   "centralRoomCode": zod.string().optional(),
-  "artificialRespiration": zod.enum(['high_frequency', 'vent', 'cpap', 'standby', 'no']).optional(),
+  "artificialRespiration": zod.enum(['high_frequency', 'vent', 'cpap', 'hfnc', 'standby', 'box', 'no']).optional(),
   "section": zod.enum(['servo', 'reception']).optional(),
   "status": zod.enum(['waiting', 'admitted', 'cancelled']).optional()
 })
@@ -421,7 +421,7 @@ export const UpdateWaitingCaseResponse = zod.object({
   "careType": zod.enum(['intensive_care_high', 'intensive_care_medium', 'picu', 'incubator']),
   "centralRoomRequired": zod.boolean(),
   "centralRoomCode": zod.string().nullish(),
-  "artificialRespiration": zod.enum(['high_frequency', 'vent', 'cpap', 'standby', 'no']),
+  "artificialRespiration": zod.enum(['high_frequency', 'vent', 'cpap', 'hfnc', 'standby', 'box', 'no']),
   "section": zod.enum(['servo', 'reception']),
   "status": zod.enum(['waiting', 'admitted', 'cancelled']),
   "createdAt": zod.coerce.date(),

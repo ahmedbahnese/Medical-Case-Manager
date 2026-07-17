@@ -1,6 +1,7 @@
 import { ReactNode } from "react";
 import { Link, useLocation } from "wouter";
 import { useGetMe, useLogout } from "@workspace/api-client-react";
+import { useAppSettings } from "@/contexts/settings-context";
 import { cn } from "@/lib/utils";
 import {
   Activity,
@@ -65,6 +66,7 @@ export function Layout({ children }: { children: ReactNode }) {
   const [location] = useLocation();
   const { data: user, isLoading } = useGetMe();
   const logout = useLogout();
+  const { hospital_name, logo_base64 } = useAppSettings();
 
   if (isLoading) return <div className="h-screen bg-background" />;
 
@@ -82,10 +84,14 @@ export function Layout({ children }: { children: ReactNode }) {
       {/* Sidebar Desktop */}
       <aside className="hidden md:flex w-64 flex-col bg-sidebar border-l border-sidebar-border h-screen sticky top-0 no-print shrink-0">
         <div className="p-4 flex items-center gap-3 text-sidebar-foreground border-b border-sidebar-border">
-          <Activity className="h-7 w-7 text-primary" />
+          {logo_base64 ? (
+            <img src={logo_base64} alt="logo" className="h-9 w-9 rounded-lg object-contain bg-white p-0.5" />
+          ) : (
+            <Activity className="h-7 w-7 text-primary" />
+          )}
           <div>
             <h1 className="font-bold text-lg leading-tight">BSCH</h1>
-            <p className="text-xs text-sidebar-foreground/60">مستشفى الأطفال التخصصي بالبحيرة</p>
+            <p className="text-xs text-sidebar-foreground/60 leading-tight max-w-[160px]">{hospital_name}</p>
           </div>
         </div>
 

@@ -1,6 +1,7 @@
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { Route, Switch, Router as WouterRouter, useLocation, Redirect } from 'wouter';
 import { useGetMe } from '@workspace/api-client-react';
+import { SettingsProvider } from '@/contexts/settings-context';
 
 import { Layout } from '@/components/layout';
 import Login from '@/pages/login';
@@ -92,9 +93,11 @@ function Router() {
 function App() {
   return (
     <QueryClientProvider client={queryClient}>
-      <WouterRouter base={import.meta.env.BASE_URL.replace(/\/$/, '')}>
-        <Router />
-      </WouterRouter>
+      <SettingsProvider>
+        <WouterRouter base={import.meta.env.BASE_URL.replace(/\/$/, '')}>
+          <Router />
+        </WouterRouter>
+      </SettingsProvider>
     </QueryClientProvider>
   );
 }

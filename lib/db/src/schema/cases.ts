@@ -13,7 +13,9 @@ export const artificialRespirationEnum = pgEnum("artificial_respiration", [
   "high_frequency",
   "vent",
   "cpap",
+  "hfnc",
   "standby",
+  "box",
   "no",
 ]);
 

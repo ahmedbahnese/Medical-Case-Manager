@@ -155,6 +155,18 @@
     break-inside: avoid;
     margin-bottom: 12px;
   }
+  /* Ensure main content is full-width when printing */
+  main, [class*="main"], .page-content {
+    margin: 0 !important;
+    padding: 0.5cm 0 !important;
+    max-width: 100% !important;
+  }
+  /* Show print-only elements */
+  .print\:block { display: block !important; }
+  .hidden.print\:block { display: block !important; }
+  /* Table print fixes */
+  table { border-collapse: collapse !important; }
+  th, td { border: 1px solid #555 !important; padding: 4px 6px !important; }
   @page {
     size: A4 portrait;
     margin: 1.5cm 1cm;

@@ -15,19 +15,23 @@ import { toast } from "sonner";
 import { apiGet } from "@/lib/api";
 
 const MODE_LABELS: Record<string, { short: string; color: string }> = {
-  vent:           { short: "VENT / PCV",    color: "text-red-600 border-red-300 bg-red-50" },
-  high_frequency: { short: "H.F.O",         color: "text-orange-600 border-orange-300 bg-orange-50" },
-  cpap:           { short: "CPAP / HFNC",   color: "text-yellow-600 border-yellow-300 bg-yellow-50" },
-  standby:        { short: "Standby / Box", color: "text-blue-600 border-blue-300 bg-blue-50" },
-  no:             { short: "هواء الغرفة",   color: "text-gray-500 border-gray-300 bg-gray-50" },
+  high_frequency: { short: "H.F.O",            color: "text-orange-600 border-orange-300 bg-orange-50" },
+  vent:           { short: "VENT / PCV",        color: "text-red-600 border-red-300 bg-red-50" },
+  cpap:           { short: "CPAP",              color: "text-yellow-600 border-yellow-300 bg-yellow-50" },
+  standby:        { short: "Standby",           color: "text-blue-600 border-blue-300 bg-blue-50" },
+  hfnc:           { short: "HFNC",             color: "text-purple-600 border-purple-300 bg-purple-50" },
+  box:            { short: "Box / نيزل كانيولا", color: "text-teal-600 border-teal-300 bg-teal-50" },
+  no:             { short: "هواء الغرفة",       color: "text-gray-500 border-gray-300 bg-gray-50" },
 };
 
 const RESP_OPTIONS = [
-  { value: "no",            label: "هواء الغرفة" },
-  { value: "standby",       label: "استاندباي / بوكس" },
-  { value: "cpap",          label: "سباب (CPAP/HFNC)" },
-  { value: "vent",          label: "فنت (VENT)" },
-  { value: "high_frequency",label: "تردد عالي (HFO)" },
+  { value: "high_frequency", label: "تردد عالي (HFO)" },
+  { value: "vent",           label: "فنت (VENT)" },
+  { value: "cpap",           label: "سباب (CPAP)" },
+  { value: "standby",        label: "استاندباي" },
+  { value: "hfnc",           label: "HFNC" },
+  { value: "box",            label: "بوكس / نيزل كانيولا" },
+  { value: "no",             label: "هواء الغرفة" },
 ];
 
 const DEPT_GROUPS = [

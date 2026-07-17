@@ -1,212 +1,394 @@
-import { useState } from "react";
-import { format } from "date-fns";
-import { ar } from "date-fns/locale";
-import {
-  useGetDashboardStats,
-  useGetDepartments,
-  useGetCases,
-  GetCasesParams,
-} from "@workspace/api-client-react";
-import { Printer, ZoomIn, ZoomOut } from "lucide-react";
+import { useState, useCallback } from "react";
+import { useGetDepartments, useGetCases, useGetWaitingCases } from "@workspace/api-client-react";
+import { Printer, FileSpreadsheet, ZoomIn, ZoomOut } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Slider } from "@/components/ui/slider";
-import { Card, CardContent } from "@/components/ui/card";
+import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { Checkbox } from "@/components/ui/checkbox";
+import { Badge } from "@/components/ui/badge";
+import { useAppSettings } from "@/contexts/settings-context";
 import { LABELS, translate, calcStayLabel } from "@/lib/constants";
 
 const DAYS_AR = ["الأحد", "الاثنين", "الثلاثاء", "الأربعاء", "الخميس", "الجمعة", "السبت"];
 
+const SHIFTS = [
+  { key: "morning",   label: "الفترة الصباحية",   icon: "☀️" },
+  { key: "afternoon", label: "الفترة المسائية 4م", icon: "🌅" },
+  { key: "night",     label: "الفترة المسائية 11م", icon: "🌙" },
+] as const;
+
+const REPORT_ROWS = [
+  { key: "inc_beds",   label: "حضانة حديث الولادة",    deptTypes: ["incubator_a","incubator_b","incubator_c"], defaultTotal: 43 },
+  { key: "picu_beds",  label: "حضانات البيكو",           deptTypes: ["picu"],                                   defaultTotal: 12 },
+  { key: "inc_vents",  label: "أجهزة تنفس الحضانات",    ventDepts: ["incubator_a","incubator_b","incubator_c"], defaultTotal: 9  },
+  { key: "picu_vents", label: "أجهزة تنفس البيكو",      ventDepts: ["picu"],                                   defaultTotal: 4  },
+  { key: "hfo",        label: "عالي التردد",             hfoOnly: true,                                         defaultTotal: 4  },
+  { key: "icu_high",   label: "أسرة العناية المركزة",    deptTypes: ["intensive_care_high"],                    defaultTotal: 10 },
+  { key: "icu_med",    label: "أسرة العناية المتوسطة",  deptTypes: ["intensive_care_medium"],                  defaultTotal: 6  },
+  { key: "icu_vents",  label: "أجهزة تنفس العناية",     ventDepts: ["intensive_care_high","intensive_care_medium"], defaultTotal: 8 },
+  { key: "internal",   label: "أسرة القسم الداخلي",     manual: true,                                          defaultTotal: 24 },
+] as const;
+
+type RowKey = typeof REPORT_ROWS[number]["key"];
+
+// Each row: total, occupied, standby, broken — free is calculated
+interface RowData { total: number; occupied: number; standby: number; broken: number }
+type ShiftData = Record<RowKey, RowData>;
+
+function makeFree(rd: RowData): number {
+  return Math.max(0, rd.total - rd.occupied - rd.standby - rd.broken);
+}
+
+function makeEmptyShift(): ShiftData {
+  const obj: Partial<ShiftData> = {};
+  for (const r of REPORT_ROWS) obj[r.key as RowKey] = { total: r.defaultTotal, occupied: 0, standby: 0, broken: 0 };
+  return obj as ShiftData;
+}
+
+type ShiftIdx = 0 | 1 | 2;
+
+interface ShiftTableProps {
+  shift: typeof SHIFTS[number];
+  shiftIndex: ShiftIdx;
+  activeShift: ShiftIdx;
+  data: ShiftData;
+  onChange: (key: RowKey, field: keyof RowData, value: number) => void;
+  fontSize: number;
+  isFirst?: boolean;
+}
+
+function NumCell({ val, editable, onChange, fontSize }: { val: number | string; editable: boolean; onChange: (v: number) => void; fontSize: number }) {
+  if (!editable) return <span className="text-muted-foreground/60">---</span>;
+  if (typeof val === "string") return <span>{val}</span>;
+  return (
+    <input
+      type="number" min={0} max={999} value={val}
+      onChange={e => onChange(Number(e.target.value) || 0)}
+      className="w-12 border-b border-gray-300 text-center bg-transparent focus:outline-none focus:border-blue-400"
+      style={{ fontSize }}
+    />
+  );
+}
+
+function ShiftTable({ shift, shiftIndex, activeShift, data, onChange, fontSize, isFirst }: ShiftTableProps) {
+  const editable = shiftIndex <= activeShift;
+
+  return (
+    <div className="mb-4 break-inside-avoid print-shift-block">
+      <h4 className={`font-bold text-center border border-black py-1 ${editable ? "bg-gray-100" : "bg-gray-50 text-gray-400"}`}
+        style={{ fontSize: fontSize + 1 }}>
+        {shift.icon} بيان الخدمة الطارئة للـ {shift.label}
+        {!editable && <span className="text-xs mr-2">(لم تُدخل بعد)</span>}
+      </h4>
+      <table className="w-full border-collapse" style={{ fontSize }}>
+        <thead>
+          <tr className="bg-gray-200">
+            <th className="border border-gray-600 p-1 text-right w-[30%]">الأقسام</th>
+            <th className="border border-gray-600 p-1 text-center w-[14%]">الإجمالي</th>
+            <th className="border border-gray-600 p-1 text-center w-[14%]">مشغول</th>
+            <th className="border border-gray-600 p-1 text-center w-[14%]">فارغ</th>
+            <th className="border border-gray-600 p-1 text-center w-[14%]">استاندباي</th>
+            <th className="border border-gray-600 p-1 text-center w-[14%]">معطل</th>
+          </tr>
+        </thead>
+        <tbody>
+          {REPORT_ROWS.map((r, i) => {
+            const rd = data[r.key as RowKey];
+            return (
+              <tr key={r.key} className={i % 2 === 0 ? "bg-white" : "bg-gray-50"}>
+                <td className="border border-gray-400 p-1 font-medium">{r.label}</td>
+                <td className="border border-gray-400 p-1 text-center">
+                  {isFirst && editable ? (
+                    <input type="number" min={0} max={999} value={rd.total}
+                      onChange={e => onChange(r.key as RowKey, "total", Number(e.target.value)||0)}
+                      className="w-12 border-b border-gray-300 text-center bg-transparent focus:outline-none" style={{ fontSize }} />
+                  ) : <span>{editable ? rd.total : "---"}</span>}
+                </td>
+                <td className="border border-gray-400 p-1 text-center">
+                  <NumCell val={rd.occupied} editable={editable} onChange={v => onChange(r.key as RowKey, "occupied", v)} fontSize={fontSize} />
+                </td>
+                <td className="border border-gray-400 p-1 text-center font-medium">
+                  {editable ? makeFree(rd) : "---"}
+                </td>
+                <td className="border border-gray-400 p-1 text-center">
+                  <NumCell val={rd.standby} editable={editable} onChange={v => onChange(r.key as RowKey, "standby", v)} fontSize={fontSize} />
+                </td>
+                <td className="border border-gray-400 p-1 text-center">
+                  <NumCell val={rd.broken} editable={editable} onChange={v => onChange(r.key as RowKey, "broken", v)} fontSize={fontSize} />
+                </td>
+              </tr>
+            );
+          })}
+        </tbody>
+      </table>
+    </div>
+  );
+}
+
+function exportExcel(shifts: ShiftData[], activeShift: ShiftIdx, hospitalName: string, reportDate: string, dayName: string, supervisor: string) {
+  const allRows: any[][] = [[hospitalName], [`بيان الخدمة الطارئة — ${dayName} ${reportDate}`], []];
+  SHIFTS.forEach((s, si) => {
+    if (si > activeShift) return;
+    const sd = shifts[si];
+    allRows.push([s.label]);
+    allRows.push(["الأقسام","الإجمالي","مشغول","فارغ","استاندباي","معطل"]);
+    REPORT_ROWS.forEach(r => {
+      const d = sd[r.key as RowKey];
+      allRows.push([r.label, d.total, d.occupied, makeFree(d), d.standby, d.broken]);
+    });
+    allRows.push([]);
+  });
+  if (supervisor) allRows.push([`الإشراف: ${supervisor}`]);
+  const tsv = allRows.map(r => r.join("\t")).join("\n");
+  const blob = new Blob(["\uFEFF"+tsv], {type:"text/tab-separated-values;charset=utf-8;"});
+  const a = document.createElement("a"); a.href=URL.createObjectURL(blob);
+  a.download=`occupancy-${reportDate}.xls`; a.click();
+}
+
 export default function OccupancyReport() {
+  const { hospital_name } = useAppSettings();
   const now = new Date();
   const [reportDate, setReportDate] = useState(now.toISOString().slice(0, 10));
-  const [reportTime, setReportTime] = useState(format(now, "hh:mm"));
-  const [reportAmPm, setReportAmPm] = useState<"ص" | "م">(parseInt(format(now, "HH")) < 12 ? "ص" : "م");
   const [fontSize, setFontSize] = useState([11]);
+  const [supervisor, setSupervisor] = useState("");
+  const [activeShift, setActiveShift] = useState<ShiftIdx>(0);
+  const [includeServo, setIncludeServo] = useState(false);
+  const [includeReception, setIncludeReception] = useState(false);
+  const [servoShift, setServoShift] = useState<ShiftIdx>(0);
+  const [receptionShift, setReceptionShift] = useState<ShiftIdx>(0);
 
-  const { data: stats } = useGetDashboardStats();
+  const [shifts, setShifts] = useState<ShiftData[]>([makeEmptyShift(), makeEmptyShift(), makeEmptyShift()]);
+
   const { data: departments } = useGetDepartments();
-  const { data: allCases } = useGetCases({ status: "active" } as GetCasesParams);
+  const { data: allCases } = useGetCases({ status: "active" } as any);
+  const { data: waitingServo } = useGetWaitingCases({ section: "servo", status: "waiting" } as any);
+  const { data: waitingReception } = useGetWaitingCases({ section: "reception", status: "waiting" } as any);
+
+  const [dbFilled, setDbFilled] = useState(false);
+  if (!dbFilled && departments && allCases) {
+    setDbFilled(true);
+    const deptTypeMap = new Map((departments ?? []).map((d: any) => [d.id, d.departmentType as string]));
+    const casesArr = allCases ?? [];
+
+    const getCount = (deptTypes: readonly string[], ventOnly = false, hfoOnly = false) =>
+      casesArr.filter((c: any) => {
+        const t = deptTypeMap.get(c.departmentId) ?? "";
+        if (!deptTypes.includes(t)) return false;
+        if (hfoOnly) return c.artificialRespiration === "high_frequency";
+        if (ventOnly) return c.artificialRespiration && c.artificialRespiration !== "no";
+        return true;
+      }).length;
+
+    const newShift0 = makeEmptyShift();
+    newShift0.inc_beds.occupied  = getCount(["incubator_a","incubator_b","incubator_c"]);
+    newShift0.picu_beds.occupied = getCount(["picu"]);
+    newShift0.inc_vents.occupied = getCount(["incubator_a","incubator_b","incubator_c"], true);
+    newShift0.picu_vents.occupied= getCount(["picu"], true);
+    newShift0.hfo.occupied       = getCount(["intensive_care_high","intensive_care_medium","picu","incubator_a","incubator_b","incubator_c"], false, true);
+    newShift0.icu_high.occupied  = getCount(["intensive_care_high"]);
+    newShift0.icu_med.occupied   = getCount(["intensive_care_medium"]);
+    newShift0.icu_vents.occupied = getCount(["intensive_care_high","intensive_care_medium"], true);
+
+    const totalInc = (departments ?? []).filter((d: any) => ["incubator_a","incubator_b","incubator_c"].includes(d.departmentType)).reduce((s: number, d: any) => s + d.capacity, 0);
+    const totalPicu = (departments ?? []).find((d: any) => d.departmentType === "picu")?.capacity ?? 12;
+    const totalIcuH = (departments ?? []).find((d: any) => d.departmentType === "intensive_care_high")?.capacity ?? 10;
+    const totalIcuM = (departments ?? []).find((d: any) => d.departmentType === "intensive_care_medium")?.capacity ?? 6;
+
+    if (totalInc) newShift0.inc_beds.total = totalInc;
+    if (totalPicu) newShift0.picu_beds.total = totalPicu;
+    if (totalIcuH) newShift0.icu_high.total = totalIcuH;
+    if (totalIcuM) newShift0.icu_med.total = totalIcuM;
+
+    setShifts([newShift0, { ...newShift0 }, { ...newShift0 }]);
+  }
+
+  const updateShift = useCallback((si: number, key: RowKey, field: keyof RowData, val: number) => {
+    setShifts(prev => {
+      const next = [...prev];
+      next[si] = { ...prev[si], [key]: { ...prev[si][key], [field]: val } };
+      return next;
+    });
+  }, []);
 
   const dateObj = new Date(reportDate + "T12:00:00");
   const dayName = DAYS_AR[dateObj.getDay()];
   const formatted = `${dateObj.getDate()}/${dateObj.getMonth() + 1}/${dateObj.getFullYear()}`;
-
-  const totalCapacity = departments?.reduce((s, d) => s + d.capacity, 0) ?? 0;
-  const activeCases = allCases?.length ?? 0;
-  const occupancyPct = totalCapacity > 0 ? Math.round((activeCases / totalCapacity) * 100) : 0;
-
-  const onVent = (allCases ?? []).filter(c => c.artificialRespiration !== "no").length;
-  const critical = (allCases ?? []).filter(c => c.status === "critical").length;
+  const fs = fontSize[0];
 
   return (
     <div className="space-y-4">
-      {/* Controls - no-print */}
+      {/* Controls — no-print */}
       <div className="no-print space-y-4">
-        <div className="flex items-center justify-between flex-wrap gap-3">
+        <div className="flex flex-wrap gap-2 items-center justify-between">
           <div>
             <h1 className="text-2xl font-bold">بيان الإشغال</h1>
-            <p className="text-muted-foreground text-sm">تقرير الإشغال الكامل للمستشفى</p>
+            <p className="text-sm text-muted-foreground">بيان الخدمة الطارئة — 3 فترات</p>
           </div>
-          <Button className="gap-2" onClick={() => window.print()}>
-            <Printer className="h-4 w-4" /> طباعة البيان
-          </Button>
+          <div className="flex gap-2 flex-wrap">
+            <Button variant="outline" size="sm" className="gap-1" onClick={() => exportExcel(shifts, activeShift, hospital_name, formatted, dayName, supervisor)}>
+              <FileSpreadsheet className="h-4 w-4" /> Excel
+            </Button>
+            <Button size="sm" className="gap-1" onClick={() => window.print()}>
+              <Printer className="h-4 w-4" /> طباعة
+            </Button>
+          </div>
         </div>
 
-        <Card>
-          <CardContent className="pt-5 pb-4">
-            <div className="grid grid-cols-2 md:grid-cols-4 gap-4 items-end">
-              <div className="space-y-1.5">
+        <div className="grid md:grid-cols-3 gap-3">
+          {/* Date & supervisor */}
+          <Card>
+            <CardContent className="pt-4 pb-3 space-y-2">
+              <div className="space-y-1">
                 <Label className="text-xs">تاريخ البيان</Label>
                 <Input type="date" value={reportDate} onChange={e => setReportDate(e.target.value)} className="h-8 text-sm" />
               </div>
-              <div className="space-y-1.5">
-                <Label className="text-xs">الوقت</Label>
-                <div className="flex gap-1">
-                  <Input value={reportTime} onChange={e => setReportTime(e.target.value)}
-                    className="h-8 text-sm flex-1" placeholder="07:00" />
-                  <button
-                    className="h-8 px-2 border rounded-md text-sm hover:bg-muted"
-                    onClick={() => setReportAmPm(v => v === "ص" ? "م" : "ص")}
-                  >
-                    {reportAmPm}
-                  </button>
+              <div className="space-y-1">
+                <Label className="text-xs">اسم المشرف</Label>
+                <Input value={supervisor} onChange={e => setSupervisor(e.target.value)} placeholder="د. ..." className="h-8 text-sm" />
+              </div>
+            </CardContent>
+          </Card>
+
+          {/* Active shift selector */}
+          <Card>
+            <CardHeader className="pb-1 pt-3"><CardTitle className="text-xs">الفترة الحالية (التي تُدخل بياناتها الآن)</CardTitle></CardHeader>
+            <CardContent className="pb-3 space-y-2">
+              <div className="flex gap-2">
+                {SHIFTS.map((s, i) => (
+                  <Button key={s.key} size="sm" className="flex-1 text-xs px-1"
+                    variant={activeShift === i ? "default" : "outline"}
+                    onClick={() => setActiveShift(i as ShiftIdx)}>
+                    {s.icon} {i === 0 ? "صباحية" : i === 1 ? "4م" : "11م"}
+                  </Button>
+                ))}
+              </div>
+              <p className="text-xs text-muted-foreground">
+                الفترات السابقة للفترة المختارة تبقى كما هي، واللاحقة تظهر (---)
+              </p>
+            </CardContent>
+          </Card>
+
+          {/* Waiting cases */}
+          <Card>
+            <CardHeader className="pb-1 pt-3"><CardTitle className="text-xs">إضافة قوائم الانتظار للبيان</CardTitle></CardHeader>
+            <CardContent className="pb-3 space-y-3">
+              <div className="space-y-1">
+                <div className="flex items-center gap-2">
+                  <Checkbox id="servo" checked={includeServo} onCheckedChange={v => setIncludeServo(!!v)} />
+                  <label htmlFor="servo" className="text-xs cursor-pointer">سيرفو ({waitingServo?.length ?? 0} حالة)</label>
+                </div>
+                {includeServo && (
+                  <div className="flex gap-1 mr-5">
+                    {SHIFTS.map((s, i) => (
+                      <Button key={s.key} size="sm" variant={servoShift === i ? "secondary" : "ghost"} className="text-xs h-6 px-1"
+                        onClick={() => setServoShift(i as ShiftIdx)}>{s.icon}</Button>
+                    ))}
+                  </div>
+                )}
+              </div>
+              <div className="space-y-1">
+                <div className="flex items-center gap-2">
+                  <Checkbox id="recep" checked={includeReception} onCheckedChange={v => setIncludeReception(!!v)} />
+                  <label htmlFor="recep" className="text-xs cursor-pointer">استقبال ({waitingReception?.length ?? 0} حالة)</label>
+                </div>
+                {includeReception && (
+                  <div className="flex gap-1 mr-5">
+                    {SHIFTS.map((s, i) => (
+                      <Button key={s.key} size="sm" variant={receptionShift === i ? "secondary" : "ghost"} className="text-xs h-6 px-1"
+                        onClick={() => setReceptionShift(i as ShiftIdx)}>{s.icon}</Button>
+                    ))}
+                  </div>
+                )}
+              </div>
+              <div className="mt-2">
+                <Label className="text-xs">حجم الخط ({fs})</Label>
+                <div className="flex items-center gap-2 mt-1">
+                  <ZoomOut className="h-3 w-3 text-muted-foreground" />
+                  <Slider value={fontSize} onValueChange={setFontSize} min={8} max={16} step={1} className="flex-1" />
+                  <ZoomIn className="h-3 w-3 text-muted-foreground" />
                 </div>
               </div>
-              <div className="space-y-1.5 col-span-2">
-                <Label className="text-xs">حجم الخط ({fontSize[0]}px)</Label>
-                <div className="flex items-center gap-3">
-                  <ZoomOut className="h-4 w-4 text-muted-foreground" />
-                  <Slider value={fontSize} onValueChange={setFontSize} min={7} max={16} step={1} className="flex-1" />
-                  <ZoomIn className="h-4 w-4 text-muted-foreground" />
-                </div>
-              </div>
-            </div>
-          </CardContent>
-        </Card>
+            </CardContent>
+          </Card>
+        </div>
       </div>
 
       {/* Printable Report */}
-      <div
-        className="bg-white text-black rounded-lg overflow-hidden shadow-lg print:shadow-none"
-        style={{ fontSize: fontSize[0], direction: "rtl", fontFamily: "Arial, sans-serif" }}
-      >
-        {/* Header */}
-        <div className="text-center border-b-2 border-black py-4 px-6">
-          <h2 style={{ fontSize: fontSize[0] + 4 }} className="font-bold">مستشفى الأطفال التخصصي بالبحيرة</h2>
-          <h3 className="font-bold mt-1">بيان الإشغال</h3>
-          <p className="mt-1">
-            يوم {dayName} الموافق {formatted} — الساعة: {reportTime} {reportAmPm}
-          </p>
+      <div className="print-area bg-white text-black" dir="rtl" style={{ fontSize: fs }}>
+        {/* Report Header */}
+        <div className="text-center mb-3 border-b-2 border-black pb-2">
+          <div className="flex items-center justify-between mb-1 text-xs">
+            <span>مديرية الصحة بالبحيرة</span>
+            <span>★★★★★★</span>
+          </div>
+          <h2 className="font-bold" style={{ fontSize: fs + 4 }}>{hospital_name}</h2>
+          <h3 className="font-bold" style={{ fontSize: fs + 2 }}>بيان الخدمة الطارئة</h3>
+          <p>عن يوم {dayName} الموافق {formatted}</p>
         </div>
 
-        <div className="p-4 space-y-4">
-          {/* Summary Stats */}
-          <div className="grid grid-cols-4 gap-3 text-center">
-            {[
-              { label: "إجمالي الحالات", value: activeCases, border: "border-blue-500" },
-              { label: "نسبة الإشغال", value: `${occupancyPct}%`, border: "border-orange-500" },
-              { label: "على التنفس", value: onVent, border: "border-teal-500" },
-              { label: "حالات حرجة", value: critical, border: "border-red-500" },
-            ].map(s => (
-              <div key={s.label} className={`border-2 ${s.border} rounded p-2`}>
-                <div className="font-bold text-lg">{s.value}</div>
-                <div className="text-xs">{s.label}</div>
-              </div>
-            ))}
+        {/* 3 Shift Tables */}
+        {SHIFTS.map((shift, si) => (
+          <div key={shift.key}>
+            <ShiftTable
+              shift={shift}
+              shiftIndex={si as ShiftIdx}
+              activeShift={activeShift}
+              data={shifts[si]}
+              onChange={(key, field, val) => updateShift(si, key, field, val)}
+              fontSize={fs}
+              isFirst={si === 0}
+            />
+            {/* Waiting cases for this shift */}
+            {includeServo && servoShift === si && (waitingServo?.length ?? 0) > 0 && (
+              <WaitingTable title="سيرفو" cases={waitingServo!} fontSize={fs} />
+            )}
+            {includeReception && receptionShift === si && (waitingReception?.length ?? 0) > 0 && (
+              <WaitingTable title="استقبال" cases={waitingReception!} fontSize={fs} />
+            )}
           </div>
+        ))}
 
-          {/* Per-Department Table */}
+        {/* Footer / Signature */}
+        <div className="mt-4 border-t border-gray-400 pt-2 flex justify-between" style={{ fontSize: fs }}>
           <div>
-            <h3 className="font-bold border-b border-black pb-1 mb-2">توزيع الإشغال على الأقسام</h3>
-            <table className="w-full border-collapse">
-              <thead>
-                <tr className="bg-gray-100">
-                  {["م", "القسم", "السعة", "نشط", "فاضي", "نسبة", "حرج", "تنفس"].map(h => (
-                    <th key={h} className="border border-gray-400 p-1 text-right font-bold">{h}</th>
-                  ))}
-                </tr>
-              </thead>
-              <tbody>
-                {departments?.map((d, i) => {
-                  const dStat = stats?.departmentStats.find(s => s.departmentId === d.id);
-                  const active = dStat?.activeCases ?? 0;
-                  const crit = dStat?.criticalCases ?? 0;
-                  const ventCount = (allCases ?? []).filter(c => c.departmentId === d.id && c.artificialRespiration !== "no").length;
-                  const pct = Math.round((active / d.capacity) * 100);
-                  return (
-                    <tr key={d.id} className={i % 2 === 0 ? "" : "bg-gray-50"}>
-                      <td className="border border-gray-300 p-1 text-center">{i + 1}</td>
-                      <td className="border border-gray-300 p-1 font-medium">{d.name}</td>
-                      <td className="border border-gray-300 p-1 text-center">{d.capacity}</td>
-                      <td className="border border-gray-300 p-1 text-center font-bold">{active}</td>
-                      <td className="border border-gray-300 p-1 text-center">{d.capacity - active}</td>
-                      <td className={`border border-gray-300 p-1 text-center font-bold ${pct >= 100 ? "bg-red-100 text-red-700" : pct >= 80 ? "bg-yellow-100" : ""}`}>
-                        {pct}%
-                      </td>
-                      <td className="border border-gray-300 p-1 text-center">{crit}</td>
-                      <td className="border border-gray-300 p-1 text-center">{ventCount}</td>
-                    </tr>
-                  );
-                })}
-              </tbody>
-              <tfoot>
-                <tr className="bg-gray-200 font-bold">
-                  <td colSpan={2} className="border border-gray-400 p-1 text-right">الإجمالي</td>
-                  <td className="border border-gray-400 p-1 text-center">{totalCapacity}</td>
-                  <td className="border border-gray-400 p-1 text-center">{activeCases}</td>
-                  <td className="border border-gray-400 p-1 text-center">{totalCapacity - activeCases}</td>
-                  <td className="border border-gray-400 p-1 text-center">{occupancyPct}%</td>
-                  <td className="border border-gray-400 p-1 text-center">{critical}</td>
-                  <td className="border border-gray-400 p-1 text-center">{onVent}</td>
-                </tr>
-              </tfoot>
-            </table>
+            <p className="font-bold">الإشراف:</p>
+            <p className="mt-4">1. {supervisor || "..............................."}</p>
+            <p className="mt-2">2. ...............................</p>
           </div>
-
-          {/* All Active Cases */}
-          <div>
-            <h3 className="font-bold border-b border-black pb-1 mb-2">بيان الحالات النشطة</h3>
-            <table className="w-full border-collapse" style={{ fontSize: fontSize[0] - 1 }}>
-              <thead>
-                <tr className="bg-gray-100">
-                  {["م", "الاسم", "السن", "القسم", "التشخيص", "التنفس الصناعي", "مدة الإقامة", "الحالة", "MOBE"].map(h => (
-                    <th key={h} className="border border-gray-400 p-1 text-right font-bold">{h}</th>
-                  ))}
-                </tr>
-              </thead>
-              <tbody>
-                {(allCases ?? []).map((c, i) => (
-                  <tr key={c.id} className={i % 2 === 0 ? "" : "bg-gray-50"}>
-                    <td className="border border-gray-300 p-1 text-center">{i + 1}</td>
-                    <td className="border border-gray-300 p-1">{c.patientName}</td>
-                    <td className="border border-gray-300 p-1">{c.age ?? "—"}</td>
-                    <td className="border border-gray-300 p-1">{c.departmentName}</td>
-                    <td className="border border-gray-300 p-1 max-w-[120px]">{c.diagnosis ?? "—"}</td>
-                    <td className="border border-gray-300 p-1">
-                      {c.artificialRespiration !== "no" ? translate(c.artificialRespiration, LABELS.ARTIFICIAL_RESPIRATION) : "—"}
-                    </td>
-                    <td className="border border-gray-300 p-1 text-center">{calcStayLabel(c.admissionDate)}</td>
-                    <td className="border border-gray-300 p-1">{translate(c.status, LABELS.STATUS)}</td>
-                    <td className="border border-gray-300 p-1">{(c as any).mobe ?? "—"}</td>
-                  </tr>
-                ))}
-                {(allCases ?? []).length === 0 && (
-                  <tr>
-                    <td colSpan={9} className="border border-gray-300 p-4 text-center text-gray-500">لا توجد حالات نشطة</td>
-                  </tr>
-                )}
-              </tbody>
-            </table>
+          <div className="text-center text-xs text-gray-400">
+            <p>نظام BSCH</p>
+            <p>{new Date().toLocaleString("ar-EG")}</p>
           </div>
-        </div>
-
-        {/* Footer */}
-        <div className="text-center border-t border-gray-300 py-3 text-xs space-y-1">
-          <p>نظام إدارة الحالات الطبية BSCH</p>
-          <p>تم الطباعة بتاريخ: {new Date().toLocaleString("ar-EG")}</p>
         </div>
       </div>
+    </div>
+  );
+}
+
+function WaitingTable({ title, cases, fontSize }: { title: string; cases: any[]; fontSize: number }) {
+  return (
+    <div className="mb-3 border-t border-gray-300 pt-2">
+      <p className="font-semibold mb-1" style={{ fontSize }}>قائمة انتظار — {title} ({cases.length} حالة)</p>
+      <table className="w-full border-collapse" style={{ fontSize: fontSize - 1 }}>
+        <thead><tr className="bg-gray-100">
+          {["م","الاسم","السن","التشخيص","نوع الرعاية"].map(h => (
+            <th key={h} className="border border-gray-400 p-1 text-right font-bold">{h}</th>
+          ))}
+        </tr></thead>
+        <tbody>
+          {cases.map((c: any, i: number) => (
+            <tr key={c.id} className={i%2===0?"":"bg-gray-50"}>
+              <td className="border border-gray-300 p-1 text-center">{i+1}</td>
+              <td className="border border-gray-300 p-1">{c.patientName}</td>
+              <td className="border border-gray-300 p-1">{c.age??"—"}</td>
+              <td className="border border-gray-300 p-1">{c.diagnosis??"—"}</td>
+              <td className="border border-gray-300 p-1">{translate(c.careType, LABELS.CARE_TYPES)}</td>
+            </tr>
+          ))}
+        </tbody>
+      </table>
     </div>
   );
 }

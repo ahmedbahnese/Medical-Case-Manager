@@ -1,17 +1,19 @@
 export const LABELS = {
   DEPARTMENT_TYPES: {
-    intensive_care_high: "عناية كبيرة",
-    intensive_care_medium: "عناية متوسطة",
-    picu: "بيكيو (PICU)",
-    incubator_a: "حضانة أ",
-    incubator_b: "حضانة ب",
-    incubator_c: "حضانة ج",
+    intensive_care_high: "العناية المركزة الكبرى",
+    intensive_care_medium: "العناية المركزة المتوسطة",
+    picu: "عناية مركزة أطفال (PICU)",
+    incubator_a: "حضانات أ",
+    incubator_b: "حضانات ب",
+    incubator_c: "حضانات ج",
   },
   ARTIFICIAL_RESPIRATION: {
     high_frequency: "تردد عالي (HFO)",
     vent: "فنت (VENT)",
-    cpap: "سباب (CPAP/HFNC)",
-    standby: "استاندباي / بوكس",
+    cpap: "سباب (CPAP)",
+    hfnc: "HFNC",
+    standby: "استاندباي",
+    box: "بوكس / نيزل كانيولا",
     no: "هواء الغرفة",
   },
   STATUS: {
@@ -21,7 +23,7 @@ export const LABELS = {
     critical: "حرج",
   },
   WAITING_SECTION: {
-    servo: "طوارئ",
+    servo: "سيرفو",
     reception: "استقبال",
   },
   WAITING_STATUS: {
@@ -36,18 +38,30 @@ export const LABELS = {
     death: "وفاة",
   },
   CARE_TYPES: {
-    intensive_care_high: "عناية كبيرة",
-    intensive_care_medium: "عناية متوسطة",
-    picu: "بيكيو (PICU)",
+    intensive_care_high: "العناية المركزة الكبرى",
+    intensive_care_medium: "العناية المركزة المتوسطة",
+    picu: "عناية مركزة أطفال (PICU)",
     incubator: "حضانة",
   },
 };
 
-// Incubator department types for bed/incubator detection
-export const INCUBATOR_TYPES = new Set(["incubator_a", "incubator_b", "incubator_c"]);
+// Types that use محضن instead of سرير
+export const INCUBATOR_TYPES = new Set([
+  "incubator_a",
+  "incubator_b",
+  "incubator_c",
+  "picu",
+  "incubator",
+]);
 
 export function getBedType(departmentType: string): "محضن" | "سرير" {
   return INCUBATOR_TYPES.has(departmentType) ? "محضن" : "سرير";
+}
+
+// Mapping from departmentType → caseType (for add-case form)
+export function deptTypeToCaseType(departmentType: string): string {
+  if (departmentType.startsWith("incubator")) return "incubator";
+  return departmentType;
 }
 
 export function translate(key: string, dict: Record<string, string>): string {

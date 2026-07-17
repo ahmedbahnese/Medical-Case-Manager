@@ -1,13 +1,44 @@
 import { useLocation, useParams } from "wouter";
 import { useGetDepartment, useUpdateCase } from "@workspace/api-client-react";
-import { Activity, ArrowLeft, Bed, Calendar, FileText, Plus, User, AlertTriangle, Search } from "lucide-react";
+
+function exportToExcel(deptName: string, cases: any[]) {
+  const headers = ["م","اسم المريض","رقم الملف","السن","التشخيص","تاريخ الدخول","مدة الإقامة","الحالة","التنفس الصناعي"];
+  const rows = cases.map((c, i) => [
+    i+1, c.patientName, c.fileNumber??"", c.age??"", c.diagnosis??"",
+    formatDateAr(c.admissionDate), calcStayLabel(c.admissionDate),
+    translate(c.status, LABELS.STATUS), translate(c.artificialRespiration, LABELS.ARTIFICIAL_RESPIRATION)
+  ]);
+  const tsv = [headers,...rows].map(r=>r.join("\t")).join("\n");
+  const blob = new Blob(["\uFEFF"+tsv], {type:"text/tab-separated-values;charset=utf-8;"});
+  const a = document.createElement("a"); a.href=URL.createObjectURL(blob);
+  a.download=`بيان-${deptName}-${new Date().toISOString().slice(0,10)}.xls`; a.click();
+}
+
+function exportToWord(deptName: string, cases: any[]) {
+  const rows = cases.map((c, i) => `
+    <tr style="background:${i%2?"#f9f9f9":"white"}">
+      <td>${i+1}</td><td>${c.patientName}</td><td>${c.age??""}</td><td>${c.diagnosis??""}</td>
+      <td>${formatDateAr(c.admissionDate)}</td><td>${calcStayLabel(c.admissionDate)}</td>
+      <td>${translate(c.status, LABELS.STATUS)}</td><td>${translate(c.artificialRespiration, LABELS.ARTIFICIAL_RESPIRATION)}</td>
+    </tr>`).join("");
+  const html = `<html xmlns:o="urn:schemas-microsoft-com:office:office" dir="rtl"><head><meta charset="utf-8">
+    <style>body{font-family:Arial;direction:rtl;}table{border-collapse:collapse;width:100%}
+    th,td{border:1px solid #ccc;padding:6px 8px;text-align:right}th{background:#2563eb;color:white;}</style></head>
+    <body><h2 style="text-align:center">بيان حالات — ${deptName}</h2>
+    <table><tr><th>م</th><th>الاسم</th><th>السن</th><th>التشخيص</th><th>تاريخ الدخول</th><th>مدة الإقامة</th><th>الحالة</th><th>التنفس</th></tr>
+    ${rows}</table></body></html>`;
+  const blob = new Blob([html], {type:"application/msword"});
+  const a = document.createElement("a"); a.href=URL.createObjectURL(blob);
+  a.download=`بيان-${deptName}-${new Date().toISOString().slice(0,10)}.doc`; a.click();
+}
+import { Activity, ArrowLeft, Bed, Calendar, FileText, Plus, User, AlertTriangle, Search, Printer, FileSpreadsheet, Download } from "lucide-react";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Input } from "@/components/ui/input";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Skeleton } from "@/components/ui/skeleton";
-import { LABELS, translate } from "@/lib/constants";
+import { LABELS, translate, formatDateAr, calcStayLabel } from "@/lib/constants";
 import { format } from "date-fns";
 import { ar } from "date-fns/locale";
 import { useState } from "react";
@@ -35,7 +66,14 @@ export default function DepartmentDetail() {
 
   return (
     <div className="space-y-6 animate-in fade-in">
-      <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4">
+      {/* Print-only header */}
+      <div className="hidden print:block text-center border-b-2 border-black pb-3 mb-2">
+        <h1 className="text-xl font-bold">بيان حالات — {dept.name}</h1>
+        <p className="text-sm">{new Date().toLocaleDateString("ar-EG", {weekday:"long",day:"2-digit",month:"2-digit",year:"numeric"})}</p>
+        <p className="text-sm">الإجمالي: {dept.capacity} — مشغول: {dept.activeCasesCount} — شاغر: {dept.capacity - dept.activeCasesCount}</p>
+      </div>
+
+      <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4 no-print">
         <div>
           <div className="flex items-center gap-2 text-muted-foreground mb-1">
             <span className="text-sm cursor-pointer hover:text-primary" onClick={() => setLocation("/dashboard")}>الرئيسية</span>
@@ -51,10 +89,21 @@ export default function DepartmentDetail() {
           {dept.description && <p className="text-muted-foreground mt-2">{dept.description}</p>}
         </div>
 
-        <Button onClick={() => setLocation(`/add-case?departmentId=${dept.id}`)}>
-          <Plus className="ml-2 h-4 w-4" />
-          إضافة حالة لهذا القسم
-        </Button>
+        <div className="flex flex-wrap gap-2 no-print">
+          <Button variant="outline" size="sm" className="gap-1" onClick={() => exportToExcel(dept.name, filteredCases)}>
+            <FileSpreadsheet className="h-4 w-4" /> Excel
+          </Button>
+          <Button variant="outline" size="sm" className="gap-1" onClick={() => exportToWord(dept.name, filteredCases)}>
+            <Download className="h-4 w-4" /> Word
+          </Button>
+          <Button variant="outline" size="sm" className="gap-1" onClick={() => window.print()}>
+            <Printer className="h-4 w-4" /> طباعة
+          </Button>
+          <Button onClick={() => setLocation(`/add-case?departmentId=${dept.id}`)} size="sm">
+            <Plus className="ml-2 h-4 w-4" />
+            إضافة حالة
+          </Button>
+        </div>
       </div>
 
       <div className="grid gap-4 grid-cols-2 lg:grid-cols-4">
