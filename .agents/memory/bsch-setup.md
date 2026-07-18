@@ -1,53 +1,49 @@
 ---
 name: BSCH project setup
-description: Key facts about the BSCH medical case management monorepo — build env, schema, routes, and page inventory.
+description: Workflow env vars, key files, routes, and frontend page inventory for BSCH medical case manager
 ---
 
-## Build
+## Workflows
+- `artifacts/api-server: API Server` — the real running API (port 8080 assigned by env `PORT`)
+- `BSCH Frontend` — Vite dev server on port 18429
+- The duplicate "API Server" and "artifacts/bsch: web" workflows always fail (port collision) — ignore them
 
-- Frontend (`artifacts/bsch`): Vite; requires `PORT` AND `BASE_PATH` env vars at build time:
-  `PORT=18429 BASE_PATH=/ pnpm --filter @workspace/bsch run build`
-- API server (`artifacts/api-server`): esbuild via `build.mjs`, no extra env vars needed.
-- `api-client-react` has no `build` script — it's used as a source reference via project references.
+## Authentication
+- Login password: `bsch2024` (stored in settings table as `login_password`; fallback: env `FOUNDER_PASSWORD`)
+- Settings page password: `@Bahnasy` (hardcoded in settings.tsx frontend only)
+- Named passwords: stored as JSON array in settings table key `named_passwords` = `[{name, password}]`
+- Auth: `POST /api/auth/founder-login` — checks founder password first, then named passwords
+- Session cookie: `bsch_session` = `"founder"` (main) or `"user:Name"` (named user)
 
-## Managed workflows
+## Key API Routes
+- `/api/departments` — GET (list), POST (add), PATCH /:id, DELETE /:id
+- `/api/settings` — GET (all), POST {password, key, value}
+- `/api/auth/founder-login` — POST {password}
+- `/api/auth/me` — GET
+- `/api/cases` — GET, POST, PATCH /:id, DELETE /:id
+- `/api/waiting-cases` — GET, POST, PATCH /:id
+- Body size limit: 5MB (for logo uploads — was 100kb default, caused 413 errors)
 
-- `artifacts/bsch: web` — the correct frontend workflow (port 18429)
-- `API Server` — the correct API workflow (port 8080)
-- The old `BSCH Frontend` and `artifacts/api-server: API Server` workflows fail with port conflicts; ignore them.
+## Database Tables (7)
+departments, medical_cases, waiting_cases, settings, audit_logs, incident_reports, (users if any)
 
-## Word export
+## Frontend Key Pages
+- `settings.tsx` — unlocked with `@Bahnasy`; sections: hospital name, logo, departments CRUD, supervisors, theme, login password, named passwords
+- `case-detail.tsx` — CaseField component is defined OUTSIDE the main component (critical: was inside causing re-mount on each keystroke)
+- `print-reports.tsx` — daily report; filteredCases is empty when selectedDeptIds.size === 0
+- `occupancy-report.tsx` — has `print-zoom-70` CSS class for 70% print scaling
+- `waiting-cases.tsx` — dialogs are max-w-2xl (was max-w-md)
 
-All Word export uses the HTML-blob-as-.doc trick (opens in Word natively for Arabic RTL).
-Shared utility: `artifacts/bsch/src/lib/word-export.ts` → `exportWordDoc(htmlBody, filename)`.
+## Lib Files
+- `artifacts/bsch/src/lib/pdf-export.ts` — `exportPDF(htmlBody, title, logoBase64?)` opens print window
+- `artifacts/bsch/src/lib/word-export.ts` — `exportWordDoc(htmlBody, filename)` — already has RTL
+- `artifacts/bsch/src/contexts/settings-context.tsx` — provides `hospital_name`, `logo_base64`, `supervisors`
 
-## Print / CSS
+## Known Pre-existing TypeScript Errors (not blocking runtime)
+- TS6305: api-client-react dist not built — Vite handles at runtime via path alias
+- TS7006: implicit any in many pages — pre-existing, not caused by batch 2 changes
 
-- `.no-print` hides elements on print; `.print-area hidden` becomes visible on print.
-- Main interactive cards (table views in respiration.tsx etc.) must have `no-print` so print uses only the dedicated `print-area` div.
-- Sidebar dark-navy theme: `--sidebar: 222 47% 13%` with light text `--sidebar-foreground: 210 40% 92%`.
-
-## Page inventory
-
-| Page | Key state |
-|---|---|
-| `dashboard.tsx` | KPI strip has `no-print`; GroupCasesDialog shows 10-col table (no status) |
-| `waiting-cases.tsx` | EditWaitingCaseDialog, selection checkboxes, Word export; servo fix via `useQueryClient().invalidateQueries()` |
-| `respiration.tsx` | Main Card has `no-print`; Word + Excel export |
-| `occupancy-report.tsx` | Word export button added |
-| `print-reports.tsx` | `includeServo`/`includeReception` state controls waiting list in print + Word |
-| `bulk-import.tsx` | Parser in `artifacts/api-server/src/routes/cases.ts` → `parseArabicCasesText` |
-
-## Smart import parser fixes (cases.ts)
-
-- Arabic digit prefixes (١٢٣): use `[\u0660-\u0669\d]+` in strip regex
-- HFNC separated from CPAP: `respHFNC = /\bHFNC\b/i`, maps to `"hfnc"`
-- Same-line age: `inlinAgeMatch = /^(.{3,40})[،,]\s*(.{2,20})$/` splits name + age
-
-## GitHub remote
-
-`origin` = `https://github.com/ahmedbahnese/Medical-Case-Manager`. Push requires user to configure GitHub credentials — auto-push from agent timed out.
-
-## Pre-existing TS errors
-
-`TS6305` (api-client-react not built) and several `TS7006`/`TS2345` in respiration.tsx, print-reports.tsx exist in the original code; Vite dev mode ignores them. Production build succeeds despite them.
+## Git
+- Repo: `github.com/ahmedbahnese/Medical-Case-Manager`
+- Push requires fresh token (Personal Access Token) — use `git remote set-url origin https://TOKEN@github.com/...`
+- Last commit: `47a909a` — batch 2 features (dept CRUD, named passwords, case edit fix, PDF)
