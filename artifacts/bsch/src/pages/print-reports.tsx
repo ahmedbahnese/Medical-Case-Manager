@@ -35,55 +35,88 @@ const RESP_OPTIONS = [
   { value: "no",             label: "هواء الغرفة" },
 ];
 
-function exportExcel(cases: any[], depts: any[], selectedIds: Set<number>, reportDate: string, reportTime: string, reportAmPm: string) {
+function exportExcel(
+  cases: any[], depts: any[], selectedIds: Set<number>,
+  reportDate: string, reportTime: string, reportAmPm: string,
+  waitingServo: any[] | undefined, waitingReception: any[] | undefined,
+  includeServo: boolean, includeReception: boolean,
+  hospitalName: string,
+) {
   const dateObj = new Date(reportDate + "T12:00:00");
   const dayName = DAYS_AR[dateObj.getDay()];
   const formatted = `${dateObj.getDate()}/${dateObj.getMonth() + 1}/${dateObj.getFullYear()}`;
-
-  const headers = ["م", "الاسم", "السن", "التشخيص", "تاريخ الدخول", "مدة الإقامة", "سرير/محضن", "ت. التنفس", "ت. فصل التنفس", "Mode", "القسم"];
   const deptMap = new Map(depts.map(d => [d.id, d]));
+  const deptNames = selectedIds.size > 0
+    ? depts.filter(d => selectedIds.has(d.id)).map(d => d.name).join(" + ")
+    : "—";
 
-  const rows = cases.map((c, i) => {
+  const caseRows = cases.map((c, i) => {
     const dept = deptMap.get(c.departmentId);
     const bedType = dept ? getBedType(dept.departmentType) : "سرير";
-    return [
-      i + 1,
-      c.patientName,
-      c.age ?? "",
-      c.diagnosis ?? "",
-      formatDateAr(c.admissionDate),
-      calcStayLabel(c.admissionDate),
-      bedType,
-      formatDateAr(c.ventilationStartDate),
-      formatDateAr(c.ventilationEndDate),
-      translate(c.artificialRespiration, LABELS.ARTIFICIAL_RESPIRATION),
-      c.departmentName ?? "",
-    ];
-  });
+    return `<tr style="background:${i%2===0?"white":"#f5f5f5"}">
+      <td style="text-align:center">${i+1}</td>
+      <td><strong>${c.patientName}</strong></td>
+      <td>${c.age ?? ""}</td>
+      <td>${c.diagnosis ?? ""}</td>
+      <td>${formatDateAr(c.admissionDate)}</td>
+      <td>${calcStayLabel(c.admissionDate)}</td>
+      <td>${bedType}</td>
+      <td>${formatDateAr(c.ventilationStartDate)}</td>
+      <td>${formatDateAr(c.ventilationEndDate)}</td>
+      <td>${translate(c.artificialRespiration, LABELS.ARTIFICIAL_RESPIRATION)}</td>
+    </tr>`;
+  }).join("");
 
-  const deptNames = depts.filter(d => selectedIds.has(d.id)).map(d => d.name).join(" + ");
-  const info = [
-    [`بيان الحالات — ${deptNames}`],
-    [`يوم ${dayName} الموافق ${formatted} — الساعة ${reportTime} ${reportAmPm}`],
-    [`إجمالي الحالات: ${cases.length}`],
-    [],
-  ];
+  let html = `<html xmlns:o="urn:schemas-microsoft-com:office:office" dir="rtl">
+<head><meta charset="utf-8">
+<style>
+  body { font-family: Arial; direction: rtl; font-size: 11pt; }
+  h2,h3,p { text-align: center; margin: 3px 0; }
+  table { border-collapse: collapse; width: 100%; margin-top: 10px; margin-bottom: 14px; }
+  th, td { border: 1px solid #555; padding: 5px 8px; text-align: right; vertical-align: top; }
+  th { background: #2563eb; color: white; font-weight: bold; }
+  h4 { margin: 10px 0 4px; }
+</style></head>
+<body>
+<h2>${hospitalName}</h2>
+<h3>بيان الحالات اليومي</h3>
+<p>القسم: ${deptNames} — يوم ${dayName} الموافق ${formatted} — الساعة ${reportTime} ${reportAmPm}</p>`;
 
-  const allRows = [...info, headers, ...rows];
-  const maxCols = Math.max(...allRows.map(r => r.length));
-  const tsv = allRows.map(r => {
-    const row = Array.isArray(r) ? r : [r];
-    while (row.length < maxCols) row.push("");
-    return row.map(v => String(v ?? "").replace(/\t/g, " ")).join("\t");
-  }).join("\n");
+  if (cases.length > 0) {
+    html += `<table>
+  <tr><th>م</th><th>الاسم</th><th>السن</th><th>التشخيص</th>
+  <th>تاريخ الدخول</th><th>مدة الإقامة</th><th>سرير/محضن</th>
+  <th>ت. التنفس</th><th>ت. الفصل</th><th>المود</th></tr>
+  ${caseRows}
+</table>`;
+  }
 
-  const blob = new Blob(["\uFEFF" + tsv], { type: "text/tab-separated-values;charset=utf-8;" });
-  const url = URL.createObjectURL(blob);
+  if (includeServo && (waitingServo?.length ?? 0) > 0) {
+    const wrows = (waitingServo as any[]).map((c, i) => `<tr style="background:${i%2===0?"white":"#f5f5f5"}">
+      <td style="text-align:center">${i+1}</td><td>${c.patientName}</td><td>${c.age ?? ""}</td>
+      <td>${c.diagnosis ?? ""}</td><td>${translate(c.artificialRespiration, LABELS.ARTIFICIAL_RESPIRATION)}</td>
+      <td>${translate(c.careType, LABELS.CARE_TYPES)}</td></tr>`).join("");
+    html += `<h4>سيرفو — قائمة الانتظار (${waitingServo!.length} حالة)</h4>
+<table><tr><th>م</th><th>الاسم</th><th>السن</th><th>التشخيص</th><th>التنفس</th><th>نوع الرعاية</th></tr>${wrows}</table>`;
+  }
+
+  if (includeReception && (waitingReception?.length ?? 0) > 0) {
+    const wrows = (waitingReception as any[]).map((c, i) => `<tr style="background:${i%2===0?"white":"#f5f5f5"}">
+      <td style="text-align:center">${i+1}</td><td>${c.patientName}</td><td>${c.age ?? ""}</td>
+      <td>${c.diagnosis ?? ""}</td><td>${translate(c.artificialRespiration, LABELS.ARTIFICIAL_RESPIRATION)}</td>
+      <td>${translate(c.careType, LABELS.CARE_TYPES)}</td></tr>`).join("");
+    html += `<h4>استقبال — قائمة الانتظار (${waitingReception!.length} حالة)</h4>
+<table><tr><th>م</th><th>الاسم</th><th>السن</th><th>التشخيص</th><th>التنفس</th><th>نوع الرعاية</th></tr>${wrows}</table>`;
+  }
+
+  html += `</body></html>`;
+
+  const blob = new Blob([html], { type: "application/vnd.ms-excel;charset=utf-8" });
   const a = document.createElement("a");
-  a.href = url;
+  a.href = URL.createObjectURL(blob);
   a.download = `bsch-report-${reportDate}.xls`;
   a.click();
-  URL.revokeObjectURL(url);
+  URL.revokeObjectURL(a.href);
 }
 
 interface InlineCellProps {
@@ -294,6 +327,8 @@ export default function PrintReports() {
     return html;
   };
 
+  const hasContent = selectedDeptIds.size > 0 || ((includeServo && (waitingServo?.length ?? 0) > 0) || (includeReception && (waitingReception?.length ?? 0) > 0));
+
   const handleExportPDF = () => exportPDF(buildReportHtml(), `daily-report-${reportDate}.pdf`, logo_base64);
 
   const handleExportWord = () => exportWordDoc(buildReportHtml(), `daily-report-${reportDate}.doc`);
@@ -309,17 +344,17 @@ export default function PrintReports() {
             <p className="text-muted-foreground text-sm">بيان الحالات — اختر الأقسام ثم اطبع أو صدّر</p>
           </div>
           <div className="flex gap-2 flex-wrap">
-            <Button variant="outline" className="gap-2" disabled={selectedDeptIds.size === 0}
-              onClick={() => exportExcel(filteredCases, depts, selectedDeptIds, reportDate, reportTime, reportAmPm)}>
+            <Button variant="outline" className="gap-2" disabled={!hasContent}
+              onClick={() => exportExcel(filteredCases, depts, selectedDeptIds, reportDate, reportTime, reportAmPm, waitingServo, waitingReception, includeServo, includeReception, hospital_name)}>
               <FileSpreadsheet className="h-4 w-4" /> Excel
             </Button>
-            <Button variant="outline" className="gap-2" disabled={selectedDeptIds.size === 0} onClick={handleExportWord}>
+            <Button variant="outline" className="gap-2" disabled={!hasContent} onClick={handleExportWord}>
               <FileText className="h-4 w-4" /> Word
             </Button>
-            <Button variant="outline" className="gap-2" disabled={selectedDeptIds.size === 0} onClick={handleExportPDF}>
+            <Button variant="outline" className="gap-2" disabled={!hasContent} onClick={handleExportPDF}>
               <FileDown className="h-4 w-4" /> PDF
             </Button>
-            <Button className="gap-2" disabled={selectedDeptIds.size === 0} onClick={handlePrint}>
+            <Button className="gap-2" disabled={!hasContent} onClick={handlePrint}>
               <Printer className="h-4 w-4" /> طباعة
             </Button>
           </div>

@@ -7,7 +7,7 @@ import {
 import { useQueryClient } from "@tanstack/react-query";
 import {
   Users, Clock, CheckCircle2, XCircle, Trash2, Plus, Printer,
-  ChevronDown, ChevronUp, FileText, Edit2, Square, CheckSquare, Download
+  ChevronDown, ChevronUp, FileText, Edit2, FileSpreadsheet, FileDown
 } from "lucide-react";
 import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -23,6 +23,8 @@ import { Textarea } from "@/components/ui/textarea";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { LABELS, translate, deptTypeToCaseType, formatDateAr } from "@/lib/constants";
 import { exportWordDoc } from "@/lib/word-export";
+import { exportPDF } from "@/lib/pdf-export";
+import { useAppSettings } from "@/contexts/settings-context";
 import { toast } from "sonner";
 import { ConfirmDialog } from "@/components/confirm-dialog";
 
@@ -41,24 +43,24 @@ const EMPTY_FORM = {
   centralRoomRequired: false, centralRoomCode: "",
 };
 
-/* ─────────────────────────── Word export ─────────────────────────── */
-function buildWaitingWordHtml(cases: any[], title: string): string {
+/* ─────────────────────────── Export helpers ─────────────────────────── */
+function buildWaitingHtml(cases: any[], title: string, hospitalName: string): string {
   const now = new Date();
   const dateStr = now.toLocaleDateString("ar-EG", { weekday: "long", day: "2-digit", month: "2-digit", year: "numeric" });
   const rows = cases.map((c, i) => `
-    <tr style="${i%2===0?'':'background:#f5f5f5'}">
+    <tr>
       <td style="text-align:center">${i+1}</td>
       <td><strong>${c.patientName}</strong></td>
       <td>${c.age ?? "—"}</td>
       <td>${c.diagnosis ?? "—"}</td>
       <td>${translate(c.careType, LABELS.CARE_TYPES)}</td>
       <td>${translate(c.artificialRespiration, LABELS.ARTIFICIAL_RESPIRATION)}</td>
-      <td>${c.centralRoomRequired ? (c.centralRoomCode ? `غرفة مركزية: ${c.centralRoomCode}` : "✓ مطلوب") : "—"}</td>
+      <td>${c.centralRoomRequired ? (c.centralRoomCode ? `غرفة: ${c.centralRoomCode}` : "✓ مطلوب") : "—"}</td>
       <td>${c.parentPhone ?? "—"}</td>
     </tr>`).join("");
   return `
     <div class="header">
-      <h2>مستشفى الأطفال المتخصص بالبحيرة — BSCH</h2>
+      <h2>${hospitalName}</h2>
       <h3>قائمة الانتظار — ${title}</h3>
       <p>${dateStr} — عدد الحالات: ${cases.length}</p>
     </div>
@@ -69,6 +71,47 @@ function buildWaitingWordHtml(cases: any[], title: string): string {
       </tr>
       ${rows}
     </table>`;
+}
+
+function exportWaitingExcel(cases: any[], title: string, hospitalName: string): void {
+  const now = new Date();
+  const dateStr = now.toLocaleDateString("ar-EG", { weekday: "long", day: "2-digit", month: "2-digit", year: "numeric" });
+  const rows = cases.map((c, i) => `
+    <tr style="background:${i%2===0?"white":"#f5f5f5"}">
+      <td style="text-align:center">${i+1}</td>
+      <td><strong>${c.patientName}</strong></td>
+      <td>${c.age ?? ""}</td>
+      <td>${c.diagnosis ?? ""}</td>
+      <td>${translate(c.careType, LABELS.CARE_TYPES)}</td>
+      <td>${translate(c.artificialRespiration, LABELS.ARTIFICIAL_RESPIRATION)}</td>
+      <td>${c.centralRoomRequired ? (c.centralRoomCode ? `غرفة: ${c.centralRoomCode}` : "مطلوب") : ""}</td>
+      <td>${c.parentPhone ?? ""}</td>
+    </tr>`).join("");
+  const html = `<html xmlns:o="urn:schemas-microsoft-com:office:office" dir="rtl">
+<head><meta charset="utf-8">
+<style>
+  body { font-family: Arial; direction: rtl; font-size: 11pt; }
+  h2,h3,p { text-align: center; margin: 3px 0; }
+  table { border-collapse: collapse; width: 100%; margin-top: 10px; }
+  th, td { border: 1px solid #555; padding: 5px 8px; text-align: right; vertical-align: top; }
+  th { background: #2563eb; color: white; font-weight: bold; }
+</style></head>
+<body>
+<h2>${hospitalName}</h2>
+<h3>قائمة الانتظار — ${title}</h3>
+<p>${dateStr} — عدد الحالات: ${cases.length}</p>
+<table>
+  <tr><th>م</th><th>الاسم</th><th>السن</th><th>التشخيص</th>
+  <th>نوع الرعاية</th><th>التنفس</th><th>غرفة مركزية</th><th>الهاتف</th></tr>
+  ${rows}
+</table>
+</body></html>`;
+  const blob = new Blob([html], { type: "application/vnd.ms-excel;charset=utf-8" });
+  const a = document.createElement("a");
+  a.href = URL.createObjectURL(blob);
+  a.download = `قائمة-الانتظار-${title}-${now.toISOString().slice(0,10)}.xls`;
+  a.click();
+  URL.revokeObjectURL(a.href);
 }
 
 /* ─────────────────────────── Add Form ─────────────────────────── */
@@ -184,7 +227,7 @@ function EditWaitingCaseDialog({ waitingCase, onClose, onSuccess }: { waitingCas
 
   return (
     <Dialog open onOpenChange={onClose}>
-      <DialogContent className="max-w-2xl max-h-[90dvh] overflow-y-auto">
+      <DialogContent className="max-w-2xl max-h-[85vh] overflow-y-auto">
         <DialogHeader>
           <DialogTitle className="flex items-center gap-2">
             <Edit2 className="h-4 w-4" /> تعديل بيانات الحالة
@@ -227,9 +270,9 @@ function EditWaitingCaseDialog({ waitingCase, onClose, onSuccess }: { waitingCas
           </div>
           <div className="space-y-1">
             <Label className="text-xs">التشخيص</Label>
-            <Textarea value={form.diagnosis} onChange={e => f("diagnosis", e.target.value)} rows={2} className="resize-none" />
+            <Textarea value={form.diagnosis} onChange={e => f("diagnosis", e.target.value)} rows={3} className="resize-none" />
           </div>
-          <div className="flex items-center gap-3">
+          <div className="flex items-center gap-3 flex-wrap">
             <Checkbox id="cr-edit" checked={form.centralRoomRequired} onCheckedChange={v => f("centralRoomRequired", !!v)} />
             <Label htmlFor="cr-edit" className="text-xs cursor-pointer">يحتاج غرفة مركزية</Label>
             {form.centralRoomRequired && (
@@ -292,7 +335,7 @@ function AdmitDialog({ waitingCase, onClose, onSuccess }: { waitingCase: any; on
 
   return (
     <Dialog open onOpenChange={onClose}>
-      <DialogContent className="max-w-2xl max-h-[90dvh] overflow-y-auto">
+      <DialogContent className="max-w-2xl max-h-[85vh] overflow-y-auto">
         <DialogHeader>
           <DialogTitle className="flex items-center gap-2">
             إجراء — <span className="font-bold">{waitingCase.patientName}</span>
@@ -360,8 +403,9 @@ function AdmitDialog({ waitingCase, onClose, onSuccess }: { waitingCase: any; on
 }
 
 /* ─────────────────────────── Cases Table ─────────────────────────── */
-function CasesTable({ cases, onAction, onEdit, onDelete, isLoading, selectedIds, onToggle, onToggleAll }: {
-  cases: any[]; onAction: (c: any) => void; onEdit: (c: any) => void; onDelete: (c: any) => void;
+function CasesTable({ cases, printCases, onAction, onEdit, onDelete, isLoading, selectedIds, onToggle, onToggleAll }: {
+  cases: any[]; printCases: any[];
+  onAction: (c: any) => void; onEdit: (c: any) => void; onDelete: (c: any) => void;
   isLoading: boolean; selectedIds: Set<number>; onToggle: (id: number) => void; onToggleAll: (all: boolean) => void;
 }) {
   if (isLoading) return (
@@ -376,6 +420,7 @@ function CasesTable({ cases, onAction, onEdit, onDelete, isLoading, selectedIds,
   );
 
   const allChecked = cases.length > 0 && cases.every(c => selectedIds.has(c.id));
+  const printSet = new Set(printCases.map(c => c.id));
 
   return (
     <div className="rounded-lg border overflow-x-auto print-area">
@@ -399,8 +444,15 @@ function CasesTable({ cases, onAction, onEdit, onDelete, isLoading, selectedIds,
           {cases.map((c, i) => {
             const mins = Math.floor((Date.now() - new Date(c.createdAt ?? c.requestDate ?? Date.now()).getTime()) / 60000);
             const waitLabel = mins < 60 ? `${mins} د` : `${Math.floor(mins/60)} س ${mins%60} د`;
+            const hiddenInPrint = !printSet.has(c.id);
             return (
-              <TableRow key={c.id} className={c.centralRoomRequired ? "bg-amber-50/60 dark:bg-amber-950/20" : ""}>
+              <TableRow
+                key={c.id}
+                className={[
+                  c.centralRoomRequired ? "bg-amber-50/60 dark:bg-amber-950/20" : "",
+                  hiddenInPrint ? "print:hidden" : "",
+                ].join(" ")}
+              >
                 <TableCell className="no-print">
                   <Checkbox checked={selectedIds.has(c.id)} onCheckedChange={() => onToggle(c.id)} />
                 </TableCell>
@@ -464,6 +516,7 @@ export default function WaitingCases() {
   const [editCase, setEditCase] = useState<any>(null);
   const [selectedIds, setSelectedIds] = useState<Set<number>>(new Set());
   const queryClient = useQueryClient();
+  const { hospital_name, logo_base64 } = useAppSettings();
 
   const { data: casesRaw, isLoading, refetch } = useGetWaitingCases({ section, status: "waiting" } as any);
   const { data: servoAll } = useGetWaitingCases({ section: "servo", status: "waiting" } as any);
@@ -483,39 +536,55 @@ export default function WaitingCases() {
   };
 
   const casesArr = (casesRaw ?? []) as any[];
-
   const toggleId = (id: number) => setSelectedIds(prev => { const n=new Set(prev); n.has(id)?n.delete(id):n.add(id); return n; });
   const toggleAll = (all: boolean) => setSelectedIds(all ? new Set(casesArr.map(c => c.id)) : new Set());
+
+  // Cases to use for print/export: selected subset if any, else all
   const selectedCases = casesArr.filter(c => selectedIds.has(c.id));
+  const exportCases = selectedCases.length > 0 ? selectedCases : casesArr;
+  const sectionTitle = section === "servo" ? "سيرفو" : "استقبال";
+
+  const handlePrint = () => window.print();
 
   const handleExportWord = () => {
-    const toExport = selectedCases.length > 0 ? selectedCases : casesArr;
-    const title = section === "servo" ? "سيرفو" : "استقبال";
-    const html = buildWaitingWordHtml(toExport, title);
+    const html = buildWaitingHtml(exportCases, sectionTitle, hospital_name);
     exportWordDoc(html, `waiting-${section}-${new Date().toISOString().slice(0,10)}.doc`);
   };
 
-  const handlePrint = () => window.print();
+  const handleExportPDF = () => {
+    const html = buildWaitingHtml(exportCases, sectionTitle, hospital_name);
+    exportPDF(html, `waiting-${section}-${new Date().toISOString().slice(0,10)}.pdf`, logo_base64);
+  };
+
+  const handleExportExcel = () => {
+    exportWaitingExcel(exportCases, sectionTitle, hospital_name);
+  };
 
   const servoCount = (servoAll ?? []).length;
   const recepCount = (recepAll ?? []).length;
 
   return (
     <div className="space-y-4">
-      <div className="flex items-center justify-between no-print">
+      <div className="flex items-center justify-between no-print flex-wrap gap-2">
         <div>
           <h1 className="text-2xl font-bold">قوائم الانتظار</h1>
           <p className="text-muted-foreground text-sm">إدارة حالات الانتظار — استقبال وسيرفو</p>
         </div>
-        <div className="flex gap-2 flex-wrap">
+        <div className="flex gap-2 flex-wrap items-center">
           {selectedCases.length > 0 && (
             <Badge variant="secondary" className="text-xs px-2 py-1">{selectedCases.length} محدد</Badge>
           )}
+          <Button variant="outline" size="sm" className="gap-1" onClick={handleExportExcel}>
+            <FileSpreadsheet className="h-4 w-4" /> {selectedCases.length > 0 ? `Excel (${selectedCases.length})` : "Excel"}
+          </Button>
           <Button variant="outline" size="sm" className="gap-1" onClick={handleExportWord}>
             <FileText className="h-4 w-4" /> {selectedCases.length > 0 ? `Word (${selectedCases.length})` : "Word"}
           </Button>
+          <Button variant="outline" size="sm" className="gap-1" onClick={handleExportPDF}>
+            <FileDown className="h-4 w-4" /> {selectedCases.length > 0 ? `PDF (${selectedCases.length})` : "PDF"}
+          </Button>
           <Button variant="outline" size="sm" className="gap-1" onClick={handlePrint}>
-            <Printer className="h-4 w-4" /> طباعة
+            <Printer className="h-4 w-4" /> {selectedCases.length > 0 ? `طباعة (${selectedCases.length})` : "طباعة"}
           </Button>
         </div>
       </div>
@@ -540,14 +609,18 @@ export default function WaitingCases() {
             </div>
 
             {/* Header for print */}
-            <div className="hidden print:block text-center border-b pb-2 mb-2">
-              <h2 className="font-bold text-lg">بيان قائمة انتظار — {sec === "servo" ? "سيرفو" : "الاستقبال"}</h2>
+            <div className="hidden print:block text-center border-b-2 border-black pb-2 mb-3">
+              {logo_base64 && <img src={logo_base64} alt="logo" className="h-12 object-contain mx-auto mb-1" />}
+              <h2 className="font-bold text-lg">{hospital_name}</h2>
+              <h3 className="font-bold">بيان قائمة انتظار — {sec === "servo" ? "سيرفو" : "الاستقبال"}</h3>
               <p className="text-sm">{new Date().toLocaleDateString("ar-EG", { weekday:"long", day:"2-digit", month:"2-digit", year:"numeric" })}</p>
+              {selectedCases.length > 0 && <p className="text-xs">المحددون فقط: {selectedCases.length} حالة</p>}
             </div>
 
-            {/* Cases table */}
+            {/* Cases table — printCases controls which rows show during print */}
             <CasesTable
               cases={casesArr}
+              printCases={exportCases}
               isLoading={isLoading}
               onAction={setAdmitCase}
               onEdit={setEditCase}
@@ -561,7 +634,7 @@ export default function WaitingCases() {
               <div className="flex justify-between items-center text-sm text-muted-foreground no-print">
                 <span>إجمالي: <strong>{casesArr.length}</strong> حالة</span>
                 {selectedCases.length > 0 && (
-                  <span className="text-primary">محدد: {selectedCases.length}</span>
+                  <span className="text-primary font-medium">محدد للطباعة/التصدير: {selectedCases.length}</span>
                 )}
               </div>
             )}
