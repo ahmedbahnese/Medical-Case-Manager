@@ -1,4 +1,4 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, memo } from "react";
 import { useLocation, useParams } from "wouter";
 import { useGetCase, useUpdateCase, useDeleteCase } from "@workspace/api-client-react";
 import {
@@ -40,6 +40,57 @@ const DISCHARGE_OPTIONS = [
   { value: "death",       label: "وفاة" },
 ];
 
+/* ─── CaseField: MUST be defined OUTSIDE the parent component ────────
+   Defining components inside a parent causes React to unmount/remount
+   them on every render, making inputs lose focus on each keypress. ── */
+interface CaseFieldProps {
+  label: string;
+  isEditing: boolean;
+  type?: "text" | "textarea" | "date";
+  editValue: any;
+  displayValue: any;
+  onChange: (v: any) => void;
+  dir?: "ltr" | "rtl";
+}
+
+const CaseField = memo(({ label, isEditing, type = "text", editValue, displayValue, onChange, dir }: CaseFieldProps) => (
+  <div className="space-y-1">
+    <Label className="text-xs text-muted-foreground">{label}</Label>
+    {isEditing ? (
+      type === "textarea" ? (
+        <Textarea
+          value={editValue ?? ""}
+          onChange={e => onChange(e.target.value)}
+          className="text-sm"
+          rows={3}
+          dir={dir}
+        />
+      ) : type === "date" ? (
+        <Input
+          type="date"
+          value={editValue ?? ""}
+          onChange={e => onChange(e.target.value)}
+          className="h-8 text-sm"
+        />
+      ) : (
+        <Input
+          value={editValue ?? ""}
+          onChange={e => onChange(e.target.value)}
+          className="h-8 text-sm"
+          dir={dir}
+        />
+      )
+    ) : (
+      <div className="bg-muted/30 px-3 py-2 rounded-md border text-sm min-h-[36px] whitespace-pre-wrap">
+        {displayValue || <span className="text-muted-foreground">—</span>}
+      </div>
+    )}
+  </div>
+));
+CaseField.displayName = "CaseField";
+
+/* ─────────────────────────────────────────────────────────────────── */
+
 export default function CaseDetail() {
   const { id } = useParams();
   const caseId = parseInt(id || "0");
@@ -52,6 +103,7 @@ export default function CaseDetail() {
 
   const [editData, setEditData] = useState<Record<string, any>>({});
 
+  // Only sync from server when NOT actively editing
   useEffect(() => {
     if (patient && !isEditing) {
       setEditData({ ...patient });
@@ -67,24 +119,15 @@ export default function CaseDetail() {
   };
 
   const handleSave = () => {
-    // Build clean update payload — only send fields that the schema accepts
     const payload: Record<string, any> = {};
-
-    // String fields
     const strFields = ["patientName","age","diagnosis","symptoms","treatment","notes","parentName","parentPhone","nationalId","fileNumber","mobe"];
     strFields.forEach(f => {
       if (editData[f] !== undefined) payload[f] = editData[f] || undefined;
     });
-
-    // Enum fields
     if (editData.status) payload.status = editData.status;
     if (editData.artificialRespiration) payload.artificialRespiration = editData.artificialRespiration;
     if (editData.caseType) payload.caseType = editData.caseType;
-
-    // Numeric
     if (editData.departmentId) payload.departmentId = Number(editData.departmentId);
-
-    // Dates (extra fields handled server-side)
     payload.admissionDate = editData.admissionDate;
     payload.ventilationStartDate = editData.ventilationStartDate || null;
     payload.ventilationEndDate = editData.ventilationEndDate || null;
@@ -106,10 +149,7 @@ export default function CaseDetail() {
   const handleDischarge = (reason?: string) => {
     updateCase.mutate({
       id: caseId,
-      data: {
-        status: "discharged",
-        ...(reason ? { dischargeReason: reason } : {}),
-      } as any
+      data: { status: "discharged", ...(reason ? { dischargeReason: reason } : {}) } as any
     }, {
       onSuccess: () => { toast.success("تم تسجيل خروج المريض"); refetch(); },
       onError: (e: any) => toast.error("حدث خطأ: " + (e?.message ?? ""))
@@ -124,26 +164,6 @@ export default function CaseDetail() {
   };
 
   const ed = (k: string, v: any) => setEditData(p => ({ ...p, [k]: v }));
-
-  const Field = ({ label, field, type = "text" }: { label: string; field: string; type?: "text" | "textarea" | "date" }) => (
-    <div className="space-y-1">
-      <Label className="text-xs text-muted-foreground">{label}</Label>
-      {isEditing ? (
-        type === "textarea" ? (
-          <Textarea value={editData[field] || ""} onChange={e => ed(field, e.target.value)} className="text-sm" rows={3} />
-        ) : type === "date" ? (
-          <Input type="date" value={toDateInput(editData[field])} onChange={e => ed(field, e.target.value)} className="h-8 text-sm" />
-        ) : (
-          <Input value={editData[field] || ""} onChange={e => ed(field, e.target.value)} className="h-8 text-sm" />
-        )
-      ) : (
-        <div className="bg-muted/30 px-3 py-2 rounded-md border text-sm min-h-[36px] whitespace-pre-wrap">
-          {type === "date" ? formatDateAr(patient[field as keyof typeof patient] as any)
-            : (patient[field as keyof typeof patient] as string) || <span className="text-muted-foreground">—</span>}
-        </div>
-      )}
-    </div>
-  );
 
   return (
     <div className="space-y-5 max-w-5xl mx-auto">
@@ -178,7 +198,7 @@ export default function CaseDetail() {
                   <ConfirmDialog
                     trigger={<Button variant="outline" size="sm" className="gap-1 border-orange-300 text-orange-600 hover:bg-orange-50">تسجيل خروج</Button>}
                     title="تسجيل خروج"
-                    description="اختر سبب الخروج"
+                    description="هل أنت متأكد من تسجيل خروج هذه الحالة؟"
                     confirmLabel="تأكيد الخروج"
                     onConfirm={() => handleDischarge()}
                   />
@@ -213,12 +233,12 @@ export default function CaseDetail() {
               <CardTitle className="text-sm flex items-center gap-2 text-blue-700"><User className="h-4 w-4" /> بيانات المريض</CardTitle>
             </CardHeader>
             <CardContent className="space-y-3">
-              <Field label="الاسم" field="patientName" />
-              <Field label="السن" field="age" />
-              <Field label="اسم ولي الأمر" field="parentName" />
-              <Field label="رقم الهاتف" field="parentPhone" />
-              <Field label="الرقم القومي" field="nationalId" />
-              <Field label="رقم الملف" field="fileNumber" />
+              <CaseField label="الاسم" isEditing={isEditing} editValue={editData.patientName} displayValue={patient.patientName} onChange={v => ed("patientName", v)} />
+              <CaseField label="السن" isEditing={isEditing} editValue={editData.age} displayValue={patient.age} onChange={v => ed("age", v)} />
+              <CaseField label="اسم ولي الأمر" isEditing={isEditing} editValue={editData.parentName} displayValue={patient.parentName} onChange={v => ed("parentName", v)} />
+              <CaseField label="رقم الهاتف" isEditing={isEditing} editValue={editData.parentPhone} displayValue={patient.parentPhone} onChange={v => ed("parentPhone", v)} dir="ltr" />
+              <CaseField label="الرقم القومي" isEditing={isEditing} editValue={editData.nationalId} displayValue={patient.nationalId} onChange={v => ed("nationalId", v)} dir="ltr" />
+              <CaseField label="رقم الملف" isEditing={isEditing} editValue={editData.fileNumber} displayValue={patient.fileNumber} onChange={v => ed("fileNumber", v)} dir="ltr" />
             </CardContent>
           </Card>
 
@@ -227,7 +247,14 @@ export default function CaseDetail() {
               <CardTitle className="text-sm flex items-center gap-2 text-green-700"><Calendar className="h-4 w-4" /> التواريخ</CardTitle>
             </CardHeader>
             <CardContent className="space-y-3">
-              <Field label="تاريخ الدخول" field="admissionDate" type="date" />
+              <CaseField
+                label="تاريخ الدخول"
+                isEditing={isEditing}
+                type="date"
+                editValue={toDateInput(editData.admissionDate)}
+                displayValue={formatDateAr(patient.admissionDate)}
+                onChange={v => ed("admissionDate", v)}
+              />
 
               <div className="space-y-1">
                 <Label className="text-xs text-muted-foreground">الحالة</Label>
@@ -250,11 +277,11 @@ export default function CaseDetail() {
                 </div>
               )}
 
-              {isEditing && patient.status === "discharged" && (
+              {isEditing && (
                 <div className="space-y-1">
                   <Label className="text-xs text-muted-foreground">سبب الخروج</Label>
                   <Select value={editData.dischargeReason ?? ""} onValueChange={v => ed("dischargeReason", v)}>
-                    <SelectTrigger className="h-8 text-sm"><SelectValue placeholder="اختر السبب" /></SelectTrigger>
+                    <SelectTrigger className="h-8 text-sm"><SelectValue placeholder="اختر السبب (اختياري)" /></SelectTrigger>
                     <SelectContent>
                       {DISCHARGE_OPTIONS.map(o => <SelectItem key={o.value} value={o.value}>{o.label}</SelectItem>)}
                     </SelectContent>
@@ -273,12 +300,12 @@ export default function CaseDetail() {
             </CardHeader>
             <CardContent className="grid md:grid-cols-2 gap-3">
               <div className="md:col-span-2">
-                <Field label="التشخيص" field="diagnosis" type="textarea" />
+                <CaseField label="التشخيص" isEditing={isEditing} type="textarea" editValue={editData.diagnosis} displayValue={patient.diagnosis} onChange={v => ed("diagnosis", v)} />
               </div>
-              <Field label="الأعراض" field="symptoms" type="textarea" />
-              <Field label="خطة العلاج" field="treatment" type="textarea" />
+              <CaseField label="الأعراض" isEditing={isEditing} type="textarea" editValue={editData.symptoms} displayValue={patient.symptoms} onChange={v => ed("symptoms", v)} />
+              <CaseField label="خطة العلاج" isEditing={isEditing} type="textarea" editValue={editData.treatment} displayValue={patient.treatment} onChange={v => ed("treatment", v)} />
               <div className="md:col-span-2">
-                <Field label="ملاحظات" field="notes" type="textarea" />
+                <CaseField label="ملاحظات" isEditing={isEditing} type="textarea" editValue={editData.notes} displayValue={patient.notes} onChange={v => ed("notes", v)} />
               </div>
             </CardContent>
           </Card>
@@ -304,38 +331,24 @@ export default function CaseDetail() {
                 )}
               </div>
 
-              <div className="space-y-1">
-                <Label className="text-xs text-muted-foreground">MOBE</Label>
-                {isEditing ? (
-                  <Input value={editData.mobe || ""} onChange={e => ed("mobe", e.target.value)} className="h-8 text-sm" />
-                ) : (
-                  <div className="bg-muted/30 px-3 py-2 rounded-md border text-sm min-h-[36px]">
-                    {patient.mobe || <span className="text-muted-foreground">—</span>}
-                  </div>
-                )}
-              </div>
+              <CaseField label="MOBE" isEditing={isEditing} editValue={editData.mobe} displayValue={patient.mobe} onChange={v => ed("mobe", v)} dir="ltr" />
 
-              <div className="space-y-1">
-                <Label className="text-xs text-muted-foreground">ت. التنفس (تاريخ البدء)</Label>
-                {isEditing ? (
-                  <Input type="date" value={toDateInput(editData.ventilationStartDate)} onChange={e => ed("ventilationStartDate", e.target.value)} className="h-8 text-sm" />
-                ) : (
-                  <div className="bg-muted/30 px-3 py-2 rounded-md border text-sm min-h-[36px]">
-                    {formatDateAr(patient.ventilationStartDate) || <span className="text-muted-foreground">—</span>}
-                  </div>
-                )}
-              </div>
-
-              <div className="space-y-1">
-                <Label className="text-xs text-muted-foreground">ت. فصل التنفس الصناعي</Label>
-                {isEditing ? (
-                  <Input type="date" value={toDateInput(editData.ventilationEndDate)} onChange={e => ed("ventilationEndDate", e.target.value)} className="h-8 text-sm" />
-                ) : (
-                  <div className="bg-muted/30 px-3 py-2 rounded-md border text-sm min-h-[36px]">
-                    {formatDateAr(patient.ventilationEndDate) || <span className="text-muted-foreground">—</span>}
-                  </div>
-                )}
-              </div>
+              <CaseField
+                label="ت. التنفس (تاريخ البدء)"
+                isEditing={isEditing}
+                type="date"
+                editValue={toDateInput(editData.ventilationStartDate)}
+                displayValue={formatDateAr(patient.ventilationStartDate)}
+                onChange={v => ed("ventilationStartDate", v)}
+              />
+              <CaseField
+                label="ت. فصل التنفس الصناعي"
+                isEditing={isEditing}
+                type="date"
+                editValue={toDateInput(editData.ventilationEndDate)}
+                displayValue={formatDateAr(patient.ventilationEndDate)}
+                onChange={v => ed("ventilationEndDate", v)}
+              />
             </CardContent>
           </Card>
         </div>

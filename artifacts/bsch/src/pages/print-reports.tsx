@@ -3,8 +3,10 @@ import { format } from "date-fns";
 import {
   useGetCases, useGetDepartments, useGetWaitingCases, useUpdateCase,
 } from "@workspace/api-client-react";
-import { Printer, ZoomIn, ZoomOut, FileSpreadsheet, FileText } from "lucide-react";
+import { Printer, ZoomIn, ZoomOut, FileSpreadsheet, FileText, FileDown } from "lucide-react";
 import { exportWordDoc } from "@/lib/word-export";
+import { exportPDF } from "@/lib/pdf-export";
+import { useAppSettings } from "@/contexts/settings-context";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -178,6 +180,7 @@ function InlineModeCell({ caseId, value, onSaved }: { caseId: number; value: str
 
 export default function PrintReports() {
   const now = new Date();
+  const { hospital_name, logo_base64 } = useAppSettings();
   const [reportDate, setReportDate] = useState(now.toISOString().slice(0, 10));
   const [reportTime, setReportTime] = useState(format(now, "hh:mm"));
   const [reportAmPm, setReportAmPm] = useState<"ص" | "م">(parseInt(format(now, "HH")) < 12 ? "ص" : "م");
@@ -221,10 +224,11 @@ export default function PrintReports() {
   const selectAll = () => setSelectedDeptIds(new Set(depts.map(d => d.id)));
   const selectNone = () => setSelectedDeptIds(new Set());
 
-  // Filter cases
-  const filteredCases = (allCases ?? []).filter(c =>
-    selectedDeptIds.size === 0 || selectedDeptIds.has(c.departmentId)
-  ).map(c => ({ ...c, ...(localEdits[c.id] ?? {}) }));
+  // Filter cases — empty when no department selected (avoid accidental "show all")
+  const filteredCases = selectedDeptIds.size === 0
+    ? []
+    : (allCases ?? []).filter(c => selectedDeptIds.has(c.departmentId))
+        .map(c => ({ ...c, ...(localEdits[c.id] ?? {}) }));
 
   const handleLocalEdit = (caseId: number, field: string, value: any) => {
     setLocalEdits(prev => ({ ...prev, [caseId]: { ...(prev[caseId] ?? {}), [field]: value } }));
@@ -240,12 +244,11 @@ export default function PrintReports() {
 
   const handlePrint = () => window.print();
 
-  const handleExportWord = () => {
+  const buildReportHtml = () => {
     const deptTypeMap2 = new Map(depts.map((d: any) => [d.id as number, (d.departmentType ?? "") as string]));
     const fa = (v: unknown) => formatDateAr((v as string) ?? null);
     const rows = filteredCases.map((c: any, i: number) => {
-      const deptType = deptTypeMap2.get(c.departmentId as number) ?? "";
-      const bedType = getBedType(deptType);
+      const bedType = getBedType(deptTypeMap2.get(c.departmentId as number) ?? "");
       return `<tr style="${i%2===0?'':'background:#f5f5f5'}">
         <td style="text-align:center">${i+1}</td>
         <td><strong>${c.patientName}</strong></td>
@@ -261,7 +264,7 @@ export default function PrintReports() {
     }).join("");
     let html = `
       <div class="header">
-        <h2>مستشفى الأطفال التخصصي بالبحيرة — BSCH</h2>
+        <h2>${hospital_name}</h2>
         <h3>بيان الحالات اليومي</h3>
         <p>القسم: ${selectedDeptNames}</p>
         <p>يوم ${dayName} الموافق ${formatted} — الساعة ${reportTime} ${reportAmPm} — عدد الحالات: ${filteredCases.length}</p>
@@ -288,8 +291,12 @@ export default function PrintReports() {
       html += `<h4>استقبال — قائمة الانتظار (${waitingReception!.length} حالة)</h4>
         <table border="1"><tr style="background:#d9e1f2"><th>م</th><th>الاسم</th><th>السن</th><th>التشخيص</th><th>التنفس</th><th>نوع الرعاية</th></tr>${wrows}</table>`;
     }
-    exportWordDoc(html, `daily-report-${reportDate}.doc`);
+    return html;
   };
+
+  const handleExportPDF = () => exportPDF(buildReportHtml(), `daily-report-${reportDate}.pdf`, logo_base64);
+
+  const handleExportWord = () => exportWordDoc(buildReportHtml(), `daily-report-${reportDate}.doc`);
 
   return (
     <div className="space-y-4">
@@ -302,13 +309,17 @@ export default function PrintReports() {
             <p className="text-muted-foreground text-sm">بيان الحالات — اختر الأقسام ثم اطبع أو صدّر</p>
           </div>
           <div className="flex gap-2 flex-wrap">
-            <Button variant="outline" className="gap-2" onClick={() => exportExcel(filteredCases, depts, selectedDeptIds, reportDate, reportTime, reportAmPm)}>
+            <Button variant="outline" className="gap-2" disabled={selectedDeptIds.size === 0}
+              onClick={() => exportExcel(filteredCases, depts, selectedDeptIds, reportDate, reportTime, reportAmPm)}>
               <FileSpreadsheet className="h-4 w-4" /> Excel
             </Button>
-            <Button variant="outline" className="gap-2" onClick={handleExportWord}>
+            <Button variant="outline" className="gap-2" disabled={selectedDeptIds.size === 0} onClick={handleExportWord}>
               <FileText className="h-4 w-4" /> Word
             </Button>
-            <Button className="gap-2" onClick={handlePrint}>
+            <Button variant="outline" className="gap-2" disabled={selectedDeptIds.size === 0} onClick={handleExportPDF}>
+              <FileDown className="h-4 w-4" /> PDF
+            </Button>
+            <Button className="gap-2" disabled={selectedDeptIds.size === 0} onClick={handlePrint}>
               <Printer className="h-4 w-4" /> طباعة
             </Button>
           </div>
@@ -423,13 +434,16 @@ export default function PrintReports() {
         </Card>
       </div>
 
-      {/* ===== Printable Report ===== */}
-      {(selectedDeptIds.size > 0 || filteredCases.length > 0) && (
+      {/* ===== Printable Report (only when dept selected) ===== */}
+      {selectedDeptIds.size > 0 && (
         <div className="print-area bg-white text-black" dir="rtl" style={{ fontSize: fontSize[0] }}>
 
           {/* Report Header */}
           <div className="text-center border-b-2 border-black pb-3 mb-3">
-            <h2 className="text-lg font-bold">مستشفى الأطفال التخصصي بالبحيرة — BSCH</h2>
+            {logo_base64 && (
+              <img src={logo_base64} alt="logo" className="h-14 object-contain mx-auto mb-2" />
+            )}
+            <h2 className="text-lg font-bold">{hospital_name}</h2>
             <h3 className="text-base font-bold mt-1">بيان الحالات اليومي</h3>
             <p className="text-sm mt-0.5">القسم: {selectedDeptNames}</p>
             <div className="flex justify-center gap-6 mt-1 text-xs">

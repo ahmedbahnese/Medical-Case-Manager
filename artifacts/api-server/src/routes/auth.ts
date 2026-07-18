@@ -2,6 +2,7 @@ import { Router, type IRouter } from "express";
 import { FounderLoginBody } from "@workspace/api-zod";
 import { db, settingsTable } from "@workspace/db";
 import { eq } from "drizzle-orm";
+import { logAction } from "./audit-logs";
 
 const router: IRouter = Router();
 
@@ -18,7 +19,7 @@ function getSessionFromCookieHeader(cookieHeader: string | undefined): string | 
   const pairs = cookieHeader.split(";");
   for (const pair of pairs) {
     const [k, v] = pair.trim().split("=");
-    if (k?.trim() === SESSION_COOKIE) return v?.trim() ?? null;
+    if (k?.trim() === SESSION_COOKIE) return decodeURIComponent(v?.trim() ?? "");
   }
   return null;
 }
@@ -31,13 +32,28 @@ async function getFounderPassword(): Promise<string> {
   return process.env.FOUNDER_PASSWORD ?? "bsch2024";
 }
 
+/** Returns [{name, password}] or [] */
+async function getNamedPasswords(): Promise<Array<{ name: string; password: string }>> {
+  try {
+    const [row] = await db.select().from(settingsTable).where(eq(settingsTable.key, "named_passwords"));
+    if (row?.value) return JSON.parse(row.value);
+  } catch {}
+  return [];
+}
+
+function parseSession(raw: string | null): { isAuthenticated: boolean; isFounder: boolean; name: string | null } {
+  if (!raw) return { isAuthenticated: false, isFounder: false, name: null };
+  if (raw === "founder") return { isAuthenticated: true, isFounder: true, name: "المؤسس" };
+  if (raw.startsWith("user:")) {
+    const name = raw.slice(5);
+    return { isAuthenticated: true, isFounder: false, name };
+  }
+  return { isAuthenticated: false, isFounder: false, name: null };
+}
+
 router.get("/auth/me", async (req, res): Promise<void> => {
   const session = getSessionFromCookieHeader(req.headers.cookie);
-  if (!session || session !== "founder") {
-    res.json({ isAuthenticated: false, isFounder: false, name: null });
-    return;
-  }
-  res.json({ isAuthenticated: true, isFounder: true, name: "المؤسس" });
+  res.json(parseSession(session));
 });
 
 router.post("/auth/founder-login", async (req, res): Promise<void> => {
@@ -47,14 +63,28 @@ router.post("/auth/founder-login", async (req, res): Promise<void> => {
     return;
   }
 
+  const { password } = parsed.data;
   const founderPassword = await getFounderPassword();
-  if (parsed.data.password !== founderPassword) {
-    res.status(401).json({ error: "كلمة المرور غير صحيحة" });
+
+  // Check main (founder) password
+  if (password === founderPassword) {
+    res.cookie(SESSION_COOKIE, "founder", COOKIE_OPTIONS);
+    await logAction("تسجيل دخول", "auth", null, "المؤسس", null, "المؤسس");
+    res.json({ isAuthenticated: true, isFounder: true, name: "المؤسس" });
     return;
   }
 
-  res.cookie(SESSION_COOKIE, "founder", COOKIE_OPTIONS);
-  res.json({ isAuthenticated: true, isFounder: true, name: "المؤسس" });
+  // Check named passwords
+  const namedPasswords = await getNamedPasswords();
+  const matched = namedPasswords.find(np => np.password === password);
+  if (matched) {
+    res.cookie(SESSION_COOKIE, `user:${matched.name}`, { ...COOKIE_OPTIONS });
+    await logAction("تسجيل دخول", "auth", null, matched.name, null, matched.name);
+    res.json({ isAuthenticated: true, isFounder: false, name: matched.name });
+    return;
+  }
+
+  res.status(401).json({ error: "كلمة المرور غير صحيحة" });
 });
 
 router.post("/auth/logout", async (req, res): Promise<void> => {

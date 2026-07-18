@@ -1,6 +1,7 @@
 import { useState, useCallback } from "react";
 import { useGetDepartments, useGetCases, useGetWaitingCases } from "@workspace/api-client-react";
-import { Printer, FileSpreadsheet, ZoomIn, ZoomOut, FileText } from "lucide-react";
+import { Printer, FileSpreadsheet, ZoomIn, ZoomOut, FileText, FileDown } from "lucide-react";
+import { exportPDF } from "@/lib/pdf-export";
 import { exportWordDoc } from "@/lib/word-export";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -188,7 +189,7 @@ function exportExcel(shifts: ShiftData[], activeShift: ShiftIdx, hospitalName: s
 }
 
 export default function OccupancyReport() {
-  const { hospital_name } = useAppSettings();
+  const { hospital_name, logo_base64 } = useAppSettings();
   const now = new Date();
   const [reportDate, setReportDate] = useState(now.toISOString().slice(0, 10));
   const [fontSize, setFontSize] = useState([11]);
@@ -272,6 +273,12 @@ export default function OccupancyReport() {
             </Button>
             <Button variant="outline" size="sm" className="gap-1" onClick={() => exportWord(shifts, activeShift, hospital_name, formatted, dayName, supervisor, waitingServo ?? [], waitingReception ?? [], includeServo, includeReception)}>
               <FileText className="h-4 w-4" /> Word
+            </Button>
+            <Button variant="outline" size="sm" className="gap-1" onClick={() => {
+              const el = document.getElementById("occupancy-print-content");
+              if (el) exportPDF(el.innerHTML, `occupancy-${reportDate}.pdf`, logo_base64);
+            }}>
+              <FileDown className="h-4 w-4" /> PDF
             </Button>
             <Button size="sm" className="gap-1" onClick={() => window.print()}>
               <Printer className="h-4 w-4" /> طباعة
@@ -359,13 +366,17 @@ export default function OccupancyReport() {
       </div>
 
       {/* Printable Report */}
-      <div className="print-area bg-white text-black" dir="rtl" style={{ fontSize: fs }}>
+      <div className="print-area print-zoom-70 bg-white text-black" dir="rtl" style={{ fontSize: fs }}>
+        <div id="occupancy-print-content">
         {/* Report Header */}
         <div className="text-center mb-3 border-b-2 border-black pb-2">
           <div className="flex items-center justify-between mb-1 text-xs">
             <span>مديرية الصحة بالبحيرة</span>
             <span>★★★★★★</span>
           </div>
+          {logo_base64 && (
+            <img src={logo_base64} alt="logo" className="h-14 object-contain mx-auto mb-1" />
+          )}
           <h2 className="font-bold" style={{ fontSize: fs + 4 }}>{hospital_name}</h2>
           <h3 className="font-bold" style={{ fontSize: fs + 2 }}>بيان الخدمة الطارئة</h3>
           <p>عن يوم {dayName} الموافق {formatted}</p>
@@ -405,6 +416,7 @@ export default function OccupancyReport() {
             <p>{new Date().toLocaleString("ar-EG")}</p>
           </div>
         </div>
+        </div>{/* /occupancy-print-content */}
       </div>
     </div>
   );

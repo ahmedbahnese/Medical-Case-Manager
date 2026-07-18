@@ -184,7 +184,7 @@ function EditWaitingCaseDialog({ waitingCase, onClose, onSuccess }: { waitingCas
 
   return (
     <Dialog open onOpenChange={onClose}>
-      <DialogContent className="max-w-md">
+      <DialogContent className="max-w-2xl max-h-[90dvh] overflow-y-auto">
         <DialogHeader>
           <DialogTitle className="flex items-center gap-2">
             <Edit2 className="h-4 w-4" /> تعديل بيانات الحالة
@@ -292,7 +292,7 @@ function AdmitDialog({ waitingCase, onClose, onSuccess }: { waitingCase: any; on
 
   return (
     <Dialog open onOpenChange={onClose}>
-      <DialogContent className="max-w-md">
+      <DialogContent className="max-w-2xl max-h-[90dvh] overflow-y-auto">
         <DialogHeader>
           <DialogTitle className="flex items-center gap-2">
             إجراء — <span className="font-bold">{waitingCase.patientName}</span>

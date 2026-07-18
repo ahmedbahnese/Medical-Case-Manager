@@ -171,4 +171,17 @@
     size: A4 portrait;
     margin: 1.5cm 1cm;
   }
+
+  /* Print starts from table — hide everything except print-area in page body */
+  main > *:not(.print-area):not(:has(.print-area)) {
+    display: none !important;
+  }
+
+  /* Occupancy report 70% zoom to fit one page */
+  .print-zoom-70 {
+    zoom: 70%;
+    -webkit-print-color-adjust: exact;
+    print-color-adjust: exact;
+  }
 }
+
