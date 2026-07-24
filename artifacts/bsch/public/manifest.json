@@ -1,0 +1,22 @@
+{
+  "name": "BSCH - نظام إدارة الحالات الطبية",
+  "short_name": "BSCH",
+  "description": "نظام إدارة الحالات الطبية - مستشفى الأطفال التخصصي",
+  "start_url": "/",
+  "display": "standalone",
+  "orientation": "portrait-primary",
+  "background_color": "#ffffff",
+  "theme_color": "#0f766e",
+  "lang": "ar",
+  "dir": "rtl",
+  "categories": ["medical", "productivity"],
+  "icons": [
+    {
+      "src": "/favicon.svg",
+      "sizes": "any",
+      "type": "image/svg+xml",
+      "purpose": "any"
+    }
+  ],
+  "prefer_related_applications": false
+}

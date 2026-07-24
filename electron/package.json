@@ -1,0 +1,55 @@
+{
+  "name": "bsch-desktop",
+  "version": "1.0.0",
+  "description": "BSCH Hospital Case Management System - Desktop App",
+  "main": "main.js",
+  "scripts": {
+    "start": "electron .",
+    "build-win": "electron-builder --win",
+    "build-portable": "electron-builder --win portable"
+  },
+  "dependencies": {},
+  "devDependencies": {
+    "electron": "^32.0.0",
+    "electron-builder": "^25.0.0"
+  },
+  "build": {
+    "appId": "com.bsch.hospital",
+    "productName": "BSCH - نظام إدارة الحالات الطبية",
+    "directories": {
+      "output": "dist-electron"
+    },
+    "files": [
+      "main.js",
+      "preload.js",
+      "error.html",
+      "../artifacts/api-server/dist/**",
+      "../artifacts/bsch/dist/public/**",
+      "../node_modules/**"
+    ],
+    "extraResources": [
+      {
+        "from": "../artifacts/api-server/dist",
+        "to": "api-server/dist"
+      },
+      {
+        "from": "../artifacts/bsch/dist/public",
+        "to": "public"
+      }
+    ],
+    "win": {
+      "target": [
+        { "target": "nsis", "arch": ["x64"] },
+        { "target": "portable", "arch": ["x64"] }
+      ],
+      "icon": "../artifacts/bsch/public/favicon.svg"
+    },
+    "nsis": {
+      "oneClick": false,
+      "allowToChangeInstallationDirectory": true,
+      "createDesktopShortcut": true,
+      "createStartMenuShortcut": true,
+      "shortcutName": "BSCH"
+    }
+  }
+}

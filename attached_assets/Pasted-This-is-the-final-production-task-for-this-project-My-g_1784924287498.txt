@@ -1,0 +1,177 @@
+This is the final production task for this project.
+
+My goal is to make this project a complete, stable, production-ready Hospital Case Management System that is fully independent from Replit.
+
+========================
+PART 1 - FINALIZE THE APPLICATION
+========================
+
+1. Fix all remaining bugs and incomplete features.
+
+2. Remove all placeholder, demo and unused code.
+
+3. Optimize the entire application for production.
+
+4. Improve performance and database queries.
+
+5. Validate every form and input.
+
+6. Improve all error handling with clear user-friendly messages.
+
+7. Add confirmation dialogs before deleting, editing or discharging any patient.
+
+8. Make every page fully responsive for Windows, Android and iPhone.
+
+9. Make all reports, PDF exports, Excel exports and printing work correctly.
+
+10. Ensure all printing layouts fit A4 pages professionally.
+
+11. Review the entire project as a senior software architect and fix hidden bugs, broken workflows, duplicated code, performance issues and security issues.
+
+========================
+PART 2 - MAKE THE PROJECT INDEPENDENT FROM REPLIT
+========================
+
+1. Remove all Replit-specific dependencies.
+
+2. The project must run completely outside Replit.
+
+3. The project must run in VS Code.
+
+4. Generate Production Build.
+
+5. Generate complete .env.example.
+
+6. Export SQL schema.
+
+7. Export SQL migration files.
+
+8. Generate complete API documentation.
+
+9. Generate project architecture documentation.
+
+10. Generate installation guide.
+
+11. Generate deployment guide.
+
+12. Generate update guide.
+
+13. Generate backup & restore guide.
+
+14. Create Backup.bat
+
+15. Create Restore.bat
+
+16. Create StartServer.bat
+
+17. Create StopServer.bat
+
+18. Create Update.bat
+
+19. Create Dockerfile.
+
+20. Create docker-compose.yml.
+
+21. Verify the project builds successfully outside Replit.
+
+========================
+PART 3 - WINDOWS SERVER VERSION
+========================
+
+Convert the project into a Windows Server application.
+
+Requirements:
+
+- Backend runs locally.
+
+- MySQL runs locally.
+
+- Package the application as a Windows Desktop application (Electron).
+
+- Generate Windows Installer (.exe).
+
+- Generate Portable version.
+
+- Application starts only when manually opened.
+
+- Backend starts automatically when opening the application.
+
+========================
+PART 4 - HOSPITAL NETWORK
+========================
+
+The application will be installed on ONE Windows computer inside the hospital.
+
+Requirements:
+
+- All other hospital computers access the system using only a web browser.
+
+- Access through Local IP or Hostname.
+
+- No installation required on client computers.
+
+- All users share ONE database according accesses password to users sets
+
+========================
+PART 5 - MOBILE SUPPORT
+========================
+
+Convert the web application into a Progressive Web App (PWA).
+
+Requirements:
+
+- Fully responsive.
+
+- Installable on Android.
+
+- Installable on iPhone.
+
+- Installable on Windows.
+
+- Same codebase.
+
+- Same backend.
+
+- Same database.
+
+- Native app-like experience.
+
+- Offline support for static assets.
+
+- Push notification ready.
+
+No separate Android or iOS application should be created.
+
+
+
+========================
+PART 6 - PROJECT HANDOVER
+========================
+
+Generate a complete handover package including:
+
+- Full source code.
+
+- Folder structure explanation.
+
+- Database documentation.
+
+- API documentation.
+
+- Build instructions.
+
+- Installation guide.
+
+- Deployment guide.
+
+- Dependency list.
+
+- Backup guide.
+
+- GitHub-ready project.
+
+- Final Production Release Summary.
+
+Finally:
+
+Commit all completed work with clear commit messages and push everything to the connected GitHub repository.
