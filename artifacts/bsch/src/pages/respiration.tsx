@@ -1,8 +1,10 @@
 import { useState, useCallback, useEffect } from "react";
 import { useGetDepartments, useUpdateCase } from "@workspace/api-client-react";
 import { Link } from "wouter";
-import { Wind, ArrowLeft, Activity, Printer, FileSpreadsheet, ZoomIn, ZoomOut, FileText } from "lucide-react";
+import { Wind, ArrowLeft, Activity, Printer, FileSpreadsheet, ZoomIn, ZoomOut, FileText, FileDown } from "lucide-react";
 import { exportWordDoc } from "@/lib/word-export";
+import { exportPDF } from "@/lib/pdf-export";
+import { useAppSettings } from "@/contexts/settings-context";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
@@ -199,6 +201,7 @@ export default function RespirationList() {
 
   const { data: departments } = useGetDepartments();
   const depts = departments ?? [];
+  const { hospital_name, logo_base64 } = useAppSettings();
 
   // Load respiration cases via plain fetch (supports no filter)
   const load = useCallback(async () => {
@@ -258,6 +261,37 @@ export default function RespirationList() {
           </Button>
           <Button variant="outline" size="sm" className="gap-1" onClick={() => exportWord(cases, depts)}>
             <FileText className="h-4 w-4" /> Word
+          </Button>
+          <Button variant="outline" size="sm" className="gap-1" onClick={() => {
+            const deptMap = new Map(depts.map((d: any) => [d.id, d.name]));
+            const fa = (v: unknown) => formatDateAr((v as string) ?? null);
+            const rows = cases.map((c: any, i: number) => `
+              <tr>
+                <td style="text-align:center">${i+1}</td>
+                <td><strong>${c.patientName}</strong></td>
+                <td>${c.age ?? "—"}</td>
+                <td>${c.diagnosis ?? "—"}</td>
+                <td>${fa(c.admissionDate)}</td>
+                <td>${fa(c.ventilationStartDate)}</td>
+                <td>${translate(c.artificialRespiration ?? "no", LABELS.ARTIFICIAL_RESPIRATION)}</td>
+                <td>${deptMap.get(c.departmentId) ?? "—"}</td>
+              </tr>`).join("");
+            const html = `
+              <div class="header">
+                <h2>${hospital_name}</h2>
+                <h3>بيان حالات التنفس الصناعي</h3>
+                <p>${dateStr} — إجمالي: ${cases.length} حالة</p>
+              </div>
+              <table border="1">
+                <tr style="background:#d9e1f2">
+                  <th>م</th><th>الاسم</th><th>السن</th><th>التشخيص</th>
+                  <th>تاريخ الدخول</th><th>ت. التنفس</th><th>Mode</th><th>القسم</th>
+                </tr>
+                ${rows}
+              </table>`;
+            exportPDF(html, `respiration-${new Date().toISOString().slice(0,10)}.pdf`, logo_base64);
+          }}>
+            <FileDown className="h-4 w-4" /> PDF
           </Button>
           <Button size="sm" className="gap-1" onClick={() => window.print()}>
             <Printer className="h-4 w-4" /> طباعة

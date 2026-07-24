@@ -1,7 +1,7 @@
 import { useState } from "react";
 import { Link } from "wouter";
 import { useGetCases, useUpdateCase } from "@workspace/api-client-react";
-import { LogOut, Search, RotateCcw, ArrowLeft } from "lucide-react";
+import { LogOut, Search, RotateCcw, ArrowLeft, FileDown, FileText, Printer } from "lucide-react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -12,10 +12,45 @@ import { Badge } from "@/components/ui/badge";
 import { LABELS, translate, formatDateAr, calcStayLabel } from "@/lib/constants";
 import { toast } from "sonner";
 import { ConfirmDialog } from "@/components/confirm-dialog";
+import { exportPDF } from "@/lib/pdf-export";
+import { exportWordDoc } from "@/lib/word-export";
+import { useAppSettings } from "@/contexts/settings-context";
+
+function buildDischargeHtml(cases: any[], hospitalName: string): string {
+  const now = new Date();
+  const dateStr = now.toLocaleDateString("ar-EG", { weekday: "long", day: "2-digit", month: "2-digit", year: "numeric" });
+  const rows = cases.map((c, i) => {
+    const dis = c.dischargeDate ? new Date(c.dischargeDate) : new Date(c.updatedAt);
+    return `<tr>
+      <td style="text-align:center">${i+1}</td>
+      <td><strong>${c.patientName}</strong></td>
+      <td>${c.fileNumber ?? "—"}</td>
+      <td>${c.age ?? "—"}</td>
+      <td>${c.diagnosis ?? "—"}</td>
+      <td>${formatDateAr(c.admissionDate)}</td>
+      <td>${formatDateAr(dis.toISOString())}</td>
+      <td>${c.departmentName ?? "—"}</td>
+    </tr>`;
+  }).join("");
+  return `
+    <div class="header">
+      <h2>${hospitalName}</h2>
+      <h3>سجل الخروج</h3>
+      <p>${dateStr} — عدد الحالات: ${cases.length}</p>
+    </div>
+    <table border="1">
+      <tr style="background:#d9e1f2">
+        <th>م</th><th>الاسم</th><th>رقم الملف</th><th>السن</th><th>التشخيص</th>
+        <th>تاريخ الدخول</th><th>تاريخ الخروج</th><th>القسم</th>
+      </tr>
+      ${rows}
+    </table>`;
+}
 
 export default function DischargeHistory() {
   const [search, setSearch] = useState("");
   const [submitted, setSubmitted] = useState(true);
+  const { hospital_name, logo_base64 } = useAppSettings();
 
   const { data: allCases, isLoading, refetch } = useGetCases({ status: "discharged" } as any);
   const updateCase = useUpdateCase();
@@ -52,16 +87,39 @@ export default function DischargeHistory() {
     });
   };
 
+  const handleExportPDF = () => {
+    const html = buildDischargeHtml(visible, hospital_name);
+    exportPDF(html, `discharge-history-${new Date().toISOString().slice(0,10)}.pdf`, logo_base64);
+  };
+
+  const handleExportWord = () => {
+    const html = buildDischargeHtml(visible, hospital_name);
+    exportWordDoc(html, `discharge-history-${new Date().toISOString().slice(0,10)}.doc`);
+  };
+
   return (
     <div className="space-y-6">
-      <div>
-        <h1 className="text-3xl font-bold flex items-center gap-3">
-          <LogOut className="h-8 w-8 text-muted-foreground" />
-          سجل الخروج
-        </h1>
-        <p className="text-muted-foreground mt-1">
-          الحالات التي تم تسجيل خروجها — يُمسح التاريخ القديم (أكثر من شهر) تلقائياً
-        </p>
+      <div className="flex items-start justify-between flex-wrap gap-3">
+        <div>
+          <h1 className="text-3xl font-bold flex items-center gap-3">
+            <LogOut className="h-8 w-8 text-muted-foreground" />
+            سجل الخروج
+          </h1>
+          <p className="text-muted-foreground mt-1">
+            الحالات التي تم تسجيل خروجها — يُمسح التاريخ القديم (أكثر من شهر) تلقائياً
+          </p>
+        </div>
+        <div className="flex gap-2 flex-wrap no-print">
+          <Button variant="outline" size="sm" className="gap-1" onClick={handleExportWord}>
+            <FileText className="h-4 w-4" /> Word
+          </Button>
+          <Button variant="outline" size="sm" className="gap-1" onClick={handleExportPDF}>
+            <FileDown className="h-4 w-4" /> PDF
+          </Button>
+          <Button variant="outline" size="sm" className="gap-1" onClick={() => window.print()}>
+            <Printer className="h-4 w-4" /> طباعة
+          </Button>
+        </div>
       </div>
 
       <Card className="border-primary/20">

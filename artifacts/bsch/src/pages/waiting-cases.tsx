@@ -7,7 +7,8 @@ import {
 import { useQueryClient } from "@tanstack/react-query";
 import {
   Users, Clock, CheckCircle2, XCircle, Trash2, Plus, Printer,
-  ChevronDown, ChevronUp, FileText, Edit2, FileSpreadsheet, FileDown
+  ChevronDown, ChevronUp, FileText, Edit2, FileSpreadsheet, FileDown,
+  LogOut, BookOpen
 } from "lucide-react";
 import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -35,6 +36,15 @@ const EXIT_REASONS = [
   { value: "request", label: "خروج حسب الطلب" },
   { value: "transferred", label: "تحويل لمستشفى أخرى" },
   { value: "no_bed", label: "رفض (لا يوجد سرير)" },
+];
+
+// Reception care type filter options
+const RECEPTION_FILTERS = [
+  { value: "all", label: "الكل" },
+  { value: "intensive_care_high", label: "العناية الكبرى" },
+  { value: "intensive_care_medium", label: "العناية المتوسطة" },
+  { value: "picu", label: "البيكيو (PICU)" },
+  { value: "incubator", label: "الداخلي" },
 ];
 
 const EMPTY_FORM = {
@@ -142,7 +152,7 @@ function AddForm({ section, onSuccess }: { section: Section; onSuccess: () => vo
       <button
         className="w-full p-3 flex items-center justify-between text-sm font-medium text-primary hover:bg-primary/5 transition-colors rounded-t-lg"
         onClick={() => setOpen(o => !o)}>
-        <span className="flex items-center gap-2"><Plus className="h-4 w-4" /> إضافة حالة للانتظار — {section === "servo" ? "سيرفو" : "استقبال"}</span>
+        <span className="flex items-center gap-2"><Plus className="h-4 w-4" /> إضافة حالة للانتظار — {section === "servo" ? "سيرفو" : "قسم الاستقبال"}</span>
         {open ? <ChevronUp className="h-4 w-4" /> : <ChevronDown className="h-4 w-4" />}
       </button>
 
@@ -162,7 +172,7 @@ function AddForm({ section, onSuccess }: { section: Section; onSuccess: () => vo
               <Input dir="ltr" value={form.parentPhone} onChange={e => f("parentPhone", e.target.value)} placeholder="01X..." />
             </div>
             <div className="space-y-1">
-              <Label className="text-xs">نوع الرعاية</Label>
+              <Label className="text-xs">نوع الرعاية المطلوب</Label>
               <Select value={form.careType} onValueChange={v => f("careType", v)}>
                 <SelectTrigger className="h-9"><SelectValue /></SelectTrigger>
                 <SelectContent>
@@ -203,9 +213,19 @@ function AddForm({ section, onSuccess }: { section: Section; onSuccess: () => vo
   );
 }
 
-/* ─────────────────────────── Edit Dialog ─────────────────────────── */
-function EditWaitingCaseDialog({ waitingCase, onClose, onSuccess }: { waitingCase: any; onClose: () => void; onSuccess: () => void }) {
+/* ─────────────────────── Unified Action Dialog ─────────────────────── */
+/**
+ * Single floating dialog for both editing a waiting case and taking action on it.
+ * Shows name/age/diagnosis/care-type editable, then action choices: admit or exit.
+ */
+function WaitingCaseActionDialog({
+  waitingCase, onClose, onSuccess
+}: { waitingCase: any; onClose: () => void; onSuccess: () => void }) {
+  const { data: departments } = useGetDepartments();
   const update = useUpdateWaitingCase();
+  const createCase = useCreateCase();
+
+  // Editable fields
   const [form, setForm] = useState({
     patientName: waitingCase.patientName ?? "",
     age: waitingCase.age ?? "",
@@ -218,184 +238,203 @@ function EditWaitingCaseDialog({ waitingCase, onClose, onSuccess }: { waitingCas
   });
   const f = (k: keyof typeof form, v: any) => setForm(p => ({ ...p, [k]: v }));
 
-  const handleSave = () => {
+  // Action section
+  const [action, setAction] = useState<"none" | "admit" | "exit">("none");
+  const [deptId, setDeptId] = useState("");
+  const [exitReason, setExitReason] = useState("improved");
+  const [medicalReport, setMedicalReport] = useState("");
+
+  const isPending = update.isPending || createCase.isPending;
+
+  const handleSaveOnly = () => {
     update.mutate({ id: waitingCase.id, data: form as any }, {
       onSuccess: () => { toast.success("تم تحديث البيانات"); onSuccess(); onClose(); },
       onError: (e: any) => toast.error("خطأ: " + (e?.response?.data?.error ?? e.message)),
     });
   };
 
-  return (
-    <Dialog open onOpenChange={onClose}>
-      <DialogContent className="max-w-2xl max-h-[85vh] overflow-y-auto">
-        <DialogHeader>
-          <DialogTitle className="flex items-center gap-2">
-            <Edit2 className="h-4 w-4" /> تعديل بيانات الحالة
-          </DialogTitle>
-        </DialogHeader>
-        <div className="space-y-3">
-          <div className="space-y-1">
-            <Label className="text-xs">اسم المريض *</Label>
-            <Input value={form.patientName} onChange={e => f("patientName", e.target.value)} />
-          </div>
-          <div className="grid grid-cols-2 gap-3">
-            <div className="space-y-1">
-              <Label className="text-xs">السن</Label>
-              <Input value={form.age} onChange={e => f("age", e.target.value)} placeholder="3 أيام" />
-            </div>
-            <div className="space-y-1">
-              <Label className="text-xs">الهاتف</Label>
-              <Input dir="ltr" value={form.parentPhone} onChange={e => f("parentPhone", e.target.value)} placeholder="01X..." />
-            </div>
-          </div>
-          <div className="grid grid-cols-2 gap-3">
-            <div className="space-y-1">
-              <Label className="text-xs">نوع الرعاية</Label>
-              <Select value={form.careType} onValueChange={v => f("careType", v)}>
-                <SelectTrigger className="h-9"><SelectValue /></SelectTrigger>
-                <SelectContent>
-                  {Object.entries(LABELS.CARE_TYPES).map(([k, v]) => <SelectItem key={k} value={k}>{v}</SelectItem>)}
-                </SelectContent>
-              </Select>
-            </div>
-            <div className="space-y-1">
-              <Label className="text-xs">التنفس</Label>
-              <Select value={form.artificialRespiration} onValueChange={v => f("artificialRespiration", v)}>
-                <SelectTrigger className="h-9"><SelectValue /></SelectTrigger>
-                <SelectContent>
-                  {Object.entries(LABELS.ARTIFICIAL_RESPIRATION).map(([k, v]) => <SelectItem key={k} value={k}>{v}</SelectItem>)}
-                </SelectContent>
-              </Select>
-            </div>
-          </div>
-          <div className="space-y-1">
-            <Label className="text-xs">التشخيص</Label>
-            <Textarea value={form.diagnosis} onChange={e => f("diagnosis", e.target.value)} rows={3} className="resize-none" />
-          </div>
-          <div className="flex items-center gap-3 flex-wrap">
-            <Checkbox id="cr-edit" checked={form.centralRoomRequired} onCheckedChange={v => f("centralRoomRequired", !!v)} />
-            <Label htmlFor="cr-edit" className="text-xs cursor-pointer">يحتاج غرفة مركزية</Label>
-            {form.centralRoomRequired && (
-              <Input value={form.centralRoomCode} onChange={e => f("centralRoomCode", e.target.value)}
-                placeholder="كود الغرفة" className="h-8 w-32" />
-            )}
-          </div>
-        </div>
-        <DialogFooter>
-          <Button variant="outline" onClick={onClose}>إلغاء</Button>
-          <Button onClick={handleSave} disabled={update.isPending}>
-            {update.isPending ? "جاري الحفظ..." : "حفظ التعديلات"}
-          </Button>
-        </DialogFooter>
-      </DialogContent>
-    </Dialog>
-  );
-}
-
-/* ─────────────────────────── Admit Dialog ─────────────────────────── */
-function AdmitDialog({ waitingCase, onClose, onSuccess }: { waitingCase: any; onClose: () => void; onSuccess: () => void }) {
-  const { data: departments } = useGetDepartments();
-  const [deptId, setDeptId] = useState("");
-  const [mode, setMode] = useState<"admit" | "exit">("admit");
-  const [exitReason, setExitReason] = useState("improved");
-  const updateStatus = useUpdateWaitingCase();
-  const createCase = useCreateCase();
-
-  const handleConfirm = () => {
-    if (mode === "admit") {
+  const handleConfirmAction = () => {
+    if (action === "admit") {
       if (!deptId) { toast.error("الرجاء اختيار القسم"); return; }
-      const dept = departments?.find(d => d.id.toString() === deptId);
+      const dept = (departments as any[] ?? []).find((d: any) => d.id.toString() === deptId);
       createCase.mutate({
         data: {
           departmentId: parseInt(deptId),
-          patientName: waitingCase.patientName,
-          age: waitingCase.age ?? undefined,
-          diagnosis: waitingCase.diagnosis ?? undefined,
-          artificialRespiration: (waitingCase.artificialRespiration ?? "no") as any,
+          patientName: form.patientName,
+          age: form.age || undefined,
+          diagnosis: form.diagnosis || undefined,
+          artificialRespiration: (form.artificialRespiration ?? "no") as any,
           caseType: dept ? deptTypeToCaseType(dept.departmentType as string) as any : "intensive_care_high",
           admissionDate: new Date().toISOString(),
+          ...(medicalReport ? { notes: medicalReport } : {}),
         }
       }, {
         onSuccess: () => {
-          updateStatus.mutate({ id: waitingCase.id, data: { status: "admitted" as WaitingCaseUpdateStatus } }, {
+          update.mutate({ id: waitingCase.id, data: { status: "admitted" as WaitingCaseUpdateStatus, ...form } as any }, {
             onSuccess: () => { toast.success("تم نقل الحالة للقسم بنجاح"); onSuccess(); onClose(); },
           });
         },
         onError: (e: any) => toast.error("خطأ في الإضافة: " + (e?.response?.data?.error ?? e.message))
       });
-    } else {
-      updateStatus.mutate({ id: waitingCase.id, data: { status: "cancelled" as WaitingCaseUpdateStatus } }, {
-        onSuccess: () => { toast.success("تم تسجيل الخروج"); onSuccess(); onClose(); },
+    } else if (action === "exit") {
+      update.mutate({
+        id: waitingCase.id,
+        data: { status: "cancelled" as WaitingCaseUpdateStatus, exitReason, ...form } as any
+      }, {
+        onSuccess: () => { toast.success(`تم تسجيل الخروج — ${EXIT_REASONS.find(r => r.value === exitReason)?.label}`); onSuccess(); onClose(); },
         onError: (e: any) => toast.error("خطأ: " + e.message)
       });
     }
   };
 
-  const isPending = updateStatus.isPending || createCase.isPending;
-
   return (
     <Dialog open onOpenChange={onClose}>
-      <DialogContent className="max-w-2xl max-h-[85vh] overflow-y-auto">
+      <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto">
         <DialogHeader>
-          <DialogTitle className="flex items-center gap-2">
-            إجراء — <span className="font-bold">{waitingCase.patientName}</span>
+          <DialogTitle className="flex items-center gap-2 text-base">
+            <Edit2 className="h-4 w-4" />
+            <span className="font-bold">{waitingCase.patientName}</span>
+            <Badge variant="outline" className="text-xs mr-1">
+              {translate(waitingCase.careType, LABELS.CARE_TYPES)}
+            </Badge>
           </DialogTitle>
         </DialogHeader>
+
         <div className="space-y-4">
-          <div className="grid grid-cols-2 gap-2">
-            <Button variant={mode === "admit" ? "default" : "outline"} onClick={() => setMode("admit")} className="w-full gap-1">
-              <CheckCircle2 className="h-4 w-4" /> دخول القسم
-            </Button>
-            <Button variant={mode === "exit" ? "secondary" : "outline"} onClick={() => setMode("exit")} className="w-full gap-1">
-              <XCircle className="h-4 w-4" /> خروج / إلغاء
-            </Button>
+          {/* ── Editable patient info ── */}
+          <div className="rounded-lg border bg-muted/20 p-3 space-y-3">
+            <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wide">بيانات الحالة</p>
+            <div className="grid grid-cols-2 gap-3">
+              <div className="col-span-2 space-y-1">
+                <Label className="text-xs">اسم المريض *</Label>
+                <Input value={form.patientName} onChange={e => f("patientName", e.target.value)} />
+              </div>
+              <div className="space-y-1">
+                <Label className="text-xs">السن</Label>
+                <Input value={form.age} onChange={e => f("age", e.target.value)} placeholder="3 أيام" />
+              </div>
+              <div className="space-y-1">
+                <Label className="text-xs">الهاتف</Label>
+                <Input dir="ltr" value={form.parentPhone} onChange={e => f("parentPhone", e.target.value)} placeholder="01X..." />
+              </div>
+              <div className="space-y-1">
+                <Label className="text-xs">القسم المطلوب (نوع الرعاية)</Label>
+                <Select value={form.careType} onValueChange={v => f("careType", v)}>
+                  <SelectTrigger className="h-9"><SelectValue /></SelectTrigger>
+                  <SelectContent>
+                    {Object.entries(LABELS.CARE_TYPES).map(([k, v]) => <SelectItem key={k} value={k}>{v}</SelectItem>)}
+                  </SelectContent>
+                </Select>
+              </div>
+              <div className="space-y-1">
+                <Label className="text-xs">التنفس الصناعي</Label>
+                <Select value={form.artificialRespiration} onValueChange={v => f("artificialRespiration", v)}>
+                  <SelectTrigger className="h-9"><SelectValue /></SelectTrigger>
+                  <SelectContent>
+                    {Object.entries(LABELS.ARTIFICIAL_RESPIRATION).map(([k, v]) => <SelectItem key={k} value={k}>{v}</SelectItem>)}
+                  </SelectContent>
+                </Select>
+              </div>
+              <div className="col-span-2 space-y-1">
+                <Label className="text-xs">التشخيص</Label>
+                <Textarea value={form.diagnosis} onChange={e => f("diagnosis", e.target.value)} rows={2} className="resize-none" />
+              </div>
+              <div className="col-span-2 flex items-center gap-3 flex-wrap">
+                <Checkbox id="cr-action" checked={form.centralRoomRequired} onCheckedChange={v => f("centralRoomRequired", !!v)} />
+                <Label htmlFor="cr-action" className="text-xs cursor-pointer">يحتاج غرفة مركزية</Label>
+                {form.centralRoomRequired && (
+                  <Input value={form.centralRoomCode} onChange={e => f("centralRoomCode", e.target.value)}
+                    placeholder="كود الغرفة" className="h-8 w-32" />
+                )}
+              </div>
+            </div>
           </div>
 
-          {mode === "admit" && (
-            <div className="space-y-2">
-              <Label>اختر القسم المراد الدخول إليه</Label>
-              <Select value={deptId} onValueChange={setDeptId}>
-                <SelectTrigger><SelectValue placeholder="اختر القسم..." /></SelectTrigger>
-                <SelectContent>
-                  {(departments as any[] ?? []).map((d: any) => (
-                    <SelectItem key={d.id} value={d.id.toString()}>
-                      {d.name} — شاغر: {d.capacity - d.activeCasesCount}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-              <p className="text-xs text-muted-foreground">ستُنشأ حالة نشطة تلقائياً في القسم المختار</p>
+          {/* ── Action section ── */}
+          <div className="rounded-lg border p-3 space-y-3">
+            <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wide">الإجراء</p>
+            <div className="grid grid-cols-2 gap-2">
+              <Button
+                variant={action === "admit" ? "default" : "outline"}
+                onClick={() => setAction(action === "admit" ? "none" : "admit")}
+                className="w-full gap-1"
+              >
+                <CheckCircle2 className="h-4 w-4" /> حجز / دخول قسم
+              </Button>
+              <Button
+                variant={action === "exit" ? "secondary" : "outline"}
+                onClick={() => setAction(action === "exit" ? "none" : "exit")}
+                className="w-full gap-1"
+              >
+                <LogOut className="h-4 w-4" /> خروج / إلغاء
+              </Button>
             </div>
-          )}
 
-          {mode === "exit" && (
-            <div className="space-y-2">
-              <Label>سبب الخروج / الإلغاء</Label>
-              <Select value={exitReason} onValueChange={setExitReason}>
-                <SelectTrigger><SelectValue /></SelectTrigger>
-                <SelectContent>
-                  {EXIT_REASONS.map(r => <SelectItem key={r.value} value={r.value}>{r.label}</SelectItem>)}
-                </SelectContent>
-              </Select>
-            </div>
-          )}
+            {action === "admit" && (
+              <div className="space-y-3 pt-1">
+                <div className="space-y-1">
+                  <Label>اختر القسم للحجز</Label>
+                  <Select value={deptId} onValueChange={setDeptId}>
+                    <SelectTrigger><SelectValue placeholder="اختر القسم..." /></SelectTrigger>
+                    <SelectContent>
+                      {(departments as any[] ?? []).map((d: any) => (
+                        <SelectItem key={d.id} value={d.id.toString()}>
+                          {d.name} — شاغر: {d.capacity - d.activeCasesCount}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                  <p className="text-xs text-muted-foreground">ستُنشأ حالة نشطة تلقائياً في القسم المختار</p>
+                </div>
+                <div className="space-y-1">
+                  <Label className="flex items-center gap-1 text-xs"><BookOpen className="h-3 w-3" /> تقرير طبي (اختياري)</Label>
+                  <Textarea
+                    value={medicalReport}
+                    onChange={e => setMedicalReport(e.target.value)}
+                    placeholder="أضف ملاحظات أو تقرير طبي للحالة..."
+                    rows={3}
+                    className="resize-none text-sm"
+                  />
+                </div>
+              </div>
+            )}
 
-          {/* Case info */}
-          <div className="rounded-md bg-muted/50 p-3 text-sm space-y-1 border">
-            <p><strong>التشخيص:</strong> {waitingCase.diagnosis ?? "—"}</p>
-            <p><strong>السن:</strong> {waitingCase.age ?? "—"}</p>
-            <p><strong>نوع الرعاية:</strong> {translate(waitingCase.careType, LABELS.CARE_TYPES)}</p>
-            <p><strong>التنفس:</strong> {translate(waitingCase.artificialRespiration, LABELS.ARTIFICIAL_RESPIRATION)}</p>
-            {waitingCase.centralRoomRequired && (
-              <p className="text-red-600 font-semibold"><strong>غرفة مركزية:</strong> {waitingCase.centralRoomCode || "مطلوب"}</p>
+            {action === "exit" && (
+              <div className="space-y-3 pt-1">
+                <div className="space-y-1">
+                  <Label>سبب الخروج / الإلغاء</Label>
+                  <Select value={exitReason} onValueChange={setExitReason}>
+                    <SelectTrigger><SelectValue /></SelectTrigger>
+                    <SelectContent>
+                      {EXIT_REASONS.map(r => <SelectItem key={r.value} value={r.value}>{r.label}</SelectItem>)}
+                    </SelectContent>
+                  </Select>
+                </div>
+                <div className="space-y-1">
+                  <Label className="flex items-center gap-1 text-xs"><BookOpen className="h-3 w-3" /> تقرير طبي (اختياري)</Label>
+                  <Textarea
+                    value={medicalReport}
+                    onChange={e => setMedicalReport(e.target.value)}
+                    placeholder="أضف ملاحظات أو تقرير طبي..."
+                    rows={3}
+                    className="resize-none text-sm"
+                  />
+                </div>
+              </div>
             )}
           </div>
         </div>
-        <DialogFooter>
+
+        <DialogFooter className="gap-2 flex-wrap">
           <Button variant="outline" onClick={onClose}>إلغاء</Button>
-          <Button onClick={handleConfirm} disabled={isPending}>
-            {isPending ? "جاري التنفيذ..." : "تأكيد"}
+          <Button variant="secondary" onClick={handleSaveOnly} disabled={isPending}>
+            حفظ التعديلات فقط
           </Button>
+          {action !== "none" && (
+            <Button onClick={handleConfirmAction} disabled={isPending}>
+              {isPending ? "جاري التنفيذ..." : action === "admit" ? "تأكيد الحجز" : "تأكيد الخروج"}
+            </Button>
+          )}
         </DialogFooter>
       </DialogContent>
     </Dialog>
@@ -403,9 +442,9 @@ function AdmitDialog({ waitingCase, onClose, onSuccess }: { waitingCase: any; on
 }
 
 /* ─────────────────────────── Cases Table ─────────────────────────── */
-function CasesTable({ cases, printCases, onAction, onEdit, onDelete, isLoading, selectedIds, onToggle, onToggleAll }: {
+function CasesTable({ cases, printCases, onAction, onDelete, isLoading, selectedIds, onToggle, onToggleAll }: {
   cases: any[]; printCases: any[];
-  onAction: (c: any) => void; onEdit: (c: any) => void; onDelete: (c: any) => void;
+  onAction: (c: any) => void; onDelete: (c: any) => void;
   isLoading: boolean; selectedIds: Set<number>; onToggle: (id: number) => void; onToggleAll: (all: boolean) => void;
 }) {
   if (isLoading) return (
@@ -479,13 +518,9 @@ function CasesTable({ cases, printCases, onAction, onEdit, onDelete, isLoading, 
                 </TableCell>
                 <TableCell className="no-print">
                   <div className="flex gap-1 justify-center">
-                    <Button size="sm" variant="outline" className="h-7 w-7 p-0" title="تعديل"
-                      onClick={() => onEdit(c)}>
-                      <Edit2 className="h-3.5 w-3.5" />
-                    </Button>
-                    <Button size="sm" className="h-7 text-xs bg-green-600 hover:bg-green-700 gap-0.5 px-2"
+                    <Button size="sm" className="h-7 text-xs gap-0.5 px-2"
                       onClick={() => onAction(c)}>
-                      <CheckCircle2 className="h-3 w-3" /> إجراء
+                      <Edit2 className="h-3 w-3" /> تعديل / إجراء
                     </Button>
                     <ConfirmDialog
                       trigger={
@@ -512,9 +547,9 @@ function CasesTable({ cases, printCases, onAction, onEdit, onDelete, isLoading, 
 /* ─────────────────────────── Main Page ─────────────────────────── */
 export default function WaitingCases() {
   const [section, setSection] = useState<Section>("reception");
-  const [admitCase, setAdmitCase] = useState<any>(null);
-  const [editCase, setEditCase] = useState<any>(null);
+  const [activeCase, setActiveCase] = useState<any>(null); // unified dialog
   const [selectedIds, setSelectedIds] = useState<Set<number>>(new Set());
+  const [receptionFilter, setReceptionFilter] = useState("all");
   const queryClient = useQueryClient();
   const { hospital_name, logo_base64 } = useAppSettings();
 
@@ -530,34 +565,53 @@ export default function WaitingCases() {
 
   const handleDelete = (c: any) => {
     deleteCase.mutate({ id: c.id }, {
-      onSuccess: () => { toast.success(`تم حذف ${c.patientName}`); setSelectedIds(prev => { const n=new Set(prev); n.delete(c.id); return n; }); invalidateAll(); },
+      onSuccess: () => {
+        toast.success(`تم حذف ${c.patientName}`);
+        setSelectedIds(prev => { const n=new Set(prev); n.delete(c.id); return n; });
+        invalidateAll();
+      },
       onError: (e: any) => toast.error("خطأ: " + e.message)
     });
   };
 
   const casesArr = (casesRaw ?? []) as any[];
-  const toggleId = (id: number) => setSelectedIds(prev => { const n=new Set(prev); n.has(id)?n.delete(id):n.add(id); return n; });
-  const toggleAll = (all: boolean) => setSelectedIds(all ? new Set(casesArr.map(c => c.id)) : new Set());
 
-  // Cases to use for print/export: selected subset if any, else all
-  const selectedCases = casesArr.filter(c => selectedIds.has(c.id));
-  const exportCases = selectedCases.length > 0 ? selectedCases : casesArr;
-  const sectionTitle = section === "servo" ? "سيرفو" : "استقبال";
+  // Apply reception care-type filter
+  const filteredCases = section === "reception" && receptionFilter !== "all"
+    ? casesArr.filter(c => {
+        if (receptionFilter === "incubator") {
+          return c.careType === "incubator" || c.careType?.startsWith("incubator_");
+        }
+        return c.careType === receptionFilter;
+      })
+    : casesArr;
+
+  const toggleId = (id: number) => setSelectedIds(prev => { const n=new Set(prev); n.has(id)?n.delete(id):n.add(id); return n; });
+  const toggleAll = (all: boolean) => setSelectedIds(all ? new Set(filteredCases.map(c => c.id)) : new Set());
+
+  // Cases to use for print/export: selected subset if any, else filtered
+  const selectedCases = filteredCases.filter(c => selectedIds.has(c.id));
+  const exportCases = selectedCases.length > 0 ? selectedCases : filteredCases;
+  const sectionTitle = section === "servo" ? "سيرفو" : "قسم الاستقبال";
+  const filterLabel = receptionFilter !== "all"
+    ? (RECEPTION_FILTERS.find(f => f.value === receptionFilter)?.label ?? "")
+    : "";
+  const exportTitle = filterLabel ? `${sectionTitle} — ${filterLabel}` : sectionTitle;
 
   const handlePrint = () => window.print();
 
   const handleExportWord = () => {
-    const html = buildWaitingHtml(exportCases, sectionTitle, hospital_name);
+    const html = buildWaitingHtml(exportCases, exportTitle, hospital_name);
     exportWordDoc(html, `waiting-${section}-${new Date().toISOString().slice(0,10)}.doc`);
   };
 
   const handleExportPDF = () => {
-    const html = buildWaitingHtml(exportCases, sectionTitle, hospital_name);
+    const html = buildWaitingHtml(exportCases, exportTitle, hospital_name);
     exportPDF(html, `waiting-${section}-${new Date().toISOString().slice(0,10)}.pdf`, logo_base64);
   };
 
   const handleExportExcel = () => {
-    exportWaitingExcel(exportCases, sectionTitle, hospital_name);
+    exportWaitingExcel(exportCases, exportTitle, hospital_name);
   };
 
   const servoCount = (servoAll ?? []).length;
@@ -568,7 +622,7 @@ export default function WaitingCases() {
       <div className="flex items-center justify-between no-print flex-wrap gap-2">
         <div>
           <h1 className="text-2xl font-bold">قوائم الانتظار</h1>
-          <p className="text-muted-foreground text-sm">إدارة حالات الانتظار — استقبال وسيرفو</p>
+          <p className="text-muted-foreground text-sm">إدارة حالات الانتظار — قسم الاستقبال وسيرفو</p>
         </div>
         <div className="flex gap-2 flex-wrap items-center">
           {selectedCases.length > 0 && (
@@ -589,10 +643,10 @@ export default function WaitingCases() {
         </div>
       </div>
 
-      <Tabs value={section} onValueChange={v => { setSection(v as Section); setSelectedIds(new Set()); }}>
+      <Tabs value={section} onValueChange={v => { setSection(v as Section); setSelectedIds(new Set()); setReceptionFilter("all"); }}>
         <TabsList className="w-full no-print">
           <TabsTrigger value="reception" className="flex-1 gap-2">
-            استقبال
+            قسم الاستقبال
             {recepCount > 0 && <Badge variant="secondary" className="text-xs h-4 px-1">{recepCount}</Badge>}
           </TabsTrigger>
           <TabsTrigger value="servo" className="flex-1 gap-2">
@@ -608,31 +662,60 @@ export default function WaitingCases() {
               <AddForm section={sec} onSuccess={invalidateAll} />
             </div>
 
+            {/* Reception care-type sub-filter */}
+            {sec === "reception" && (
+              <div className="no-print flex flex-wrap gap-1.5 items-center">
+                <span className="text-xs text-muted-foreground ml-1">تصفية:</span>
+                {RECEPTION_FILTERS.map(rf => (
+                  <button
+                    key={rf.value}
+                    onClick={() => { setReceptionFilter(rf.value); setSelectedIds(new Set()); }}
+                    className={[
+                      "px-3 py-1 rounded-full text-xs font-medium border transition-colors",
+                      receptionFilter === rf.value
+                        ? "bg-primary text-primary-foreground border-primary"
+                        : "bg-background border-border text-muted-foreground hover:border-primary/50"
+                    ].join(" ")}
+                  >
+                    {rf.label}
+                    {rf.value !== "all" && (
+                      <span className="mr-1 opacity-60">
+                        ({(casesArr.filter(c =>
+                          rf.value === "incubator"
+                            ? c.careType === "incubator" || c.careType?.startsWith("incubator_")
+                            : c.careType === rf.value
+                        )).length})
+                      </span>
+                    )}
+                  </button>
+                ))}
+              </div>
+            )}
+
             {/* Header for print */}
             <div className="hidden print:block text-center border-b-2 border-black pb-2 mb-3">
               {logo_base64 && <img src={logo_base64} alt="logo" className="h-12 object-contain mx-auto mb-1" />}
               <h2 className="font-bold text-lg">{hospital_name}</h2>
-              <h3 className="font-bold">بيان قائمة انتظار — {sec === "servo" ? "سيرفو" : "الاستقبال"}</h3>
+              <h3 className="font-bold">بيان قائمة انتظار — {sec === "servo" ? "سيرفو" : "قسم الاستقبال"}{filterLabel ? ` — ${filterLabel}` : ""}</h3>
               <p className="text-sm">{new Date().toLocaleDateString("ar-EG", { weekday:"long", day:"2-digit", month:"2-digit", year:"numeric" })}</p>
               {selectedCases.length > 0 && <p className="text-xs">المحددون فقط: {selectedCases.length} حالة</p>}
             </div>
 
-            {/* Cases table — printCases controls which rows show during print */}
+            {/* Cases table */}
             <CasesTable
-              cases={casesArr}
+              cases={filteredCases}
               printCases={exportCases}
               isLoading={isLoading}
-              onAction={setAdmitCase}
-              onEdit={setEditCase}
+              onAction={setActiveCase}
               onDelete={handleDelete}
               selectedIds={selectedIds}
               onToggle={toggleId}
               onToggleAll={toggleAll}
             />
 
-            {casesArr.length > 0 && (
+            {filteredCases.length > 0 && (
               <div className="flex justify-between items-center text-sm text-muted-foreground no-print">
-                <span>إجمالي: <strong>{casesArr.length}</strong> حالة</span>
+                <span>إجمالي: <strong>{filteredCases.length}</strong> حالة</span>
                 {selectedCases.length > 0 && (
                   <span className="text-primary font-medium">محدد للطباعة/التصدير: {selectedCases.length}</span>
                 )}
@@ -642,19 +725,12 @@ export default function WaitingCases() {
         ))}
       </Tabs>
 
-      {admitCase && (
-        <AdmitDialog
-          waitingCase={admitCase}
-          onClose={() => setAdmitCase(null)}
-          onSuccess={() => { invalidateAll(); setAdmitCase(null); }}
-        />
-      )}
-
-      {editCase && (
-        <EditWaitingCaseDialog
-          waitingCase={editCase}
-          onClose={() => setEditCase(null)}
-          onSuccess={invalidateAll}
+      {/* Unified action/edit dialog */}
+      {activeCase && (
+        <WaitingCaseActionDialog
+          waitingCase={activeCase}
+          onClose={() => setActiveCase(null)}
+          onSuccess={() => { invalidateAll(); setActiveCase(null); }}
         />
       )}
     </div>

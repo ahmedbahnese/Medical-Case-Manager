@@ -32,8 +32,8 @@ async function getFounderPassword(): Promise<string> {
   return process.env.FOUNDER_PASSWORD ?? "bsch2024";
 }
 
-/** Returns [{name, password}] or [] */
-async function getNamedPasswords(): Promise<Array<{ name: string; password: string }>> {
+/** Returns [{name, password, canEdit?, allowedPages?}] or [] */
+async function getNamedPasswords(): Promise<Array<{ name: string; password: string; canEdit?: boolean; allowedPages?: string[] }>> {
   try {
     const [row] = await db.select().from(settingsTable).where(eq(settingsTable.key, "named_passwords"));
     if (row?.value) return JSON.parse(row.value);
@@ -53,7 +53,19 @@ function parseSession(raw: string | null): { isAuthenticated: boolean; isFounder
 
 router.get("/auth/me", async (req, res): Promise<void> => {
   const session = getSessionFromCookieHeader(req.headers.cookie);
-  res.json(parseSession(session));
+  const base = parseSession(session);
+  if (!base.isAuthenticated || base.isFounder || !base.name) {
+    res.json(base);
+    return;
+  }
+  // Named user — attach their permissions
+  const named = await getNamedPasswords();
+  const entry = named.find(np => np.name === base.name);
+  res.json({
+    ...base,
+    canEdit: entry?.canEdit !== false, // default true
+    allowedPages: entry?.allowedPages ?? [],
+  });
 });
 
 router.post("/auth/founder-login", async (req, res): Promise<void> => {

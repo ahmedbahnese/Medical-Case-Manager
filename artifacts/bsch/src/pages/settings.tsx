@@ -4,6 +4,7 @@ import {
   Settings, Lock, Eye, EyeOff, Upload, Save, User, Plus, Trash2,
   Palette, Building2, Edit2, X, Check
 } from "lucide-react";
+import { Checkbox } from "@/components/ui/checkbox";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -44,7 +45,25 @@ interface Department {
   activeCasesCount?: number;
 }
 
-interface NamedPassword { name: string; password: string }
+interface NamedPassword {
+  name: string;
+  password: string;
+  canEdit?: boolean;       // default true — false = view-only
+  allowedPages?: string[]; // empty = all non-restricted pages
+}
+
+const ALL_USER_PAGES = [
+  { href: "/dashboard",             label: "لوحة التحكم" },
+  { href: "/add-case",              label: "إضافة حالة" },
+  { href: "/waiting-cases",         label: "قوائم الانتظار" },
+  { href: "/artificial-respiration",label: "التنفس الصناعي" },
+  { href: "/occupancy-report",      label: "بيان الإشغال" },
+  { href: "/print-reports",         label: "التقرير اليومي" },
+  { href: "/incident-report",       label: "بيانات الحوادث" },
+  { href: "/advanced-search",       label: "بحث متقدم" },
+  { href: "/discharge-history",     label: "سجل الخروج" },
+  { href: "/bulk-import",           label: "الاستيراد الذكي" },
+];
 
 export default function SettingsPage() {
   const { refreshSettings } = useSettingsActions();
@@ -68,6 +87,8 @@ export default function SettingsPage() {
   const [newNpName, setNewNpName] = useState("");
   const [newNpPassword, setNewNpPassword] = useState("");
   const [showNewNpPw, setShowNewNpPw] = useState(false);
+  const [newNpCanEdit, setNewNpCanEdit] = useState(true);
+  const [newNpPages, setNewNpPages] = useState<string[]>([]);
 
   // Departments
   const [departments, setDepartments] = useState<Department[]>([]);
@@ -152,8 +173,16 @@ export default function SettingsPage() {
   const saveNamedPasswords = (list: NamedPassword[]) => saveSetting("named_passwords", JSON.stringify(list));
   const addNamedPassword = () => {
     if (!newNpName.trim() || !newNpPassword.trim()) { toast.error("الاسم وكلمة المرور مطلوبان"); return; }
-    const updated = [...namedPasswords, { name: newNpName.trim(), password: newNpPassword.trim() }];
-    setNamedPasswords(updated); setNewNpName(""); setNewNpPassword(""); saveNamedPasswords(updated);
+    const newUser: NamedPassword = {
+      name: newNpName.trim(),
+      password: newNpPassword.trim(),
+      canEdit: newNpCanEdit,
+      allowedPages: newNpPages,
+    };
+    const updated = [...namedPasswords, newUser];
+    setNamedPasswords(updated);
+    setNewNpName(""); setNewNpPassword(""); setNewNpCanEdit(true); setNewNpPages([]);
+    saveNamedPasswords(updated);
   };
   const removeNamedPassword = (i: number) => {
     const updated = namedPasswords.filter((_, idx) => idx !== i);
@@ -535,60 +564,131 @@ export default function SettingsPage() {
       {/* Named Passwords */}
       <Card>
         <CardHeader className="pb-3">
-          <CardTitle className="text-base flex items-center gap-2"><Lock className="h-4 w-4" /> كلمات مرور المستخدمين</CardTitle>
+          <CardTitle className="text-base flex items-center gap-2"><User className="h-4 w-4" /> كلمات مرور المستخدمين والصلاحيات</CardTitle>
           <CardDescription className="text-xs">
-            أضف كلمة مرور لكل موظف باسمه — سيُسجَّل اسمه في سجل العمليات عند كل دخول وتعديل
+            أضف مستخدمين بأسمائهم وكلمات مرورهم وحدد ما يمكنهم رؤيته أو تعديله — الإعدادات وسجل العمليات والنسخ الاحتياطي للمؤسس فقط
           </CardDescription>
         </CardHeader>
         <CardContent className="space-y-3">
           {namedPasswords.length > 0 && (
             <div className="space-y-2">
               {namedPasswords.map((np, i) => (
-                <div key={i} className="flex items-center justify-between bg-muted/30 px-3 py-2 rounded-md">
-                  <div>
-                    <span className="font-medium text-sm">{np.name}</span>
-                    <span className="text-xs text-muted-foreground mr-2">{'•'.repeat(Math.min(np.password.length, 8))}</span>
+                <div key={i} className="border rounded-lg px-3 py-2.5 bg-muted/20 space-y-1.5">
+                  <div className="flex items-center justify-between">
+                    <div className="flex items-center gap-2 flex-wrap">
+                      <span className="font-medium text-sm">{np.name}</span>
+                      <span className="text-xs text-muted-foreground">{'•'.repeat(Math.min(np.password?.length ?? 0, 8))}</span>
+                      <Badge variant={np.canEdit !== false ? "default" : "secondary"} className="text-[10px] h-4 px-1.5">
+                        {np.canEdit !== false ? "تعديل" : "عرض فقط"}
+                      </Badge>
+                      {np.allowedPages && np.allowedPages.length > 0 && (
+                        <Badge variant="outline" className="text-[10px] h-4 px-1.5">
+                          {np.allowedPages.length} صفحة
+                        </Badge>
+                      )}
+                    </div>
+                    <ConfirmDialog
+                      trigger={
+                        <Button size="sm" variant="ghost" className="h-6 w-6 p-0 text-destructive hover:bg-destructive/10">
+                          <Trash2 className="h-3.5 w-3.5" />
+                        </Button>
+                      }
+                      title={`حذف مستخدم "${np.name}"`}
+                      description="سيُحذف وصول هذا المستخدم فوراً."
+                      confirmLabel="حذف"
+                      onConfirm={() => removeNamedPassword(i)}
+                    />
                   </div>
-                  <ConfirmDialog
-                    trigger={
-                      <Button size="sm" variant="ghost" className="h-6 w-6 p-0 text-destructive hover:bg-destructive/10">
-                        <Trash2 className="h-3.5 w-3.5" />
-                      </Button>
-                    }
-                    title={`حذف مستخدم "${np.name}"`}
-                    description="سيُحذف وصول هذا المستخدم فوراً."
-                    confirmLabel="حذف"
-                    onConfirm={() => removeNamedPassword(i)}
-                  />
+                  {np.allowedPages && np.allowedPages.length > 0 && (
+                    <p className="text-[10px] text-muted-foreground">
+                      الصفحات: {np.allowedPages.map(p => ALL_USER_PAGES.find(x => x.href === p)?.label ?? p).join("، ")}
+                    </p>
+                  )}
+                  {(!np.allowedPages || np.allowedPages.length === 0) && (
+                    <p className="text-[10px] text-muted-foreground">يرى جميع الصفحات المتاحة</p>
+                  )}
                 </div>
               ))}
             </div>
           )}
           {namedPasswords.length === 0 && <p className="text-sm text-muted-foreground text-center py-2">لا توجد مستخدمون مضافون بعد</p>}
-          <div className="grid grid-cols-2 gap-2 pt-1">
-            <div className="space-y-1">
-              <Label className="text-xs">اسم المستخدم</Label>
-              <Input value={newNpName} onChange={e => setNewNpName(e.target.value)} placeholder="د. أحمد محمد" className="h-9" />
-            </div>
-            <div className="space-y-1">
-              <Label className="text-xs">كلمة المرور</Label>
-              <div className="relative">
-                <Input type={showNewNpPw ? "text" : "password"} value={newNpPassword}
-                  onChange={e => setNewNpPassword(e.target.value)}
-                  onKeyDown={e => e.key === "Enter" && addNamedPassword()}
-                  placeholder="كلمة المرور" className="h-9 pr-9" dir="ltr" />
-                <button type="button" className="absolute left-2 top-1/2 -translate-y-1/2 text-muted-foreground"
-                  onClick={() => setShowNewNpPw(s => !s)}>
-                  {showNewNpPw ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
-                </button>
+
+          {/* Add new user form */}
+          <div className="border rounded-lg p-3 space-y-3 bg-muted/10">
+            <p className="text-xs font-semibold text-muted-foreground">إضافة مستخدم جديد</p>
+            <div className="grid grid-cols-2 gap-2">
+              <div className="space-y-1">
+                <Label className="text-xs">اسم المستخدم</Label>
+                <Input value={newNpName} onChange={e => setNewNpName(e.target.value)} placeholder="د. أحمد محمد" className="h-9" />
+              </div>
+              <div className="space-y-1">
+                <Label className="text-xs">كلمة المرور</Label>
+                <div className="relative">
+                  <Input type={showNewNpPw ? "text" : "password"} value={newNpPassword}
+                    onChange={e => setNewNpPassword(e.target.value)}
+                    placeholder="كلمة المرور" className="h-9 pr-9" dir="ltr" />
+                  <button type="button" className="absolute left-2 top-1/2 -translate-y-1/2 text-muted-foreground"
+                    onClick={() => setShowNewNpPw(s => !s)}>
+                    {showNewNpPw ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
+                  </button>
+                </div>
               </div>
             </div>
+
+            {/* Permissions */}
+            <div className="space-y-2">
+              <Label className="text-xs font-medium">الصلاحيات</Label>
+              <div className="flex items-center gap-3">
+                <Checkbox
+                  id="np-can-edit"
+                  checked={newNpCanEdit}
+                  onCheckedChange={v => setNewNpCanEdit(!!v)}
+                />
+                <Label htmlFor="np-can-edit" className="text-xs cursor-pointer">
+                  صلاحية التعديل (إضافة / تعديل / حذف)
+                  {!newNpCanEdit && <span className="mr-1 text-amber-600">— عرض فقط</span>}
+                </Label>
+              </div>
+            </div>
+
+            {/* Page access */}
+            <div className="space-y-2">
+              <div className="flex items-center justify-between">
+                <Label className="text-xs font-medium">الصفحات المتاحة</Label>
+                <button
+                  type="button"
+                  className="text-[10px] text-primary hover:underline"
+                  onClick={() => setNewNpPages(newNpPages.length === ALL_USER_PAGES.length ? [] : ALL_USER_PAGES.map(p => p.href))}
+                >
+                  {newNpPages.length === ALL_USER_PAGES.length ? "إلغاء الكل" : "تحديد الكل"}
+                </button>
+              </div>
+              <p className="text-[10px] text-muted-foreground">اتركها فارغة لإتاحة جميع الصفحات</p>
+              <div className="grid grid-cols-2 gap-1.5">
+                {ALL_USER_PAGES.map(page => (
+                  <div key={page.href} className="flex items-center gap-2">
+                    <Checkbox
+                      id={`page-${page.href}`}
+                      checked={newNpPages.includes(page.href)}
+                      onCheckedChange={v => {
+                        setNewNpPages(prev =>
+                          v ? [...prev, page.href] : prev.filter(p => p !== page.href)
+                        );
+                      }}
+                    />
+                    <Label htmlFor={`page-${page.href}`} className="text-xs cursor-pointer">{page.label}</Label>
+                  </div>
+                ))}
+              </div>
+            </div>
+
+            <Button size="sm" onClick={addNamedPassword} disabled={!newNpName.trim() || !newNpPassword.trim() || loading} className="gap-1 w-full">
+              <Plus className="h-4 w-4" /> إضافة مستخدم
+            </Button>
           </div>
-          <Button size="sm" onClick={addNamedPassword} disabled={!newNpName.trim() || !newNpPassword.trim() || loading} className="gap-1 w-full">
-            <Plus className="h-4 w-4" /> إضافة مستخدم
-          </Button>
+
           <p className="text-xs text-muted-foreground bg-muted/30 p-2 rounded">
-            💡 كل مستخدم يدخل بكلمة مروره الخاصة — ستجد اسمه في سجل العمليات مع كل إجراء.
+            💡 كل مستخدم يدخل بكلمة مروره الخاصة — سيرى فقط الصفحات المحددة له، وإذا كان عرض فقط لن يتمكن من التعديل.
           </p>
         </CardContent>
       </Card>
