@@ -10,6 +10,8 @@ import { toast } from "sonner";
 import { apiGet, apiPost, apiPatch, apiDelete } from "@/lib/api";
 import { ConfirmDialog } from "@/components/confirm-dialog";
 import { formatDateTimeAr } from "@/lib/constants";
+import { ReportWatermark } from "@/components/report-watermark";
+import { useAppSettings } from "@/contexts/settings-context";
 
 interface IncidentCase {
   id: number;
@@ -151,6 +153,7 @@ export default function IncidentReportPage() {
   const [isEditing, setIsEditing] = useState(false);
   const [loading, setLoading] = useState(false);
   const [showPrint, setShowPrint] = useState(false);
+  const { logo_base64, watermark_enabled } = useAppSettings();
 
   useEffect(() => {
     loadReports();
@@ -293,8 +296,8 @@ export default function IncidentReportPage() {
     );
   }
 
-  return (
-    <div className="max-w-5xl mx-auto space-y-6">
+    return (
+      <ReportWatermark enabled={watermark_enabled} logo={logo_base64} className="max-w-5xl mx-auto space-y-6">
       <div className="flex items-center justify-between no-print">
         <div className="flex items-center gap-3">
           <Button variant="ghost" size="sm" onClick={() => setMode("list")}>
@@ -411,6 +414,6 @@ export default function IncidentReportPage() {
           <ReportPrintView report={currentReport} />
         </div>
       )}
-    </div>
+    </ReportWatermark>
   );
 }

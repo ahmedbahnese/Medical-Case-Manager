@@ -304,6 +304,14 @@ router.patch("/cases/:id", async (req, res): Promise<void> => {
     updatedAt: new Date(),
   };
 
+  if (body.data.status === "discharged") {
+    const allowedReasons = ["improved", "request", "transferred", "death"];
+    if (!allowedReasons.includes(extraData.dischargeReason)) {
+      res.status(400).json({ error: "سبب الخروج مطلوب ويجب أن يكون صحيحاً" });
+      return;
+    }
+  }
+
   // Handle extra fields not in the Zod schema
   if (extraData.mobe !== undefined) updates.mobe = extraData.mobe;
   if (extraData.ventilationStartDate !== undefined) {

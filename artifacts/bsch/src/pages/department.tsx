@@ -2,6 +2,7 @@ import { useLocation, useParams } from "wouter";
 import { useGetDepartment, useUpdateCase } from "@workspace/api-client-react";
 import { useAppSettings } from "@/contexts/settings-context";
 import { exportPDF } from "@/lib/pdf-export";
+import { ReportWatermark } from "@/components/report-watermark";
 
 function formatDateAr(val: string | null | undefined): string {
   if (!val) return "—";
@@ -127,7 +128,7 @@ export default function DepartmentDetail() {
   const departmentId = parseInt(id || "0");
   const [, setLocation] = useLocation();
   const [searchFilter, setSearchFilter] = useState("");
-  const { hospital_name, logo_base64 } = useAppSettings();
+  const { hospital_name, logo_base64, watermark_enabled } = useAppSettings();
 
   const { data: dept, isLoading } = useGetDepartment(departmentId);
 
@@ -156,11 +157,11 @@ export default function DepartmentDetail() {
     a.download = `بيان-${dept.name}-${new Date().toISOString().slice(0,10)}.doc`; a.click();
   };
   const handleExportPDF = () => {
-    exportPDF(buildDeptHtml(dept.name, filteredCases, hospital_name), `dept-${dept.name}.pdf`, logo_base64);
+    exportPDF(buildDeptHtml(dept.name, filteredCases, hospital_name), `dept-${dept.name}.pdf`, logo_base64, watermark_enabled ? logo_base64 : null);
   };
 
   return (
-    <div className="space-y-6 animate-in fade-in">
+    <ReportWatermark enabled={watermark_enabled} logo={logo_base64} className="space-y-6 animate-in fade-in">
       {/* Print-only header */}
       <div className="hidden print:block text-center border-b-2 border-black pb-3 mb-2">
         {logo_base64 && <img src={logo_base64} alt="logo" className="h-14 object-contain mx-auto mb-2" />}
@@ -334,6 +335,6 @@ export default function DepartmentDetail() {
           </Table>
         </CardContent>
       </Card>
-    </div>
+    </ReportWatermark>
   );
 }

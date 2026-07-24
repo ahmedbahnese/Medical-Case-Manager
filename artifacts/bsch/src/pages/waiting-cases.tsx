@@ -26,6 +26,7 @@ import { LABELS, translate, deptTypeToCaseType, formatDateAr } from "@/lib/const
 import { exportWordDoc } from "@/lib/word-export";
 import { exportPDF } from "@/lib/pdf-export";
 import { useAppSettings } from "@/contexts/settings-context";
+import { ReportWatermark } from "@/components/report-watermark";
 import { toast } from "sonner";
 import { ConfirmDialog } from "@/components/confirm-dialog";
 
@@ -35,7 +36,7 @@ const EXIT_REASONS = [
   { value: "improved", label: "تحسن / دخل القسم" },
   { value: "request", label: "خروج حسب الطلب" },
   { value: "transferred", label: "تحويل لمستشفى أخرى" },
-  { value: "no_bed", label: "رفض (لا يوجد سرير)" },
+  { value: "death", label: "وفاة" },
 ];
 
 // Reception care type filter options
@@ -289,7 +290,7 @@ function WaitingCaseActionDialog({
 
   return (
     <Dialog open onOpenChange={onClose}>
-      <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto">
+      <DialogContent className="w-[calc(100%-1rem)] max-w-[calc(100%-1rem)] h-[calc(100dvh-1rem)] max-h-none overflow-y-auto">
         <DialogHeader>
           <DialogTitle className="flex items-center gap-2 text-base">
             <Edit2 className="h-4 w-4" />
@@ -551,7 +552,7 @@ export default function WaitingCases() {
   const [selectedIds, setSelectedIds] = useState<Set<number>>(new Set());
   const [receptionFilter, setReceptionFilter] = useState("all");
   const queryClient = useQueryClient();
-  const { hospital_name, logo_base64 } = useAppSettings();
+  const { hospital_name, logo_base64, watermark_enabled } = useAppSettings();
 
   const { data: casesRaw, isLoading, refetch } = useGetWaitingCases({ section, status: "waiting" } as any);
   const { data: servoAll } = useGetWaitingCases({ section: "servo", status: "waiting" } as any);
@@ -607,7 +608,7 @@ export default function WaitingCases() {
 
   const handleExportPDF = () => {
     const html = buildWaitingHtml(exportCases, exportTitle, hospital_name);
-    exportPDF(html, `waiting-${section}-${new Date().toISOString().slice(0,10)}.pdf`, logo_base64);
+    exportPDF(html, `waiting-${section}-${new Date().toISOString().slice(0,10)}.pdf`, logo_base64, watermark_enabled ? logo_base64 : null);
   };
 
   const handleExportExcel = () => {
@@ -618,7 +619,7 @@ export default function WaitingCases() {
   const recepCount = (recepAll ?? []).length;
 
   return (
-    <div className="space-y-4">
+    <ReportWatermark enabled={watermark_enabled} logo={logo_base64} className="space-y-4">
       <div className="flex items-center justify-between no-print flex-wrap gap-2">
         <div>
           <h1 className="text-2xl font-bold">قوائم الانتظار</h1>
@@ -733,6 +734,6 @@ export default function WaitingCases() {
           onSuccess={() => { invalidateAll(); setActiveCase(null); }}
         />
       )}
-    </div>
+    </ReportWatermark>
   );
 }

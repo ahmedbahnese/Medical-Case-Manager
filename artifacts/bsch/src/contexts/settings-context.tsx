@@ -5,12 +5,14 @@ interface AppSettings {
   hospital_name: string;
   logo_base64: string | null;
   supervisors: string;
+  watermark_enabled: boolean;
 }
 
 const DEFAULT_SETTINGS: AppSettings = {
   hospital_name: "مستشفى الأطفال التخصصي بالبحيرة",
   logo_base64: null,
   supervisors: "",
+  watermark_enabled: true,
 };
 
 const SettingsContext = createContext<{
@@ -37,6 +39,7 @@ export function SettingsProvider({ children }: { children: ReactNode }) {
         hospital_name: data.hospital_name || DEFAULT_SETTINGS.hospital_name,
         logo_base64: data.logo_base64 || null,
         supervisors: data.supervisors || "",
+        watermark_enabled: data.watermark_enabled !== "false",
       };
       setSettings(next);
       localStorage.setItem("bsch_settings", JSON.stringify(next));

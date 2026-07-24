@@ -33,6 +33,7 @@ interface SettingsData {
   supervisors?: string;
   theme_color?: string;
   named_passwords?: string;
+  watermark_enabled?: string;
 }
 
 interface Department {
@@ -77,6 +78,7 @@ export default function SettingsPage() {
   const [loginPassword, setLoginPassword] = useState("");
   const [logoPreview, setLogoPreview] = useState<string | null>(null);
   const [themeColor, setThemeColor] = useState("#2563eb");
+  const [watermarkEnabled, setWatermarkEnabled] = useState(true);
 
   // Supervisors
   const [supervisors, setSupervisors] = useState<string[]>([]);
@@ -111,6 +113,7 @@ export default function SettingsPage() {
       if (data.hospital_name) setHospitalName(data.hospital_name);
       if (data.logo_base64) setLogoPreview(data.logo_base64);
       if (data.theme_color) setThemeColor(data.theme_color);
+      if (data.watermark_enabled !== undefined) setWatermarkEnabled(data.watermark_enabled !== "false");
       if (data.supervisors) {
         try { setSupervisors(JSON.parse(data.supervisors)); } catch { setSupervisors([]); }
       }
@@ -304,6 +307,36 @@ export default function SettingsPage() {
               <Save className="h-4 w-4 ml-1" /> حفظ
             </Button>
           </div>
+        </CardContent>
+      </Card>
+
+      {/* Report watermark */}
+      <Card>
+        <CardHeader className="pb-3">
+          <CardTitle className="text-base">العلامة المائية للتقارير</CardTitle>
+          <CardDescription className="text-xs">
+            استخدم الشعار المرفوع خلف التقارير والسجلات بشكل خفيف ورسمي. يمكنك تغيير الشعار من القسم السابق.
+          </CardDescription>
+        </CardHeader>
+        <CardContent className="flex items-center justify-between gap-4 flex-wrap">
+          <div className="flex items-center gap-3">
+            <Checkbox
+              id="watermark-enabled"
+              checked={watermarkEnabled}
+              onCheckedChange={(checked) => setWatermarkEnabled(!!checked)}
+            />
+            <Label htmlFor="watermark-enabled" className="cursor-pointer">
+              إظهار الشعار كعلامة مائية في التقارير والطباعة
+            </Label>
+          </div>
+          <Button
+            variant="outline"
+            size="sm"
+            disabled={loading}
+            onClick={() => saveSetting("watermark_enabled", String(watermarkEnabled))}
+          >
+            <Save className="h-4 w-4 ml-1" /> حفظ الإعداد
+          </Button>
         </CardContent>
       </Card>
 

@@ -15,6 +15,7 @@ import { Skeleton } from "@/components/ui/skeleton";
 import { LABELS, translate, formatDateAr, calcStayLabel } from "@/lib/constants";
 import { toast } from "sonner";
 import { ConfirmDialog } from "@/components/confirm-dialog";
+import { Dialog, DialogContent, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 
 const STATUS_COLORS: Record<string, string> = {
   active:     "bg-green-100 text-green-800 border-green-300",
@@ -102,6 +103,8 @@ export default function CaseDetail() {
   const deleteCase = useDeleteCase();
 
   const [editData, setEditData] = useState<Record<string, any>>({});
+  const [showDischargeDialog, setShowDischargeDialog] = useState(false);
+  const [dischargeReason, setDischargeReason] = useState("");
 
   // Only sync from server when NOT actively editing
   useEffect(() => {
@@ -146,7 +149,11 @@ export default function CaseDetail() {
     });
   };
 
-  const handleDischarge = (reason?: string) => {
+  const handleDischarge = (reason: string) => {
+    if (!reason) {
+      toast.error("يجب اختيار سبب الخروج");
+      return;
+    }
     updateCase.mutate({
       id: caseId,
       data: { status: "discharged", ...(reason ? { dischargeReason: reason } : {}) } as any
@@ -195,13 +202,10 @@ export default function CaseDetail() {
                   <Button variant="outline" size="sm" className="gap-1" onClick={() => setIsEditing(true)}>
                     <Edit className="h-4 w-4" /> تعديل
                   </Button>
-                  <ConfirmDialog
-                    trigger={<Button variant="outline" size="sm" className="gap-1 border-orange-300 text-orange-600 hover:bg-orange-50">تسجيل خروج</Button>}
-                    title="تسجيل خروج"
-                    description="هل أنت متأكد من تسجيل خروج هذه الحالة؟"
-                    confirmLabel="تأكيد الخروج"
-                    onConfirm={() => handleDischarge()}
-                  />
+                  <Button variant="outline" size="sm" className="gap-1 border-orange-300 text-orange-600 hover:bg-orange-50"
+                    onClick={() => { setDischargeReason(""); setShowDischargeDialog(true); }}>
+                    تسجيل خروج
+                  </Button>
                 </>
               )}
               <ConfirmDialog
@@ -224,6 +228,33 @@ export default function CaseDetail() {
           )}
         </div>
       </div>
+
+      <Dialog open={showDischargeDialog} onOpenChange={setShowDischargeDialog}>
+        <DialogContent className="max-w-md">
+          <DialogHeader>
+            <DialogTitle>تسجيل خروج الحالة</DialogTitle>
+          </DialogHeader>
+          <div className="space-y-3">
+            <p className="text-sm text-muted-foreground">اختر سبب الخروج قبل اعتماد الإجراء.</p>
+            <Label>سبب الخروج <span className="text-destructive">*</span></Label>
+            <Select value={dischargeReason} onValueChange={setDischargeReason}>
+              <SelectTrigger><SelectValue placeholder="اختر سبب الخروج" /></SelectTrigger>
+              <SelectContent>
+                {DISCHARGE_OPTIONS.map(option => (
+                  <SelectItem key={option.value} value={option.value}>{option.label}</SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setShowDischargeDialog(false)}>إلغاء</Button>
+            <Button variant="destructive" disabled={!dischargeReason || updateCase.isPending}
+              onClick={() => { handleDischarge(dischargeReason); setShowDischargeDialog(false); }}>
+              تأكيد الخروج
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
 
       <div className="grid md:grid-cols-3 gap-4">
         {/* Demographics */}

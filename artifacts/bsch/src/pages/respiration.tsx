@@ -16,6 +16,7 @@ import { Button } from "@/components/ui/button";
 import { LABELS, translate, formatDateAr, toInputDate } from "@/lib/constants";
 import { toast } from "sonner";
 import { apiGet } from "@/lib/api";
+import { ReportWatermark } from "@/components/report-watermark";
 
 const MODE_LABELS: Record<string, { short: string; color: string }> = {
   high_frequency: { short: "H.F.O",            color: "text-orange-600 border-orange-300 bg-orange-50" },
@@ -201,7 +202,7 @@ export default function RespirationList() {
 
   const { data: departments } = useGetDepartments();
   const depts = departments ?? [];
-  const { hospital_name, logo_base64 } = useAppSettings();
+  const { hospital_name, logo_base64, watermark_enabled } = useAppSettings();
 
   // Load respiration cases via plain fetch (supports no filter)
   const load = useCallback(async () => {
@@ -243,7 +244,7 @@ export default function RespirationList() {
   const dateStr = `يوم ${DAYS_AR[now.getDay()]} ${now.getDate()}/${now.getMonth()+1}/${now.getFullYear()}`;
 
   return (
-    <div className="space-y-5">
+    <ReportWatermark enabled={watermark_enabled} logo={logo_base64} className="space-y-5">
       {/* Header */}
       <div className="flex flex-col md:flex-row md:items-center gap-3">
         <div className="flex items-center gap-3 flex-1">
@@ -289,7 +290,7 @@ export default function RespirationList() {
                 </tr>
                 ${rows}
               </table>`;
-            exportPDF(html, `respiration-${new Date().toISOString().slice(0,10)}.pdf`, logo_base64);
+            exportPDF(html, `respiration-${new Date().toISOString().slice(0,10)}.pdf`, logo_base64, watermark_enabled ? logo_base64 : null);
           }}>
             <FileDown className="h-4 w-4" /> PDF
           </Button>
@@ -453,6 +454,6 @@ export default function RespirationList() {
           نظام BSCH — طُبع بتاريخ {new Date().toLocaleString("ar-EG")}
         </div>
       </div>
-    </div>
+    </ReportWatermark>
   );
 }

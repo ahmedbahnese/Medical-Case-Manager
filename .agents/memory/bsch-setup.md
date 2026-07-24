@@ -4,29 +4,20 @@ description: Workflow env vars, key files, routes, and frontend page inventory f
 ---
 
 ## Workflows
-- `artifacts/api-server: API Server` — the real running API (port 8080 assigned by env `PORT`)
+- `API Server` — the real running API (port 8080 assigned by env `PORT`)
 - `BSCH Frontend` — Vite dev server on port 18429
-- The duplicate "API Server" and "artifacts/bsch: web" workflows always fail (port collision) — ignore them
+- The artifact-prefixed workflow names are not registered in this imported project; restart the two names above.
+**Why:** The imported project exposes legacy workflow names even though artifact manifests exist.
+**How to apply:** Use the exact visible workflow names for restarts and health checks.
 
-## Authentication
-- Login password: `bsch2024` (stored in settings table as `login_password`; fallback: env `FOUNDER_PASSWORD`)
-- Settings page password: `@Bahnasy` (hardcoded in settings.tsx frontend only)
-- Named passwords: stored as JSON array in settings table key `named_passwords` = `[{name, password, canEdit?, allowedPages?}]`
-- Auth: `POST /api/auth/founder-login` — checks founder password first, then named passwords
-- Session cookie: `bsch_session` = `"founder"` (main) or `"user:Name"` (named user)
-- `GET /api/auth/me` returns `{ isAuthenticated, isFounder, name, canEdit?, allowedPages? }` — named users get permissions from DB
-
-## User Permissions System
-- `canEdit`: boolean (default true). False = view-only user, shown "عرض فقط" badge in sidebar.
-- `allowedPages`: string[] of allowed hrefs. Empty array = all non-restricted pages allowed.
-- Founder-only pages: `/settings`, `/audit-log`, `/backup` — hidden from non-founders in layout.tsx.
-- Layout reads permissions from `useGetMe()` cast as `any`.
-- Logout button shows a confirmation dialog with reason selector (not instant logout).
+## Access Control
+- The imported project has authenticated sessions and named-user page permissions; private access details are intentionally omitted from this note.
+- Founder-only pages include settings, audit log, and backup.
 
 ## Key API Routes
 - `/api/departments` — GET (list), POST (add), PATCH /:id, DELETE /:id
-- `/api/settings` — GET (all), POST {password, key, value}
-- `/api/auth/founder-login` — POST {password}
+- `/api/settings` — GET and protected update endpoint
+- `/api/auth/*` — authentication and session endpoints
 - `/api/auth/me` — GET (returns permissions for named users)
 - `/api/cases` — GET, POST, PATCH /:id, DELETE /:id
 - `/api/waiting-cases` — GET, POST, PATCH /:id
@@ -36,7 +27,7 @@ description: Workflow env vars, key files, routes, and frontend page inventory f
 departments, medical_cases, waiting_cases, settings, audit_logs, incident_reports, (users if any)
 
 ## Frontend Key Pages
-- `settings.tsx` — unlocked with `@Bahnasy`; sections: hospital name, logo, departments CRUD, supervisors, theme, login password, named passwords with permissions
+- `settings.tsx` — sections: hospital name, logo, departments CRUD, supervisors, theme, and named-user permissions
 - `case-detail.tsx` — CaseField component is defined OUTSIDE the main component (critical: was inside causing re-mount on each keystroke)
 - `print-reports.tsx` — daily report; filteredCases is empty when selectedDeptIds.size === 0
 - `occupancy-report.tsx` — has `print-zoom-70` CSS class for 70% print scaling
@@ -66,5 +57,3 @@ departments, medical_cases, waiting_cases, settings, audit_logs, incident_report
 
 ## Git
 - Repo: `github.com/ahmedbahnese/Medical-Case-Manager`
-- Push requires fresh token (Personal Access Token) — use `git remote set-url origin https://TOKEN@github.com/...`
-- Last commit: `47a909a` — batch 2 features (dept CRUD, named passwords, case edit fix, PDF)

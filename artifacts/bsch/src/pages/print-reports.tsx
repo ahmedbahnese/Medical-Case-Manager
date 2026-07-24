@@ -16,6 +16,7 @@ import { Checkbox } from "@/components/ui/checkbox";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { LABELS, translate, calcStayLabel, formatDateAr, getBedType, toInputDate } from "@/lib/constants";
 import { toast } from "sonner";
+import { ReportWatermark } from "@/components/report-watermark";
 
 const DAYS_AR = ["الأحد", "الاثنين", "الثلاثاء", "الأربعاء", "الخميس", "الجمعة", "السبت"];
 
@@ -213,7 +214,7 @@ function InlineModeCell({ caseId, value, onSaved }: { caseId: number; value: str
 
 export default function PrintReports() {
   const now = new Date();
-  const { hospital_name, logo_base64 } = useAppSettings();
+  const { hospital_name, logo_base64, watermark_enabled } = useAppSettings();
   const [reportDate, setReportDate] = useState(now.toISOString().slice(0, 10));
   const [reportTime, setReportTime] = useState(format(now, "hh:mm"));
   const [reportAmPm, setReportAmPm] = useState<"ص" | "م">(parseInt(format(now, "HH")) < 12 ? "ص" : "م");
@@ -329,12 +330,12 @@ export default function PrintReports() {
 
   const hasContent = selectedDeptIds.size > 0 || ((includeServo && (waitingServo?.length ?? 0) > 0) || (includeReception && (waitingReception?.length ?? 0) > 0));
 
-  const handleExportPDF = () => exportPDF(buildReportHtml(), `daily-report-${reportDate}.pdf`, logo_base64);
+  const handleExportPDF = () => exportPDF(buildReportHtml(), `daily-report-${reportDate}.pdf`, logo_base64, watermark_enabled ? logo_base64 : null);
 
   const handleExportWord = () => exportWordDoc(buildReportHtml(), `daily-report-${reportDate}.doc`);
 
   return (
-    <div className="space-y-4">
+    <ReportWatermark enabled={watermark_enabled} logo={logo_base64} className="space-y-4">
 
       {/* ===== Controls (no-print) ===== */}
       <div className="no-print space-y-4">
@@ -595,6 +596,6 @@ export default function PrintReports() {
           </div>
         </div>
       )}
-    </div>
+    </ReportWatermark>
   );
 }

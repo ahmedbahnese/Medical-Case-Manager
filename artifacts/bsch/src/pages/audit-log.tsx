@@ -9,6 +9,8 @@ import { Badge } from "@/components/ui/badge";
 import { toast } from "sonner";
 import { apiGet } from "@/lib/api";
 import { formatDateTimeAr } from "@/lib/constants";
+import { ReportWatermark } from "@/components/report-watermark";
+import { useAppSettings } from "@/contexts/settings-context";
 
 const SETTINGS_PASSWORD = "@Bahnasy";
 
@@ -38,6 +40,7 @@ export default function AuditLog() {
   const [showPw, setShowPw] = useState(false);
   const [logs, setLogs] = useState<AuditLog[]>([]);
   const [loading, setLoading] = useState(false);
+  const { logo_base64, watermark_enabled } = useAppSettings();
 
   const handleUnlock = () => {
     if (pw === SETTINGS_PASSWORD) {
@@ -102,7 +105,7 @@ export default function AuditLog() {
   }
 
   return (
-    <div className="space-y-6">
+    <ReportWatermark enabled={watermark_enabled} logo={logo_base64} className="space-y-6">
       <div className="flex items-center justify-between">
         <div>
           <h1 className="text-3xl font-bold flex items-center gap-3">
@@ -160,6 +163,6 @@ export default function AuditLog() {
           </div>
         </CardContent>
       </Card>
-    </div>
+    </ReportWatermark>
   );
 }

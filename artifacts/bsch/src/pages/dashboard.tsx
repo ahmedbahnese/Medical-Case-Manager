@@ -4,7 +4,7 @@ import { useGetDashboardStats, useGetDepartments, useGetCases } from "@workspace
 import { exportWordDoc } from "@/lib/word-export";
 import {
   Users, Activity, AlertTriangle, Clock, Wind, ArrowLeft, Plus,
-  Download, FileSpreadsheet, Printer, ChevronDown, ChevronUp, ZoomIn, ZoomOut, Bed
+  Download, FileSpreadsheet, FileDown, Printer, ChevronDown, ChevronUp, ZoomIn, ZoomOut, Bed
 } from "lucide-react";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -14,6 +14,8 @@ import { LABELS, translate, calcStayLabel, formatDateAr } from "@/lib/constants"
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Slider } from "@/components/ui/slider";
 import { useAppSettings } from "@/contexts/settings-context";
+import { ReportWatermark } from "@/components/report-watermark";
+import { exportPDF } from "@/lib/pdf-export";
 
 function exportCSV(cases: any[], depts: any[]) {
   const deptMap = new Map(depts.map(d => [d.id, d.departmentType as string]));
@@ -38,6 +40,7 @@ function GroupCasesDialog({ deptIds, groupLabel, open, onClose }: {
 }) {
   const { data: cases, isLoading } = useGetCases({ status: "active" } as any);
   const { data: depts } = useGetDepartments();
+  const { hospital_name, logo_base64, watermark_enabled } = useAppSettings();
   const [fontSize, setFontSize] = useState([12]);
   const displayCases = (cases ?? []).filter((c: any) => deptIds.includes(c.departmentId));
 
@@ -72,9 +75,29 @@ function GroupCasesDialog({ deptIds, groupLabel, open, onClose }: {
     exportWordDoc(html, `cases-${groupLabel}-${now.toISOString().slice(0,10)}.doc`);
   };
 
+  const handleExportPDF = () => {
+    const now = new Date();
+    const rows = displayCases.map((c: any, i: number) => `
+      <tr>
+        <td>${i + 1}</td><td><strong>${c.patientName}</strong></td><td>${c.age ?? "—"}</td>
+        <td>${c.diagnosis ?? "—"}</td><td>${formatDateAr(c.admissionDate)}</td>
+        <td>${calcStayLabel(c.admissionDate)}</td><td>${getBed(c.departmentId)}</td>
+        <td>${translate(c.artificialRespiration, LABELS.ARTIFICIAL_RESPIRATION)}</td><td>${c.mobe ?? "—"}</td>
+      </tr>`).join("");
+    exportPDF(`
+      <div class="header"><h2>${hospital_name}</h2><h3>بيان حالات ${groupLabel}</h3>
+      <p>${now.toLocaleDateString("ar-EG")} — عدد الحالات: ${displayCases.length}</p></div>
+      <table><thead><tr><th>م</th><th>الاسم</th><th>السن</th><th>التشخيص</th><th>الدخول</th><th>الإقامة</th><th>سرير/محضن</th><th>التنفس</th><th>مود</th></tr></thead>
+      <tbody>${rows}</tbody></table>`,
+      `cases-${groupLabel}-${now.toISOString().slice(0, 10)}.pdf`,
+      logo_base64,
+      watermark_enabled ? logo_base64 : null,
+    );
+  };
+
   return (
     <Dialog open={open} onOpenChange={onClose}>
-      <DialogContent className="max-w-5xl max-h-[90dvh] flex flex-col">
+      <DialogContent className="w-[calc(100%-1rem)] max-w-[calc(100%-1rem)] h-[calc(100dvh-1rem)] max-h-none flex flex-col">
         <DialogHeader>
           <DialogTitle className="flex items-center justify-between flex-wrap gap-2">
             <span>حالات {groupLabel} ({displayCases.length})</span>
@@ -88,6 +111,9 @@ function GroupCasesDialog({ deptIds, groupLabel, open, onClose }: {
               </Button>
               <Button size="sm" variant="outline" className="gap-1" onClick={handleExportWord}>
                 <Bed className="h-4 w-4" /> Word
+              </Button>
+              <Button size="sm" variant="outline" className="gap-1" onClick={handleExportPDF}>
+                <FileDown className="h-4 w-4" /> PDF
               </Button>
               <Button size="sm" variant="outline" className="gap-1" onClick={() => window.print()}>
                 <Printer className="h-4 w-4" /> طباعة
@@ -138,7 +164,7 @@ export default function Dashboard() {
   const [, setLocation] = useLocation();
   const { data: stats, isLoading: statsLoading } = useGetDashboardStats();
   const { data: departments, isLoading: deptLoading } = useGetDepartments();
-  const { hospital_name } = useAppSettings();
+  const { hospital_name, logo_base64, watermark_enabled } = useAppSettings();
   const [openGroup, setOpenGroup] = useState<{ key: string; label: string; deptIds: number[] } | null>(null);
 
   const isLoading = statsLoading || deptLoading;
@@ -183,7 +209,7 @@ export default function Dashboard() {
   });
 
   return (
-    <div className="space-y-4 animate-in fade-in duration-300">
+    <ReportWatermark enabled={watermark_enabled} logo={logo_base64} className="space-y-4 animate-in fade-in duration-300">
       {/* Header */}
       <div className="flex items-center justify-between no-print">
         <div>
@@ -334,6 +360,6 @@ export default function Dashboard() {
           onClose={() => setOpenGroup(null)}
         />
       )}
-    </div>
+    </ReportWatermark>
   );
 }

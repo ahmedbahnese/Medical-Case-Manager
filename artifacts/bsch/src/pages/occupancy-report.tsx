@@ -11,6 +11,7 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Badge } from "@/components/ui/badge";
 import { useAppSettings } from "@/contexts/settings-context";
+import { ReportWatermark } from "@/components/report-watermark";
 import { LABELS, translate, calcStayLabel } from "@/lib/constants";
 
 const DAYS_AR = ["الأحد", "الاثنين", "الثلاثاء", "الأربعاء", "الخميس", "الجمعة", "السبت"];
@@ -189,7 +190,7 @@ function exportExcel(shifts: ShiftData[], activeShift: ShiftIdx, hospitalName: s
 }
 
 export default function OccupancyReport() {
-  const { hospital_name, logo_base64 } = useAppSettings();
+  const { hospital_name, logo_base64, watermark_enabled } = useAppSettings();
   const now = new Date();
   const [reportDate, setReportDate] = useState(now.toISOString().slice(0, 10));
   const [fontSize, setFontSize] = useState([11]);
@@ -276,7 +277,7 @@ export default function OccupancyReport() {
             </Button>
             <Button variant="outline" size="sm" className="gap-1" onClick={() => {
               const el = document.getElementById("occupancy-print-content");
-              if (el) exportPDF(el.innerHTML, `occupancy-${reportDate}.pdf`, logo_base64);
+              if (el) exportPDF(el.innerHTML, `occupancy-${reportDate}.pdf`, logo_base64, watermark_enabled ? logo_base64 : null);
             }}>
               <FileDown className="h-4 w-4" /> PDF
             </Button>
@@ -366,7 +367,8 @@ export default function OccupancyReport() {
       </div>
 
       {/* Printable Report */}
-      <div className="print-area print-zoom-70 bg-white text-black" dir="rtl" style={{ fontSize: fs }}>
+      <ReportWatermark enabled={watermark_enabled} logo={logo_base64} className="print-area print-zoom-70 bg-white text-black" >
+      <div dir="rtl" style={{ fontSize: fs }}>
         <div id="occupancy-print-content">
         {/* Report Header */}
         <div className="text-center mb-3 border-b-2 border-black pb-2">
@@ -418,6 +420,7 @@ export default function OccupancyReport() {
         </div>
         </div>{/* /occupancy-print-content */}
       </div>
+      </ReportWatermark>
     </div>
   );
 }

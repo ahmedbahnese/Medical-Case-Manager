@@ -15,6 +15,7 @@ import { ConfirmDialog } from "@/components/confirm-dialog";
 import { exportPDF } from "@/lib/pdf-export";
 import { exportWordDoc } from "@/lib/word-export";
 import { useAppSettings } from "@/contexts/settings-context";
+import { ReportWatermark } from "@/components/report-watermark";
 
 function buildDischargeHtml(cases: any[], hospitalName: string): string {
   const now = new Date();
@@ -50,7 +51,7 @@ function buildDischargeHtml(cases: any[], hospitalName: string): string {
 export default function DischargeHistory() {
   const [search, setSearch] = useState("");
   const [submitted, setSubmitted] = useState(true);
-  const { hospital_name, logo_base64 } = useAppSettings();
+  const { hospital_name, logo_base64, watermark_enabled } = useAppSettings();
 
   const { data: allCases, isLoading, refetch } = useGetCases({ status: "discharged" } as any);
   const updateCase = useUpdateCase();
@@ -89,7 +90,7 @@ export default function DischargeHistory() {
 
   const handleExportPDF = () => {
     const html = buildDischargeHtml(visible, hospital_name);
-    exportPDF(html, `discharge-history-${new Date().toISOString().slice(0,10)}.pdf`, logo_base64);
+    exportPDF(html, `discharge-history-${new Date().toISOString().slice(0,10)}.pdf`, logo_base64, watermark_enabled ? logo_base64 : null);
   };
 
   const handleExportWord = () => {
@@ -98,7 +99,7 @@ export default function DischargeHistory() {
   };
 
   return (
-    <div className="space-y-6">
+    <ReportWatermark enabled={watermark_enabled} logo={logo_base64} className="space-y-6">
       <div className="flex items-start justify-between flex-wrap gap-3">
         <div>
           <h1 className="text-3xl font-bold flex items-center gap-3">
@@ -217,6 +218,6 @@ export default function DischargeHistory() {
           </div>
         </CardContent>
       </Card>
-    </div>
+    </ReportWatermark>
   );
 }

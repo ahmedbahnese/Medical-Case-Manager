@@ -2,9 +2,17 @@
  * Export an HTML string as a PDF using a hidden print window.
  * Opens a styled window with RTL Arabic support, triggers browser print dialog.
  */
-export function exportPDF(htmlBody: string, title: string, logoBase64?: string | null) {
+export function exportPDF(
+  htmlBody: string,
+  title: string,
+  logoBase64?: string | null,
+  watermarkBase64?: string | null,
+) {
   const logoHtml = logoBase64
     ? `<img src="${logoBase64}" alt="logo" style="height:60px;object-fit:contain;margin-bottom:6pt;" /><br/>`
+    : "";
+  const watermarkHtml = watermarkBase64
+    ? `<div class="watermark" style="background-image:url('${watermarkBase64}')"></div>`
     : "";
 
   const doc = `<!DOCTYPE html>
@@ -22,6 +30,17 @@ export function exportPDF(htmlBody: string, title: string, logoBase64?: string |
       margin: 0;
       padding: 0;
     }
+    .watermark {
+      position: fixed;
+      inset: 0;
+      background-repeat: no-repeat;
+      background-position: center;
+      background-size: 52%;
+      opacity: .075;
+      pointer-events: none;
+      z-index: 0;
+    }
+    body > *:not(.watermark) { position: relative; z-index: 1; }
     table {
       border-collapse: collapse;
       width: 100%;
@@ -59,6 +78,7 @@ export function exportPDF(htmlBody: string, title: string, logoBase64?: string |
   </style>
 </head>
 <body>
+  ${watermarkHtml}
   ${logoHtml}
   ${htmlBody}
 </body>

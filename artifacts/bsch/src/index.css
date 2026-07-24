@@ -122,6 +122,32 @@
   body {
     @apply font-sans antialiased bg-background text-foreground;
   }
+
+  .report-watermark {
+    position: relative;
+    isolation: isolate;
+  }
+  .report-watermark::before {
+    content: "";
+    position: absolute;
+    inset: 8% 18%;
+    background-image: var(--report-watermark-image);
+    background-repeat: no-repeat;
+    background-position: center;
+    background-size: min(52vw, 420px);
+    opacity: 0.075;
+    pointer-events: none;
+    z-index: -1;
+  }
+
+  .report-watermark > * {
+    position: relative;
+  }
+
+  [data-state="active"].data-\[state\]\:bg-background {
+    background: linear-gradient(135deg, hsl(var(--primary)), hsl(190 70% 42%)) !important;
+    color: white !important;
+  }
 }
 
 @media print {
@@ -177,6 +203,13 @@
     zoom: 70%;
     -webkit-print-color-adjust: exact;
     print-color-adjust: exact;
+  }
+  .report-watermark::before {
+    opacity: 0.075 !important;
+    z-index: 0;
+  }
+  .report-watermark > * {
+    z-index: 1;
   }
 }
 
