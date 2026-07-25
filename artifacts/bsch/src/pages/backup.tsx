@@ -1,6 +1,6 @@
-import { useState } from "react";
+import { useRef, useState } from "react";
 import { useGetBackups, useCreateBackup } from "@workspace/api-client-react";
-import { Database, DownloadCloud, Plus, Trash2 } from "lucide-react";
+import { Database, DownloadCloud, Plus, Trash2, Upload, RotateCcw } from "lucide-react";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -9,10 +9,11 @@ import { toast } from "sonner";
 import { format } from "date-fns";
 import { ar } from "date-fns/locale";
 import { ConfirmDialog } from "@/components/confirm-dialog";
-import { apiDelete, getDownloadUrl } from "@/lib/api";
+import { apiDelete, apiPost, getDownloadUrl } from "@/lib/api";
 
 export default function Backup() {
   const [name, setName] = useState("");
+  const importRef = useRef<HTMLInputElement>(null);
   const { data: backups, isLoading, refetch } = useGetBackups();
   const createBackup = useCreateBackup();
 
@@ -48,6 +49,29 @@ export default function Backup() {
     a.download = `bsch-backup-${backupName}.json`;
     a.click();
     toast.success("جاري تحميل النسخة...");
+  };
+
+  const handleImport = async (event: React.ChangeEvent<HTMLInputElement>) => {
+    const file = event.target.files?.[0];
+    event.target.value = "";
+    if (!file) return;
+    try {
+      const backupData = JSON.parse(await file.text());
+      await apiPost("/api/backups/import", { backupName: file.name.replace(/\.json$/i, ""), backupData });
+      toast.success("تم استيراد النسخة وحفظها في سجل النسخ");
+      refetch();
+    } catch (e: any) {
+      toast.error("تعذر استيراد النسخة: " + e.message);
+    }
+  };
+
+  const handleRestore = async (id: number) => {
+    try {
+      await apiPost(`/api/backups/${id}/restore`, { confirm: true, replaceExisting: true });
+      toast.success("تمت استعادة النسخة واستبدال بيانات الحالات الحالية");
+    } catch (e: any) {
+      toast.error("تعذر استعادة النسخة: " + e.message);
+    }
   };
 
   return (
@@ -94,6 +118,20 @@ export default function Backup() {
 
       <Card>
         <CardHeader>
+          <CardTitle>استيراد نسخة من الجهاز</CardTitle>
+          <CardDescription>يمكنك استيراد ملف JSON محفوظ سابقاً، ثم اختيار استعادته بشكل منفصل.</CardDescription>
+        </CardHeader>
+        <CardContent>
+          <input ref={importRef} type="file" accept=".json,application/json" className="hidden" onChange={handleImport} />
+          <Button variant="outline" className="gap-2" onClick={() => importRef.current?.click()}>
+            <Upload className="h-4 w-4" /> استيراد ملف نسخة
+          </Button>
+          <p className="text-xs text-destructive mt-2">الاستعادة تستبدل بيانات الحالات وقائمة الانتظار بعد تأكيد واضح.</p>
+        </CardContent>
+      </Card>
+
+      <Card>
+        <CardHeader>
           <CardTitle>سجل النسخ الاحتياطية</CardTitle>
         </CardHeader>
         <CardContent className="p-0">
@@ -127,6 +165,17 @@ export default function Backup() {
                       <Button variant="outline" size="sm" className="gap-1.5" onClick={() => handleDownload(b.id, b.backupName)}>
                         <DownloadCloud className="h-4 w-4" /> تحميل
                       </Button>
+                      <ConfirmDialog
+                        trigger={
+                          <Button variant="outline" size="sm" className="gap-1.5 text-amber-700">
+                            <RotateCcw className="h-4 w-4" /> استعادة
+                          </Button>
+                        }
+                        title="استعادة النسخة واستبدال البيانات"
+                        description={`سيتم حذف الحالات وقائمة الانتظار الحالية ثم استعادة "${b.backupName}". هذا الإجراء لا يمكن التراجع عنه. هل تريد المتابعة؟`}
+                        confirmLabel="نعم، استبدال البيانات"
+                        onConfirm={() => handleRestore(b.id)}
+                      />
                       <ConfirmDialog
                         trigger={
                           <Button variant="ghost" size="sm" className="text-destructive hover:bg-destructive/10">

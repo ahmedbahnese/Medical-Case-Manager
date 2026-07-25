@@ -1,5 +1,5 @@
 import { useState, useEffect } from "react";
-import { ClipboardList, Lock, Eye, EyeOff, RefreshCw } from "lucide-react";
+import { ClipboardList, Lock, Eye, EyeOff, RefreshCw, Trash2 } from "lucide-react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -7,7 +7,8 @@ import { Label } from "@/components/ui/label";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Badge } from "@/components/ui/badge";
 import { toast } from "sonner";
-import { apiGet } from "@/lib/api";
+import { apiDelete, apiGet } from "@/lib/api";
+import { ConfirmDialog } from "@/components/confirm-dialog";
 import { formatDateTimeAr } from "@/lib/constants";
 import { ReportWatermark } from "@/components/report-watermark";
 import { useAppSettings } from "@/contexts/settings-context";
@@ -63,6 +64,16 @@ export default function AuditLog() {
     }
   };
 
+  const clearLogs = async () => {
+    try {
+      await apiDelete("/api/audit-logs");
+      setLogs([]);
+      toast.success("تم مسح سجل العمليات");
+    } catch (e: any) {
+      toast.error("تعذر مسح السجل: " + e.message);
+    }
+  };
+
   if (!unlocked) {
     return (
       <div className="max-w-md mx-auto mt-12 space-y-6">
@@ -114,9 +125,18 @@ export default function AuditLog() {
           </h1>
           <p className="text-muted-foreground mt-1">جميع العمليات التي تمت على النظام</p>
         </div>
-        <Button variant="outline" className="gap-2" onClick={loadLogs} disabled={loading}>
-          <RefreshCw className={`h-4 w-4 ${loading ? "animate-spin" : ""}`} /> تحديث
-        </Button>
+        <div className="flex gap-2">
+          <Button variant="outline" className="gap-2" onClick={loadLogs} disabled={loading}>
+            <RefreshCw className={`h-4 w-4 ${loading ? "animate-spin" : ""}`} /> تحديث
+          </Button>
+          <ConfirmDialog
+            trigger={<Button variant="outline" className="gap-2 text-destructive"><Trash2 className="h-4 w-4" /> مسح السجل</Button>}
+            title="مسح سجل العمليات بالكامل"
+            description="سيتم حذف جميع السجلات الحالية نهائياً. هل تريد المتابعة؟"
+            confirmLabel="نعم، مسح السجل"
+            onConfirm={clearLogs}
+          />
+        </div>
       </div>
 
       <Card>

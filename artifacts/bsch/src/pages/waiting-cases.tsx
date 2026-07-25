@@ -130,6 +130,7 @@ function AddForm({ section, onSuccess }: { section: Section; onSuccess: () => vo
   const [open, setOpen] = useState(false);
   const [form, setForm] = useState({ ...EMPTY_FORM });
   const create = useCreateWaitingCase();
+  const [reportFile, setReportFile] = useState<{ name: string; data: string } | null>(null);
   const f = (k: keyof typeof EMPTY_FORM, v: any) => setForm(p => ({ ...p, [k]: v }));
 
   const handleSubmit = () => {
@@ -138,6 +139,7 @@ function AddForm({ section, onSuccess }: { section: Section; onSuccess: () => vo
       onSuccess: () => {
         toast.success("تمت الإضافة لقائمة الانتظار");
         setForm({ ...EMPTY_FORM });
+        setReportFile(null);
         setOpen(false);
         onSuccess();
       },
@@ -173,6 +175,10 @@ function AddForm({ section, onSuccess }: { section: Section; onSuccess: () => vo
               <Input dir="ltr" value={form.parentPhone} onChange={e => f("parentPhone", e.target.value)} placeholder="01X..." />
             </div>
             <div className="space-y-1">
+              <Label className="text-xs">الرقم القومي للمريض / ولي الأمر</Label>
+              <Input dir="ltr" value={form.nationalId} onChange={e => f("nationalId", e.target.value)} placeholder="14 رقماً" maxLength={14} />
+            </div>
+            <div className="space-y-1">
               <Label className="text-xs">نوع الرعاية المطلوب</Label>
               <Select value={form.careType} onValueChange={v => f("careType", v)}>
                 <SelectTrigger className="h-9"><SelectValue /></SelectTrigger>
@@ -193,6 +199,22 @@ function AddForm({ section, onSuccess }: { section: Section; onSuccess: () => vo
             <div className="col-span-2 md:col-span-3 space-y-1">
               <Label className="text-xs">التشخيص</Label>
               <Textarea value={form.diagnosis} onChange={e => f("diagnosis", e.target.value)} rows={2} className="resize-none" />
+            </div>
+            <div className="col-span-2 md:col-span-3 space-y-1">
+              <Label className="text-xs">تقرير مرفوع للحالة (اختياري، حتى 2MB)</Label>
+              <Input type="file" accept=".pdf,.png,.jpg,.jpeg,.webp" onChange={async e => {
+                const file = e.target.files?.[0];
+                if (!file) return;
+                if (file.size > 2 * 1024 * 1024) { toast.error("حجم التقرير أكبر من 2MB"); return; }
+                const data = await new Promise<string>((resolve, reject) => {
+                  const reader = new FileReader();
+                  reader.onload = () => resolve(String(reader.result));
+                  reader.onerror = reject;
+                  reader.readAsDataURL(file);
+                });
+                setReportFile({ name: file.name, data });
+              }} />
+              {reportFile && <p className="text-xs text-muted-foreground">{reportFile.name}</p>}
             </div>
             <div className="col-span-2 md:col-span-3 flex items-center gap-3 flex-wrap">
               <div className="flex items-center gap-2">
@@ -232,6 +254,7 @@ function WaitingCaseActionDialog({
     age: waitingCase.age ?? "",
     diagnosis: waitingCase.diagnosis ?? "",
     parentPhone: waitingCase.parentPhone ?? "",
+    nationalId: waitingCase.nationalId ?? "",
     careType: waitingCase.careType ?? "intensive_care_high",
     artificialRespiration: waitingCase.artificialRespiration ?? "no",
     centralRoomRequired: waitingCase.centralRoomRequired ?? false,
@@ -244,11 +267,14 @@ function WaitingCaseActionDialog({
   const [deptId, setDeptId] = useState("");
   const [exitReason, setExitReason] = useState("improved");
   const [medicalReport, setMedicalReport] = useState("");
+  const [reportFile, setReportFile] = useState<{ name: string; data: string } | null>(
+    waitingCase.medicalReportData ? { name: waitingCase.medicalReportName ?? "تقرير محفوظ", data: waitingCase.medicalReportData } : null
+  );
 
   const isPending = update.isPending || createCase.isPending;
 
   const handleSaveOnly = () => {
-    update.mutate({ id: waitingCase.id, data: form as any }, {
+    update.mutate({ id: waitingCase.id, data: { ...form, medicalReport, medicalReportName: reportFile?.name, medicalReportData: reportFile?.data } as any }, {
       onSuccess: () => { toast.success("تم تحديث البيانات"); onSuccess(); onClose(); },
       onError: (e: any) => toast.error("خطأ: " + (e?.response?.data?.error ?? e.message)),
     });
@@ -271,7 +297,7 @@ function WaitingCaseActionDialog({
         }
       }, {
         onSuccess: () => {
-          update.mutate({ id: waitingCase.id, data: { status: "admitted" as WaitingCaseUpdateStatus, ...form } as any }, {
+          update.mutate({ id: waitingCase.id, data: { status: "admitted" as WaitingCaseUpdateStatus, ...form, medicalReport, medicalReportName: reportFile?.name, medicalReportData: reportFile?.data } as any }, {
             onSuccess: () => { toast.success("تم نقل الحالة للقسم بنجاح"); onSuccess(); onClose(); },
           });
         },
@@ -280,7 +306,7 @@ function WaitingCaseActionDialog({
     } else if (action === "exit") {
       update.mutate({
         id: waitingCase.id,
-        data: { status: "cancelled" as WaitingCaseUpdateStatus, exitReason, ...form } as any
+        data: { status: "cancelled" as WaitingCaseUpdateStatus, exitReason, ...form, medicalReport, medicalReportName: reportFile?.name, medicalReportData: reportFile?.data } as any
       }, {
         onSuccess: () => { toast.success(`تم تسجيل الخروج — ${EXIT_REASONS.find(r => r.value === exitReason)?.label}`); onSuccess(); onClose(); },
         onError: (e: any) => toast.error("خطأ: " + e.message)
@@ -423,6 +449,22 @@ function WaitingCaseActionDialog({
                 </div>
               </div>
             )}
+            <div className="space-y-1 pt-1">
+              <Label className="text-xs">إرفاق ملف التقرير (اختياري، حتى 2MB)</Label>
+              <Input type="file" accept=".pdf,.png,.jpg,.jpeg,.webp" onChange={async e => {
+                const file = e.target.files?.[0];
+                if (!file) return;
+                if (file.size > 2 * 1024 * 1024) { toast.error("حجم التقرير أكبر من 2MB"); return; }
+                const data = await new Promise<string>((resolve, reject) => {
+                  const reader = new FileReader();
+                  reader.onload = () => resolve(String(reader.result));
+                  reader.onerror = reject;
+                  reader.readAsDataURL(file);
+                });
+                setReportFile({ name: file.name, data });
+              }} />
+              {reportFile && <p className="text-xs text-muted-foreground">{reportFile.name}</p>}
+            </div>
           </div>
         </div>
 

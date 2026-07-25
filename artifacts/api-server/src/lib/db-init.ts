@@ -83,6 +83,7 @@ export async function initDatabase(): Promise<void> {
         description TEXT,
         capacity    INTEGER NOT NULL DEFAULT 10,
         department_type department_type NOT NULL,
+        report_fields_json TEXT NOT NULL DEFAULT '[]',
         created_at  TIMESTAMP NOT NULL DEFAULT NOW(),
         updated_at  TIMESTAMP NOT NULL DEFAULT NOW()
       )
@@ -124,6 +125,9 @@ export async function initDatabase(): Promise<void> {
         diagnosis             TEXT,
         parent_phone          TEXT,
         national_id           TEXT,
+        medical_report        TEXT,
+        medical_report_name   TEXT,
+        medical_report_data   TEXT,
         care_type             waiting_care_type NOT NULL,
         central_room_required BOOLEAN NOT NULL DEFAULT FALSE,
         central_room_code     TEXT,
@@ -134,6 +138,12 @@ export async function initDatabase(): Promise<void> {
         updated_at            TIMESTAMP NOT NULL DEFAULT NOW()
       )
     `);
+
+    // Keep imported/older databases compatible with the current schema.
+    await db.execute(sql`ALTER TABLE departments ADD COLUMN IF NOT EXISTS report_fields_json TEXT NOT NULL DEFAULT '[]'`);
+    await db.execute(sql`ALTER TABLE waiting_cases ADD COLUMN IF NOT EXISTS medical_report TEXT`);
+    await db.execute(sql`ALTER TABLE waiting_cases ADD COLUMN IF NOT EXISTS medical_report_name TEXT`);
+    await db.execute(sql`ALTER TABLE waiting_cases ADD COLUMN IF NOT EXISTS medical_report_data TEXT`);
 
     await db.execute(sql`
       CREATE TABLE IF NOT EXISTS settings (

@@ -18,6 +18,7 @@ export const departmentsTable = pgTable("departments", {
   description: text("description"),
   capacity: integer("capacity").notNull().default(10),
   departmentType: departmentTypeEnum("department_type").notNull(),
+  reportFieldsJson: text("report_fields_json").notNull().default("[]"),
   createdAt: timestamp("created_at").defaultNow().notNull(),
   updatedAt: timestamp("updated_at").defaultNow().notNull(),
 });

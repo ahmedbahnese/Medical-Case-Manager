@@ -9,6 +9,7 @@ import {
   DeleteWaitingCaseParams,
 } from "@workspace/api-zod";
 import { logAction } from "./audit-logs";
+import { getCurrentUserName } from "../middleware/auth";
 
 const router: IRouter = Router();
 
@@ -49,6 +50,9 @@ router.post("/waiting-cases", async (req, res): Promise<void> => {
     diagnosis: parsed.data.diagnosis ?? null,
     parentPhone: parsed.data.parentPhone ?? null,
     nationalId: parsed.data.nationalId ?? null,
+    medicalReport: (parsed.data as any).medicalReport ?? null,
+    medicalReportName: (parsed.data as any).medicalReportName ?? null,
+    medicalReportData: (parsed.data as any).medicalReportData ?? null,
     careType: parsed.data.careType as any,
     centralRoomRequired: parsed.data.centralRoomRequired ?? false,
     centralRoomCode: parsed.data.centralRoomCode ?? null,
@@ -57,7 +61,7 @@ router.post("/waiting-cases", async (req, res): Promise<void> => {
     status: "waiting",
   }).returning();
 
-  await logAction("إضافة لقائمة الانتظار", "waiting_case", newCase.id, newCase.patientName, `القسم: ${newCase.section}`);
+  await logAction("إضافة لقائمة الانتظار", "waiting_case", newCase.id, newCase.patientName, `القسم: ${newCase.section}`, getCurrentUserName(req.headers.cookie));
 
   res.status(201).json(newCase);
 });
@@ -78,6 +82,9 @@ router.patch("/waiting-cases/:id", async (req, res): Promise<void> => {
 
   const extraData = req.body as any;
   const updates: Record<string, unknown> = { ...body.data, updatedAt: new Date() };
+  for (const key of ["medicalReport", "medicalReportName", "medicalReportData"]) {
+    if (extraData[key] !== undefined) updates[key] = extraData[key] || null;
+  }
 
   const [updated] = await db
     .update(waitingCasesTable)
@@ -115,7 +122,8 @@ router.patch("/waiting-cases/:id", async (req, res): Promise<void> => {
       "waiting_case",
       updated.id,
       updated.patientName,
-      extraData.exitReason ? `السبب: ${extraData.exitReason}` : null
+      extraData.exitReason ? `السبب: ${extraData.exitReason}` : null,
+      getCurrentUserName(req.headers.cookie)
     );
   }
 

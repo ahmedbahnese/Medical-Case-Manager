@@ -1,10 +1,14 @@
 import { Router, type IRouter } from "express";
-import { desc } from "drizzle-orm";
+import { desc, lt, sql } from "drizzle-orm";
 import { db, auditLogsTable } from "@workspace/db";
+import { getCurrentUserName } from "../middleware/auth";
 
 const router: IRouter = Router();
 
 router.get("/audit-logs", async (req, res): Promise<void> => {
+  await db.delete(auditLogsTable).where(
+    lt(auditLogsTable.createdAt, sql`NOW() - INTERVAL '1 month'`),
+  );
   const limit = parseInt((req.query.limit as string) ?? "100", 10);
   const logs = await db
     .select()
@@ -14,13 +18,18 @@ router.get("/audit-logs", async (req, res): Promise<void> => {
   res.json(logs);
 });
 
+router.delete("/audit-logs", async (_req, res): Promise<void> => {
+  await db.delete(auditLogsTable);
+  res.json({ success: true });
+});
+
 export async function logAction(
   action: string,
   entityType: string,
   entityId: number | null,
   entityName: string | null,
   details: string | null,
-  performedBy = "المستخدم"
+  performedBy?: string
 ) {
   try {
     await db.insert(auditLogsTable).values({
@@ -29,7 +38,7 @@ export async function logAction(
       entityId,
       entityName,
       details,
-      performedBy,
+      performedBy: performedBy ?? "مستخدم النظام",
     });
   } catch { /* non-critical, don't fail the main operation */ }
 }

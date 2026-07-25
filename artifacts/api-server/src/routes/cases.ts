@@ -11,6 +11,7 @@ import {
   BulkImportCasesBody,
 } from "@workspace/api-zod";
 import { logAction } from "./audit-logs";
+import { getCurrentUserName } from "../middleware/auth";
 
 const router: IRouter = Router();
 
@@ -124,7 +125,7 @@ router.post("/cases", async (req, res): Promise<void> => {
     admissionDate: extraData.admissionDate ? new Date(extraData.admissionDate) : new Date(),
   }).returning();
 
-  await logAction("إضافة حالة", "case", newCase.id, patientName, `تم إضافة حالة جديدة للقسم رقم ${departmentId}`);
+  await logAction("إضافة حالة", "case", newCase.id, patientName, `تم إضافة حالة جديدة للقسم رقم ${departmentId}`, getCurrentUserName(req.headers.cookie));
 
   const enriched = await enrichCaseWithDepartment(newCase);
   res.status(201).json(enriched);
@@ -347,7 +348,7 @@ router.patch("/cases/:id", async (req, res): Promise<void> => {
   }
 
   const action = body.data.status === "discharged" ? "تسجيل خروج" : "تعديل حالة";
-  await logAction(action, "case", updated.id, updated.patientName, JSON.stringify(body.data));
+  await logAction(action, "case", updated.id, updated.patientName, JSON.stringify(body.data), getCurrentUserName(req.headers.cookie));
 
   const enriched = await enrichCaseWithDepartment(updated);
   res.json(enriched);
@@ -371,7 +372,7 @@ router.delete("/cases/:id", async (req, res): Promise<void> => {
     return;
   }
 
-  await logAction("حذف حالة", "case", deleted.id, deleted.patientName, "تم حذف الملف نهائياً");
+  await logAction("حذف حالة", "case", deleted.id, deleted.patientName, "تم حذف الملف نهائياً", getCurrentUserName(req.headers.cookie));
 
   res.json({ success: true });
 });

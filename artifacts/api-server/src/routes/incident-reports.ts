@@ -1,6 +1,8 @@
 import { Router, type IRouter } from "express";
 import { eq, desc } from "drizzle-orm";
 import { db, incidentReportsTable, waitingCasesTable } from "@workspace/db";
+import { logAction } from "./audit-logs";
+import { getCurrentUserName } from "../middleware/auth";
 
 const router: IRouter = Router();
 
@@ -59,6 +61,7 @@ router.post("/incident-reports", async (req, res): Promise<void> => {
   }
 
   res.status(201).json({ ...report, cases: JSON.parse(report.casesJson ?? "[]") });
+  await logAction("إضافة تقرير حادث", "incident_report", report.id, report.incidentType, null, getCurrentUserName(req.headers.cookie));
 });
 
 router.patch("/incident-reports/:id", async (req, res): Promise<void> => {
@@ -82,6 +85,7 @@ router.patch("/incident-reports/:id", async (req, res): Promise<void> => {
     return;
   }
   res.json({ ...updated, cases: JSON.parse(updated.casesJson ?? "[]") });
+  await logAction("تعديل تقرير حادث", "incident_report", updated.id, updated.incidentType, null, getCurrentUserName(req.headers.cookie));
 });
 
 router.delete("/incident-reports/:id", async (req, res): Promise<void> => {
@@ -91,6 +95,7 @@ router.delete("/incident-reports/:id", async (req, res): Promise<void> => {
     res.status(404).json({ error: "التقرير غير موجود" });
     return;
   }
+  await logAction("حذف تقرير حادث", "incident_report", deleted.id, deleted.incidentType, "تم حذف التقرير", getCurrentUserName(req.headers.cookie));
   res.json({ success: true });
 });
 

@@ -11,6 +11,13 @@ function getSession(cookieHeader: string | undefined): string | null {
   return null;
 }
 
+export function getCurrentUserName(cookieHeader: string | undefined): string {
+  const session = getSession(cookieHeader);
+  if (session === "founder") return "المؤسس";
+  if (session?.startsWith("user:")) return session.slice(5) || "مستخدم النظام";
+  return "مستخدم النظام";
+}
+
 /** Require any valid session (founder or named user) */
 export function requireAuth(req: Request, res: Response, next: NextFunction): void {
   const session = getSession(req.headers.cookie);

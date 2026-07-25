@@ -284,7 +284,22 @@ export default function IncidentReportPage() {
                     <TableCell>{r.totalInjured}</TableCell>
                     <TableCell>{r.totalDeaths}</TableCell>
                     <TableCell>
-                      <Button variant="ghost" size="sm">عرض ←</Button>
+                      <div className="flex gap-1 justify-end">
+                        <Button variant="ghost" size="sm">عرض ←</Button>
+                        <ConfirmDialog
+                          trigger={<Button variant="ghost" size="sm" className="text-destructive" onClick={e => e.stopPropagation()}><Trash2 className="h-4 w-4" /></Button>}
+                          title="حذف تقرير الحادث"
+                          description={`هل تريد حذف تقرير "${r.incidentType}"؟ لا يمكن التراجع.`}
+                          confirmLabel="حذف التقرير"
+                          onConfirm={async () => {
+                            try {
+                              await apiDelete(`/api/incident-reports/${r.id}`);
+                              setReports(prev => prev.filter(item => item.id !== r.id));
+                              toast.success("تم حذف تقرير الحادث");
+                            } catch (e: any) { toast.error("تعذر الحذف: " + e.message); }
+                          }}
+                        />
+                      </div>
                     </TableCell>
                   </TableRow>
                 ))}
