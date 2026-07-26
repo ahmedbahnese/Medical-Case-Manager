@@ -4,56 +4,43 @@ description: Workflow env vars, key files, routes, and frontend page inventory f
 ---
 
 ## Workflows
-- `API Server` — the real running API (port 8080 assigned by env `PORT`)
-- `BSCH Frontend` — Vite dev server on port 18429
-- The artifact-prefixed workflow names are not registered in this imported project; restart the two names above.
-**Why:** The imported project exposes legacy workflow names even though artifact manifests exist.
-**How to apply:** Use the exact visible workflow names for restarts and health checks.
+- `artifacts/api-server: API Server` — the active API workflow (port 8080 via PORT env var)
+- `artifacts/bsch: web` — the active frontend workflow (port 18429 via PORT env var)
+- Old "API Server" and "BSCH Frontend" workflows are failed/inactive — ignore them.
+**Why:** The platform registered artifact-managed workflows which supersede the old imported ones.
+**How to apply:** Always restart/check the artifact-managed workflows, never the legacy ones.
 
 ## Access Control
-- The imported project has authenticated sessions and named-user page permissions; private access details are intentionally omitted from this note.
-- Founder-only pages include settings, audit log, and backup.
+- Founder session: cookie `bsch_session=founder`
+- Named user session: cookie `bsch_session=user:<name>`
+- `GET /api/auth/me` returns `{ isAuthenticated, isFounder, name, pagePermissions? }` for named users
+  - If user has `pagePermissions: [{ href, access: "none"|"view"|"edit" }]`, use that
+  - Otherwise falls back to legacy `{ canEdit, allowedPages }`
+- Founder-only pages: settings, audit log, backup (`founderOnly: true` in NAV_GROUPS)
 
-## Key API Routes
-- `/api/departments` — GET (list), POST (add), PATCH /:id, DELETE /:id
-- `/api/settings` — GET and protected update endpoint
-- `/api/auth/*` — authentication and session endpoints
-- `/api/auth/me` — GET (returns permissions for named users)
-- `/api/cases` — GET, POST, PATCH /:id, DELETE /:id
-- `/api/waiting-cases` — GET, POST, PATCH /:id
-- Body size limit: 5MB (for logo uploads — was 100kb default, caused 413 errors)
+## Named Password / User Structure (settings.tsx)
+```typescript
+interface PagePermission { href: string; access: "none" | "view" | "edit"; }
+interface NamedPassword {
+  name: string; password: string;
+  canEdit?: boolean; allowedPages?: string[]; // legacy
+  pagePermissions?: PagePermission[];          // new format
+}
+```
+- Stored as JSON in `named_passwords` setting key
+- `migrateUserToPagePerms(np)` converts legacy → new format
+- Settings page has inline edit form with per-page permission 3-button grid
 
-## Database Tables (7)
-departments, medical_cases, waiting_cases, settings, audit_logs, incident_reports, (users if any)
+## Department Report Fields
+- `reportFieldsJson: string` (JSON array of field keys) stored per department
+- 11 available fields: fileNumber, age, diagnosis, admissionDate, stayDays, status, artificialRespiration, mobe, parentName, parentPhone, nationalId
+- `getActiveFields(rfJson?)` in department.tsx returns field descriptors with getText renderers
+- buildDeptHtml and exportToExcelFormatted both accept optional `reportFieldsJson` param
 
-## Frontend Key Pages
-- `settings.tsx` — sections: hospital name, logo, departments CRUD, supervisors, theme, and named-user permissions
-- `case-detail.tsx` — CaseField component is defined OUTSIDE the main component (critical: was inside causing re-mount on each keystroke)
-- `print-reports.tsx` — daily report; filteredCases is empty when selectedDeptIds.size === 0
-- `occupancy-report.tsx` — has `print-zoom-70` CSS class for 70% print scaling
-- `waiting-cases.tsx` — reception tab renamed "قسم الاستقبال"; unified WaitingCaseActionDialog (edit + action in one dialog); sub-filter buttons for reception by careType
+## Waiting Cases File Upload
+- `medicalReportData` (base64) and `medicalReportName` must be explicitly passed in `AddForm.handleSubmit`
+- View report button appears in CasesTable row when `c.medicalReportData` truthy
+- Admission dialog groups departments: compatible ones (by careType) shown first with label
 
-## Waiting Cases Features
-- Unified dialog: opens from "تعديل / إجراء" button; editable fields + action section (admit to dept OR exit with reason); both support medical report textarea
-- Reception sub-filters: الكل / العناية الكبرى / العناية المتوسطة / البيكيو / الداخلي
-- Export: Excel, Word, PDF, Print — all respect care-type filter and selection
-
-## PDF Export Coverage
-- `department.tsx` ✓ (existing)
-- `print-reports.tsx` ✓ (existing)
-- `occupancy-report.tsx` ✓ (existing)
-- `waiting-cases.tsx` ✓ (existing)
-- `discharge-history.tsx` ✓ (added — Word + PDF + Print buttons in header)
-- `respiration.tsx` ✓ (added — PDF button alongside existing Excel + Word + Print)
-
-## Lib Files
-- `artifacts/bsch/src/lib/pdf-export.ts` — `exportPDF(htmlBody, title, logoBase64?)` opens print window
-- `artifacts/bsch/src/lib/word-export.ts` — `exportWordDoc(htmlBody, filename)` — already has RTL
-- `artifacts/bsch/src/contexts/settings-context.tsx` — provides `hospital_name`, `logo_base64`, `supervisors`
-
-## Known Pre-existing TypeScript Errors (not blocking runtime)
-- TS6305: api-client-react dist not built — Vite handles at runtime via path alias
-- TS7006: implicit any in many pages — pre-existing, not caused by batch 2 changes
-
-## Git
-- Repo: `github.com/ahmedbahnese/Medical-Case-Manager`
+## TS Error Baseline
+- TS6305 (api-client-react dist not built) and TS7006 (implicit any) are pre-existing — do not fix unless asked.

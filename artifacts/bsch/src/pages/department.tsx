@@ -38,21 +38,41 @@ const DEPT_TYPE_MAP: Record<string, string> = {
   picu: "PICU", incubator_a: "حضانة A", incubator_b: "حضانة B", incubator_c: "حضانة C",
 };
 
-function buildDeptHtml(deptName: string, cases: any[], hospitalName: string): string {
+/* ── Configurable field definitions ── */
+const ALL_DEPT_FIELDS: { key: string; label: string; getText: (c: any) => string }[] = [
+  { key: "fileNumber",            label: "رقم الملف",       getText: c => c.fileNumber ?? "—" },
+  { key: "age",                   label: "السن",             getText: c => c.age ?? "—" },
+  { key: "diagnosis",             label: "التشخيص",         getText: c => c.diagnosis ?? "—" },
+  { key: "admissionDate",         label: "تاريخ الدخول",    getText: c => formatDateAr(c.admissionDate) },
+  { key: "stayDays",              label: "مدة الإقامة",     getText: c => calcStayLabel(c.admissionDate) },
+  { key: "status",                label: "الحالة",          getText: c => translate(c.status, STATUS_MAP) },
+  { key: "artificialRespiration", label: "التنفس الصناعي",  getText: c => translate(c.artificialRespiration, RESP_MAP) },
+  { key: "mobe",                  label: "MOBE",             getText: c => c.mobe ?? "—" },
+  { key: "parentName",            label: "ولي الأمر",       getText: c => c.parentName ?? "—" },
+  { key: "parentPhone",           label: "هاتف ولي الأمر", getText: c => c.parentPhone ?? "—" },
+  { key: "nationalId",            label: "الرقم القومي",    getText: c => c.nationalId ?? "—" },
+];
+
+const DEFAULT_DEPT_FIELD_KEYS = ALL_DEPT_FIELDS.map(f => f.key);
+
+function getActiveFields(reportFieldsJson: string | null | undefined) {
+  try {
+    const parsed = JSON.parse(reportFieldsJson ?? "[]");
+    return Array.isArray(parsed) && parsed.length > 0
+      ? ALL_DEPT_FIELDS.filter(f => parsed.includes(f.key))
+      : ALL_DEPT_FIELDS;
+  } catch { return ALL_DEPT_FIELDS; }
+}
+
+function buildDeptHtml(deptName: string, cases: any[], hospitalName: string, reportFieldsJson?: string): string {
   const now = new Date();
   const dateStr = now.toLocaleDateString("ar-EG", { weekday: "long", day: "2-digit", month: "2-digit", year: "numeric" });
-  const rows = cases.map((c, i) => `
-    <tr>
-      <td style="text-align:center">${i + 1}</td>
-      <td><strong>${c.patientName}</strong></td>
-      <td>${c.fileNumber ?? "—"}</td>
-      <td>${c.age ?? "—"}</td>
-      <td>${c.diagnosis ?? "—"}</td>
-      <td>${formatDateAr(c.admissionDate)}</td>
-      <td>${calcStayLabel(c.admissionDate)}</td>
-      <td>${translate(c.status, STATUS_MAP)}</td>
-      <td>${translate(c.artificialRespiration, RESP_MAP)}</td>
-    </tr>`).join("");
+  const activeFields = getActiveFields(reportFieldsJson);
+  const headers = activeFields.map(f => `<th>${f.label}</th>`).join("");
+  const rows = cases.map((c, i) => {
+    const cells = activeFields.map(f => `<td>${f.getText(c)}</td>`).join("");
+    return `<tr><td style="text-align:center">${i + 1}</td><td><strong>${c.patientName}</strong></td>${cells}</tr>`;
+  }).join("");
   return `
     <div class="header">
       <h2>${hospitalName}</h2>
@@ -61,28 +81,21 @@ function buildDeptHtml(deptName: string, cases: any[], hospitalName: string): st
     </div>
     <table border="1">
       <tr style="background:#d9e1f2">
-        <th>م</th><th>الاسم</th><th>رقم الملف</th><th>السن</th><th>التشخيص</th>
-        <th>تاريخ الدخول</th><th>مدة الإقامة</th><th>الحالة</th><th>التنفس</th>
+        <th>م</th><th>الاسم</th>${headers}
       </tr>
       ${rows}
     </table>`;
 }
 
-function exportToExcelFormatted(deptName: string, cases: any[], hospitalName: string): void {
+function exportToExcelFormatted(deptName: string, cases: any[], hospitalName: string, reportFieldsJson?: string): void {
   const now = new Date();
   const dateStr = now.toLocaleDateString("ar-EG", { weekday: "long", day: "2-digit", month: "2-digit", year: "numeric" });
-  const rows = cases.map((c, i) => `
-    <tr style="background:${i%2===0?"white":"#f5f5f5"}">
-      <td style="text-align:center">${i+1}</td>
-      <td><strong>${c.patientName}</strong></td>
-      <td>${c.fileNumber ?? ""}</td>
-      <td>${c.age ?? ""}</td>
-      <td>${c.diagnosis ?? ""}</td>
-      <td>${formatDateAr(c.admissionDate)}</td>
-      <td>${calcStayLabel(c.admissionDate)}</td>
-      <td>${translate(c.status, STATUS_MAP)}</td>
-      <td>${translate(c.artificialRespiration, RESP_MAP)}</td>
-    </tr>`).join("");
+  const activeFields = getActiveFields(reportFieldsJson);
+  const headers = activeFields.map(f => `<th>${f.label}</th>`).join("");
+  const rows = cases.map((c, i) => {
+    const cells = activeFields.map(f => `<td>${f.getText(c)}</td>`).join("");
+    return `<tr style="background:${i%2===0?"white":"#f5f5f5"}"><td style="text-align:center">${i+1}</td><td><strong>${c.patientName}</strong></td>${cells}</tr>`;
+  }).join("");
   const html = `<html xmlns:o="urn:schemas-microsoft-com:office:office" dir="rtl">
 <head><meta charset="utf-8">
 <style>
@@ -92,15 +105,13 @@ function exportToExcelFormatted(deptName: string, cases: any[], hospitalName: st
   table { border-collapse: collapse; width: 100%; margin-top: 10px; }
   th, td { border: 1px solid #555; padding: 5px 8px; text-align: right; vertical-align: top; }
   th { background: #2563eb; color: white; font-weight: bold; }
-  .even { background: #f5f5f5; }
 </style></head>
 <body>
 <h2>${hospitalName}</h2>
 <h3>بيان حالات — ${deptName}</h3>
 <p>${dateStr} — إجمالي الحالات: ${cases.length}</p>
 <table>
-  <tr><th>م</th><th>الاسم</th><th>رقم الملف</th><th>السن</th><th>التشخيص</th>
-  <th>تاريخ الدخول</th><th>مدة الإقامة</th><th>الحالة</th><th>التنفس</th></tr>
+  <tr><th>م</th><th>الاسم</th>${headers}</tr>
   ${rows}
 </table>
 </body></html>`;
@@ -144,9 +155,12 @@ export default function DepartmentDetail() {
     (c.diagnosis && c.diagnosis.includes(searchFilter))
   ) || [];
 
+  const rfJson = (dept as any).reportFieldsJson as string | undefined;
+  const activeFields = getActiveFields(rfJson);
+
   const handlePrint = () => window.print();
   const handleExportWord = () => {
-    const html = buildDeptHtml(dept.name, filteredCases, hospital_name);
+    const html = buildDeptHtml(dept.name, filteredCases, hospital_name, rfJson);
     const full = `<html xmlns:o="urn:schemas-microsoft-com:office:office" dir="rtl"><head><meta charset="utf-8">
       <style>body{font-family:Arial;direction:rtl;}table{border-collapse:collapse;width:100%}
       th,td{border:1px solid #ccc;padding:6px 8px;text-align:right}th{background:#2563eb;color:white;}
@@ -157,7 +171,7 @@ export default function DepartmentDetail() {
     a.download = `بيان-${dept.name}-${new Date().toISOString().slice(0,10)}.doc`; a.click();
   };
   const handleExportPDF = () => {
-    exportPDF(buildDeptHtml(dept.name, filteredCases, hospital_name), `dept-${dept.name}.pdf`, logo_base64, watermark_enabled ? logo_base64 : null);
+    exportPDF(buildDeptHtml(dept.name, filteredCases, hospital_name, rfJson), `dept-${dept.name}.pdf`, logo_base64, watermark_enabled ? logo_base64 : null);
   };
 
   return (
@@ -269,19 +283,15 @@ export default function DepartmentDetail() {
           <Table>
             <TableHeader>
               <TableRow className="bg-muted/30">
-                <TableHead>رقم الملف</TableHead>
                 <TableHead>اسم المريض</TableHead>
-                <TableHead>التشخيص</TableHead>
-                <TableHead>تاريخ الدخول</TableHead>
-                <TableHead>التنفس الصناعي</TableHead>
-                <TableHead>الحالة</TableHead>
+                {activeFields.map(f => <TableHead key={f.key}>{f.label}</TableHead>)}
                 <TableHead className="no-print"></TableHead>
               </TableRow>
             </TableHeader>
             <TableBody>
               {filteredCases.length === 0 ? (
                 <TableRow>
-                  <TableCell colSpan={7} className="h-32 text-center text-muted-foreground">
+                  <TableCell colSpan={activeFields.length + 2} className="h-32 text-center text-muted-foreground">
                     لا يوجد حالات مطابقة للبحث أو القسم فارغ
                   </TableCell>
                 </TableRow>
@@ -292,37 +302,27 @@ export default function DepartmentDetail() {
                     className="cursor-pointer hover:bg-muted/50"
                     onClick={() => setLocation(`/case/${c.id}`)}
                   >
-                    <TableCell className="font-mono text-xs">{c.fileNumber || '-'}</TableCell>
                     <TableCell className="font-medium">
                       <div className="flex items-center gap-2">
                         <User className="h-4 w-4 text-muted-foreground" />
                         {c.patientName}
                       </div>
                     </TableCell>
-                    <TableCell className="max-w-[200px] truncate" title={c.diagnosis || ''}>
-                      {c.diagnosis || '-'}
-                    </TableCell>
-                    <TableCell className="text-muted-foreground text-sm">
-                      {format(new Date(c.admissionDate), 'PP', { locale: ar })}
-                    </TableCell>
-                    <TableCell>
-                      {c.artificialRespiration !== 'no' ? (
-                        <Badge variant="outline" className="bg-teal-500/10 text-teal-400 border-teal-500/30">
-                          {translate(c.artificialRespiration, RESP_MAP)}
-                        </Badge>
-                      ) : (
-                        <span className="text-muted-foreground text-xs">-</span>
-                      )}
-                    </TableCell>
-                    <TableCell>
-                      <Badge variant={
-                        c.status === 'critical' ? 'destructive' :
-                        c.status === 'active' ? 'default' :
-                        c.status === 'recovering' ? 'success' : 'secondary'
-                      }>
-                        {translate(c.status, STATUS_MAP)}
-                      </Badge>
-                    </TableCell>
+                    {activeFields.map(f => (
+                      <TableCell key={f.key} className={f.key === 'diagnosis' ? 'max-w-[180px] truncate' : ''}>
+                        {f.key === 'status' ? (
+                          <Badge variant={c.status === 'critical' ? 'destructive' : c.status === 'active' ? 'default' : 'secondary'}>
+                            {translate(c.status, STATUS_MAP)}
+                          </Badge>
+                        ) : f.key === 'artificialRespiration' ? (
+                          c.artificialRespiration !== 'no'
+                            ? <Badge variant="outline" className="bg-teal-500/10 text-teal-400 border-teal-500/30">{translate(c.artificialRespiration, RESP_MAP)}</Badge>
+                            : <span className="text-muted-foreground text-xs">—</span>
+                        ) : (
+                          <span className="text-sm">{f.getText(c)}</span>
+                        )}
+                      </TableCell>
+                    ))}
                     <TableCell className="no-print">
                       <Button variant="ghost" size="icon" className="h-8 w-8 text-muted-foreground">
                         <ArrowLeft className="h-4 w-4" />

@@ -27,6 +27,21 @@ const DEPT_TYPE_OPTIONS = [
   { value: "incubator_c",           label: "حاضنات ج" },
 ];
 
+const REPORT_FIELD_OPTIONS = [
+  { key: "fileNumber",            label: "رقم الملف" },
+  { key: "age",                   label: "السن" },
+  { key: "diagnosis",             label: "التشخيص" },
+  { key: "admissionDate",         label: "تاريخ الدخول" },
+  { key: "stayDays",              label: "مدة الإقامة" },
+  { key: "status",                label: "الحالة" },
+  { key: "artificialRespiration", label: "التنفس الصناعي" },
+  { key: "mobe",                  label: "MOBE" },
+  { key: "parentName",            label: "ولي الأمر" },
+  { key: "parentPhone",           label: "هاتف ولي الأمر" },
+  { key: "nationalId",            label: "الرقم القومي" },
+];
+const ALL_REPORT_FIELD_KEYS = REPORT_FIELD_OPTIONS.map(f => f.key);
+
 interface SettingsData {
   hospital_name?: string;
   logo_base64?: string;
@@ -44,13 +59,44 @@ interface Department {
   departmentType: string;
   description?: string;
   activeCasesCount?: number;
+  reportFieldsJson?: string;
+}
+
+interface PagePermission {
+  href: string;
+  access: "none" | "view" | "edit";
 }
 
 interface NamedPassword {
   name: string;
   password: string;
-  canEdit?: boolean;       // default true — false = view-only
-  allowedPages?: string[]; // empty = all non-restricted pages
+  canEdit?: boolean;
+  allowedPages?: string[];
+  pagePermissions?: PagePermission[];
+}
+
+const ACCESS_LABELS: Record<string, string> = { none: "لا وصول", view: "عرض", edit: "تعديل" };
+const ACCESS_ACTIVE_CLASS: Record<string, string> = {
+  none: "bg-destructive/10 text-destructive border-destructive/40",
+  view: "bg-amber-100 text-amber-700 border-amber-300 dark:bg-amber-950/40 dark:text-amber-400",
+  edit: "bg-emerald-100 text-emerald-700 border-emerald-300 dark:bg-emerald-950/40 dark:text-emerald-400",
+};
+
+const DEFAULT_PAGE_PERMS: PagePermission[] = ALL_USER_PAGES.map(p => ({ href: p.href, access: "edit" as const }));
+
+function migrateUserToPagePerms(np: NamedPassword): PagePermission[] {
+  if (np.pagePermissions?.length) return np.pagePermissions;
+  return ALL_USER_PAGES.map(p => ({
+    href: p.href,
+    access: (np.allowedPages?.length && !np.allowedPages.includes(p.href)
+      ? "none"
+      : np.canEdit !== false ? "edit" : "view") as "none" | "view" | "edit",
+  }));
+}
+
+function setPageAccess(perms: PagePermission[], href: string, access: "none" | "view" | "edit"): PagePermission[] {
+  const existing = perms.filter(p => p.href !== href);
+  return [...existing, { href, access }];
 }
 
 const ALL_USER_PAGES = [
@@ -89,8 +135,13 @@ export default function SettingsPage() {
   const [newNpName, setNewNpName] = useState("");
   const [newNpPassword, setNewNpPassword] = useState("");
   const [showNewNpPw, setShowNewNpPw] = useState(false);
-  const [newNpCanEdit, setNewNpCanEdit] = useState(true);
-  const [newNpPages, setNewNpPages] = useState<string[]>([]);
+  const [newNpPagePerms, setNewNpPagePerms] = useState<PagePermission[]>([...DEFAULT_PAGE_PERMS]);
+  // Edit existing user
+  const [editingUserIdx, setEditingUserIdx] = useState<number | null>(null);
+  const [editUserName, setEditUserName] = useState("");
+  const [editUserPw, setEditUserPw] = useState("");
+  const [editUserPerms, setEditUserPerms] = useState<PagePermission[]>([]);
+  const [showEditUserPw, setShowEditUserPw] = useState(false);
 
   // Departments
   const [departments, setDepartments] = useState<Department[]>([]);
@@ -99,6 +150,8 @@ export default function SettingsPage() {
   const [editDeptData, setEditDeptData] = useState<Partial<Department>>({});
   const [newDept, setNewDept] = useState({ name: "", code: "", capacity: 10, departmentType: "intensive_care_high", description: "" });
   const [showAddDept, setShowAddDept] = useState(false);
+  const [newDeptFields, setNewDeptFields] = useState<string[]>(ALL_REPORT_FIELD_KEYS);
+  const [showNewDeptFields, setShowNewDeptFields] = useState(false);
 
   const loadDepartments = async () => {
     try {
@@ -179,17 +232,37 @@ export default function SettingsPage() {
     const newUser: NamedPassword = {
       name: newNpName.trim(),
       password: newNpPassword.trim(),
-      canEdit: newNpCanEdit,
-      allowedPages: newNpPages,
+      pagePermissions: newNpPagePerms,
     };
     const updated = [...namedPasswords, newUser];
     setNamedPasswords(updated);
-    setNewNpName(""); setNewNpPassword(""); setNewNpCanEdit(true); setNewNpPages([]);
+    setNewNpName(""); setNewNpPassword(""); setNewNpPagePerms([...DEFAULT_PAGE_PERMS]);
     saveNamedPasswords(updated);
   };
   const removeNamedPassword = (i: number) => {
     const updated = namedPasswords.filter((_, idx) => idx !== i);
     setNamedPasswords(updated); saveNamedPasswords(updated);
+  };
+  const startEditUser = (i: number) => {
+    const np = namedPasswords[i];
+    setEditingUserIdx(i);
+    setEditUserName(np.name);
+    setEditUserPw("");
+    setEditUserPerms(migrateUserToPagePerms(np));
+    setShowEditUserPw(false);
+  };
+  const cancelEditUser = () => { setEditingUserIdx(null); setEditUserName(""); setEditUserPw(""); setEditUserPerms([]); };
+  const saveEditUser = (i: number) => {
+    if (!editUserName.trim()) { toast.error("اسم المستخدم مطلوب"); return; }
+    const list = [...namedPasswords];
+    list[i] = {
+      name: editUserName.trim(),
+      password: editUserPw.trim() || list[i].password,
+      pagePermissions: editUserPerms,
+    };
+    setNamedPasswords(list);
+    saveNamedPasswords(list);
+    cancelEditUser();
   };
 
   /* ─── Departments ─── */
@@ -200,13 +273,15 @@ export default function SettingsPage() {
       const res = await fetch("/api/departments", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(newDept),
+        body: JSON.stringify({ ...newDept, reportFieldsJson: JSON.stringify(newDeptFields) }),
         credentials: "include",
       });
       if (!res.ok) { const d = await res.json(); throw new Error(d.error); }
       toast.success("تم إضافة القسم");
       setNewDept({ name: "", code: "", capacity: 10, departmentType: "intensive_care_high", description: "" });
+      setNewDeptFields(ALL_REPORT_FIELD_KEYS);
       setShowAddDept(false);
+      setShowNewDeptFields(false);
       loadDepartments();
     } catch (e: any) { toast.error("خطأ: " + e.message); }
     finally { setDeptLoading(false); }
@@ -414,8 +489,34 @@ export default function SettingsPage() {
                     className="h-8 text-sm" />
                 </div>
               </div>
+              {/* Report fields config */}
+              <div className="col-span-2 space-y-2">
+                <button
+                  type="button"
+                  className="text-xs text-primary underline underline-offset-2"
+                  onClick={() => setShowNewDeptFields(s => !s)}
+                >
+                  {showNewDeptFields ? "إخفاء" : "تخصيص"} حقول البيان ({newDeptFields.length}/{REPORT_FIELD_OPTIONS.length})
+                </button>
+                {showNewDeptFields && (
+                  <div className="grid grid-cols-3 gap-1.5 p-2 border rounded-lg bg-background">
+                    {REPORT_FIELD_OPTIONS.map(opt => (
+                      <div key={opt.key} className="flex items-center gap-1.5">
+                        <Checkbox
+                          id={`nf-${opt.key}`}
+                          checked={newDeptFields.includes(opt.key)}
+                          onCheckedChange={v => setNewDeptFields(prev =>
+                            v ? [...prev, opt.key] : prev.filter(k => k !== opt.key)
+                          )}
+                        />
+                        <Label htmlFor={`nf-${opt.key}`} className="text-xs cursor-pointer">{opt.label}</Label>
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </div>
               <div className="flex gap-2 justify-end">
-                <Button variant="ghost" size="sm" onClick={() => setShowAddDept(false)}>إلغاء</Button>
+                <Button variant="ghost" size="sm" onClick={() => { setShowAddDept(false); setShowNewDeptFields(false); }}>إلغاء</Button>
                 <Button size="sm" onClick={handleAddDept} disabled={deptLoading} className="gap-1">
                   <Plus className="h-4 w-4" /> إضافة
                 </Button>
@@ -464,6 +565,33 @@ export default function SettingsPage() {
                             className="h-8 text-sm" />
                         </div>
                       </div>
+                      {/* Report fields config for edit */}
+                      <div className="space-y-1.5">
+                        <p className="text-xs font-medium text-muted-foreground">حقول البيان — اختر ما يظهر في بيان هذا القسم:</p>
+                        <div className="grid grid-cols-3 gap-1.5 p-2 border rounded-lg bg-muted/20">
+                          {REPORT_FIELD_OPTIONS.map(opt => {
+                            const currentJson = editDeptData.reportFieldsJson ?? dept.reportFieldsJson ?? "[]";
+                            let currentFields: string[];
+                            try { const p = JSON.parse(currentJson); currentFields = Array.isArray(p) && p.length > 0 ? p : ALL_REPORT_FIELD_KEYS; }
+                            catch { currentFields = ALL_REPORT_FIELD_KEYS; }
+                            return (
+                              <div key={opt.key} className="flex items-center gap-1.5">
+                                <Checkbox
+                                  id={`ef-${dept.id}-${opt.key}`}
+                                  checked={currentFields.includes(opt.key)}
+                                  onCheckedChange={v => {
+                                    const updated = v
+                                      ? [...currentFields, opt.key]
+                                      : currentFields.filter(k => k !== opt.key);
+                                    setEditDeptData(p => ({ ...p, reportFieldsJson: JSON.stringify(updated) }));
+                                  }}
+                                />
+                                <Label htmlFor={`ef-${dept.id}-${opt.key}`} className="text-xs cursor-pointer">{opt.label}</Label>
+                              </div>
+                            );
+                          })}
+                        </div>
+                      </div>
                       <div className="flex gap-2 justify-end">
                         <Button variant="ghost" size="sm" onClick={() => { setEditingDept(null); setEditDeptData({}); }}>
                           <X className="h-4 w-4" />
@@ -480,14 +608,21 @@ export default function SettingsPage() {
                         <div className="flex items-center gap-2 flex-wrap">
                           <span className="font-medium text-sm">{dept.name}</span>
                           <Badge variant="outline" className="text-[10px] h-4 px-1">{dept.code}</Badge>
+                          <Badge variant="secondary" className="text-[10px] h-4 px-1">
+                            {DEPT_TYPE_OPTIONS.find(o => o.value === dept.departmentType)?.label ?? dept.departmentType}
+                          </Badge>
                           <span className="text-xs text-muted-foreground">
                             طاقة: {dept.capacity} | مشغول: {dept.activeCasesCount ?? 0}
                           </span>
+                          {(() => {
+                            try { const f = JSON.parse(dept.reportFieldsJson ?? "[]"); return Array.isArray(f) && f.length > 0 && f.length < ALL_REPORT_FIELD_KEYS.length ? <span className="text-[10px] text-muted-foreground">({f.length} حقل في البيان)</span> : null; }
+                            catch { return null; }
+                          })()}
                         </div>
                       </div>
                       <div className="flex gap-1 shrink-0">
                         <Button size="sm" variant="ghost" className="h-7 w-7 p-0"
-                          onClick={() => { setEditingDept(dept.id); setEditDeptData({}); }}>
+                          onClick={() => { setEditingDept(dept.id); setEditDeptData({ reportFieldsJson: dept.reportFieldsJson ?? "[]" }); }}>
                           <Edit2 className="h-3.5 w-3.5" />
                         </Button>
                         <ConfirmDialog
@@ -599,46 +734,104 @@ export default function SettingsPage() {
         <CardHeader className="pb-3">
           <CardTitle className="text-base flex items-center gap-2"><User className="h-4 w-4" /> كلمات مرور المستخدمين والصلاحيات</CardTitle>
           <CardDescription className="text-xs">
-            أضف مستخدمين بأسمائهم وكلمات مرورهم وحدد ما يمكنهم رؤيته أو تعديله — الإعدادات وسجل العمليات والنسخ الاحتياطي للمؤسس فقط
+            أضف مستخدمين وحدد صلاحية كل صفحة — تعديل / عرض / لا وصول — الإعدادات وسجل العمليات والنسخ الاحتياطي للمؤسس فقط
           </CardDescription>
         </CardHeader>
         <CardContent className="space-y-3">
           {namedPasswords.length > 0 && (
             <div className="space-y-2">
               {namedPasswords.map((np, i) => (
-                <div key={i} className="border rounded-lg px-3 py-2.5 bg-muted/20 space-y-1.5">
-                  <div className="flex items-center justify-between">
-                    <div className="flex items-center gap-2 flex-wrap">
-                      <span className="font-medium text-sm">{np.name}</span>
-                      <span className="text-xs text-muted-foreground">{'•'.repeat(Math.min(np.password?.length ?? 0, 8))}</span>
-                      <Badge variant={np.canEdit !== false ? "default" : "secondary"} className="text-[10px] h-4 px-1.5">
-                        {np.canEdit !== false ? "تعديل" : "عرض فقط"}
-                      </Badge>
-                      {np.allowedPages && np.allowedPages.length > 0 && (
-                        <Badge variant="outline" className="text-[10px] h-4 px-1.5">
-                          {np.allowedPages.length} صفحة
-                        </Badge>
-                      )}
+                <div key={i} className="border rounded-lg bg-muted/20">
+                  {editingUserIdx === i ? (
+                    /* ── Inline edit form ── */
+                    <div className="p-3 space-y-3">
+                      <p className="text-xs font-semibold text-primary">تعديل: {np.name}</p>
+                      <div className="grid grid-cols-2 gap-2">
+                        <div className="space-y-1">
+                          <Label className="text-xs">الاسم</Label>
+                          <Input value={editUserName} onChange={e => setEditUserName(e.target.value)} className="h-9" />
+                        </div>
+                        <div className="space-y-1">
+                          <Label className="text-xs">كلمة المرور الجديدة <span className="text-muted-foreground">(فارغ = إبقاء)</span></Label>
+                          <div className="relative">
+                            <Input type={showEditUserPw ? "text" : "password"} value={editUserPw}
+                              onChange={e => setEditUserPw(e.target.value)}
+                              placeholder="اتركه فارغاً للإبقاء" className="h-9 pr-9" dir="ltr" />
+                            <button type="button" className="absolute left-2 top-1/2 -translate-y-1/2 text-muted-foreground"
+                              onClick={() => setShowEditUserPw(s => !s)}>
+                              {showEditUserPw ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
+                            </button>
+                          </div>
+                        </div>
+                      </div>
+                      <div className="space-y-1.5">
+                        <div className="flex items-center justify-between">
+                          <Label className="text-xs font-medium">صلاحيات كل صفحة</Label>
+                          <div className="flex gap-2">
+                            <button type="button" className="text-[10px] text-emerald-600 hover:underline"
+                              onClick={() => setEditUserPerms(ALL_USER_PAGES.map(p => ({ href: p.href, access: "edit" as const })))}>تعديل للكل</button>
+                            <button type="button" className="text-[10px] text-amber-600 hover:underline"
+                              onClick={() => setEditUserPerms(ALL_USER_PAGES.map(p => ({ href: p.href, access: "view" as const })))}>عرض للكل</button>
+                            <button type="button" className="text-[10px] text-destructive hover:underline"
+                              onClick={() => setEditUserPerms(ALL_USER_PAGES.map(p => ({ href: p.href, access: "none" as const })))}>إخفاء الكل</button>
+                          </div>
+                        </div>
+                        <div className="border rounded-md divide-y text-xs">
+                          {ALL_USER_PAGES.map(page => {
+                            const access = editUserPerms.find(p => p.href === page.href)?.access ?? "edit";
+                            return (
+                              <div key={page.href} className="flex items-center justify-between px-3 py-1.5">
+                                <span>{page.label}</span>
+                                <div className="flex gap-1">
+                                  {(["none", "view", "edit"] as const).map(level => (
+                                    <button key={level} type="button"
+                                      className={`text-[10px] px-2 py-0.5 rounded border transition-colors ${access === level ? ACCESS_ACTIVE_CLASS[level] : "border-border text-muted-foreground hover:border-primary/40"}`}
+                                      onClick={() => setEditUserPerms(p => setPageAccess(p, page.href, level))}>
+                                      {ACCESS_LABELS[level]}
+                                    </button>
+                                  ))}
+                                </div>
+                              </div>
+                            );
+                          })}
+                        </div>
+                      </div>
+                      <div className="flex gap-2 justify-end pt-1">
+                        <Button variant="ghost" size="sm" onClick={cancelEditUser}><X className="h-4 w-4 ml-1" /> إلغاء</Button>
+                        <Button size="sm" onClick={() => saveEditUser(i)} disabled={loading}><Check className="h-4 w-4 ml-1" /> حفظ</Button>
+                      </div>
                     </div>
-                    <ConfirmDialog
-                      trigger={
-                        <Button size="sm" variant="ghost" className="h-6 w-6 p-0 text-destructive hover:bg-destructive/10">
-                          <Trash2 className="h-3.5 w-3.5" />
+                  ) : (
+                    /* ── Display row ── */
+                    <div className="px-3 py-2.5 flex items-center justify-between gap-2">
+                      <div className="flex items-center gap-2 flex-wrap min-w-0">
+                        <span className="font-medium text-sm">{np.name}</span>
+                        <span className="text-xs text-muted-foreground">{'•'.repeat(Math.min(np.password?.length ?? 0, 8))}</span>
+                        {(() => {
+                          const perms = migrateUserToPagePerms(np);
+                          const ec = perms.filter(p => p.access === "edit").length;
+                          const vc = perms.filter(p => p.access === "view").length;
+                          const nc = perms.filter(p => p.access === "none").length;
+                          return (<>
+                            {ec > 0 && <Badge variant="default" className="text-[10px] h-4 px-1.5">{ec} تعديل</Badge>}
+                            {vc > 0 && <Badge variant="outline" className="text-[10px] h-4 px-1.5 text-amber-600 border-amber-300">{vc} عرض</Badge>}
+                            {nc > 0 && <Badge variant="secondary" className="text-[10px] h-4 px-1.5">{nc} مخفي</Badge>}
+                          </>);
+                        })()}
+                      </div>
+                      <div className="flex gap-1 shrink-0">
+                        <Button size="sm" variant="ghost" className="h-6 w-6 p-0" onClick={() => startEditUser(i)}>
+                          <Edit2 className="h-3.5 w-3.5" />
                         </Button>
-                      }
-                      title={`حذف مستخدم "${np.name}"`}
-                      description="سيُحذف وصول هذا المستخدم فوراً."
-                      confirmLabel="حذف"
-                      onConfirm={() => removeNamedPassword(i)}
-                    />
-                  </div>
-                  {np.allowedPages && np.allowedPages.length > 0 && (
-                    <p className="text-[10px] text-muted-foreground">
-                      الصفحات: {np.allowedPages.map(p => ALL_USER_PAGES.find(x => x.href === p)?.label ?? p).join("، ")}
-                    </p>
-                  )}
-                  {(!np.allowedPages || np.allowedPages.length === 0) && (
-                    <p className="text-[10px] text-muted-foreground">يرى جميع الصفحات المتاحة</p>
+                        <ConfirmDialog
+                          trigger={<Button size="sm" variant="ghost" className="h-6 w-6 p-0 text-destructive hover:bg-destructive/10"><Trash2 className="h-3.5 w-3.5" /></Button>}
+                          title={`حذف مستخدم "${np.name}"`}
+                          description="سيُحذف وصول هذا المستخدم فوراً."
+                          confirmLabel="حذف"
+                          onConfirm={() => removeNamedPassword(i)}
+                        />
+                      </div>
+                    </div>
                   )}
                 </div>
               ))}
@@ -667,61 +860,45 @@ export default function SettingsPage() {
                 </div>
               </div>
             </div>
-
-            {/* Permissions */}
-            <div className="space-y-2">
-              <Label className="text-xs font-medium">الصلاحيات</Label>
-              <div className="flex items-center gap-3">
-                <Checkbox
-                  id="np-can-edit"
-                  checked={newNpCanEdit}
-                  onCheckedChange={v => setNewNpCanEdit(!!v)}
-                />
-                <Label htmlFor="np-can-edit" className="text-xs cursor-pointer">
-                  صلاحية التعديل (إضافة / تعديل / حذف)
-                  {!newNpCanEdit && <span className="mr-1 text-amber-600">— عرض فقط</span>}
-                </Label>
-              </div>
-            </div>
-
-            {/* Page access */}
-            <div className="space-y-2">
+            <div className="space-y-1.5">
               <div className="flex items-center justify-between">
-                <Label className="text-xs font-medium">الصفحات المتاحة</Label>
-                <button
-                  type="button"
-                  className="text-[10px] text-primary hover:underline"
-                  onClick={() => setNewNpPages(newNpPages.length === ALL_USER_PAGES.length ? [] : ALL_USER_PAGES.map(p => p.href))}
-                >
-                  {newNpPages.length === ALL_USER_PAGES.length ? "إلغاء الكل" : "تحديد الكل"}
-                </button>
+                <Label className="text-xs font-medium">صلاحيات كل صفحة</Label>
+                <div className="flex gap-2">
+                  <button type="button" className="text-[10px] text-emerald-600 hover:underline"
+                    onClick={() => setNewNpPagePerms(ALL_USER_PAGES.map(p => ({ href: p.href, access: "edit" as const })))}>تعديل للكل</button>
+                  <button type="button" className="text-[10px] text-amber-600 hover:underline"
+                    onClick={() => setNewNpPagePerms(ALL_USER_PAGES.map(p => ({ href: p.href, access: "view" as const })))}>عرض للكل</button>
+                  <button type="button" className="text-[10px] text-destructive hover:underline"
+                    onClick={() => setNewNpPagePerms(ALL_USER_PAGES.map(p => ({ href: p.href, access: "none" as const })))}>إخفاء الكل</button>
+                </div>
               </div>
-              <p className="text-[10px] text-muted-foreground">اتركها فارغة لإتاحة جميع الصفحات</p>
-              <div className="grid grid-cols-2 gap-1.5">
-                {ALL_USER_PAGES.map(page => (
-                  <div key={page.href} className="flex items-center gap-2">
-                    <Checkbox
-                      id={`page-${page.href}`}
-                      checked={newNpPages.includes(page.href)}
-                      onCheckedChange={v => {
-                        setNewNpPages(prev =>
-                          v ? [...prev, page.href] : prev.filter(p => p !== page.href)
-                        );
-                      }}
-                    />
-                    <Label htmlFor={`page-${page.href}`} className="text-xs cursor-pointer">{page.label}</Label>
-                  </div>
-                ))}
+              <div className="border rounded-md divide-y text-xs">
+                {ALL_USER_PAGES.map(page => {
+                  const access = newNpPagePerms.find(p => p.href === page.href)?.access ?? "edit";
+                  return (
+                    <div key={page.href} className="flex items-center justify-between px-3 py-1.5">
+                      <span>{page.label}</span>
+                      <div className="flex gap-1">
+                        {(["none", "view", "edit"] as const).map(level => (
+                          <button key={level} type="button"
+                            className={`text-[10px] px-2 py-0.5 rounded border transition-colors ${access === level ? ACCESS_ACTIVE_CLASS[level] : "border-border text-muted-foreground hover:border-primary/40"}`}
+                            onClick={() => setNewNpPagePerms(p => setPageAccess(p, page.href, level))}>
+                            {ACCESS_LABELS[level]}
+                          </button>
+                        ))}
+                      </div>
+                    </div>
+                  );
+                })}
               </div>
             </div>
-
             <Button size="sm" onClick={addNamedPassword} disabled={!newNpName.trim() || !newNpPassword.trim() || loading} className="gap-1 w-full">
               <Plus className="h-4 w-4" /> إضافة مستخدم
             </Button>
           </div>
 
           <p className="text-xs text-muted-foreground bg-muted/30 p-2 rounded">
-            💡 كل مستخدم يدخل بكلمة مروره الخاصة — سيرى فقط الصفحات المحددة له، وإذا كان عرض فقط لن يتمكن من التعديل.
+            💡 كل مستخدم يدخل بكلمة مروره — الصفحات المخفية لا تظهر في القائمة، وصفحات "عرض" تُعرض بدون أزرار تعديل.
           </p>
         </CardContent>
       </Card>

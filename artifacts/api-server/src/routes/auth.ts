@@ -32,8 +32,16 @@ async function getFounderPassword(): Promise<string> {
   return process.env.FOUNDER_PASSWORD ?? "bsch2024";
 }
 
-/** Returns [{name, password, canEdit?, allowedPages?}] or [] */
-async function getNamedPasswords(): Promise<Array<{ name: string; password: string; canEdit?: boolean; allowedPages?: string[] }>> {
+type PageAccess = "none" | "view" | "edit";
+interface PagePermission { href: string; access: PageAccess; }
+interface NamedPasswordRecord {
+  name: string; password: string;
+  canEdit?: boolean; allowedPages?: string[];
+  pagePermissions?: PagePermission[];
+}
+
+/** Returns named users from DB or [] */
+async function getNamedPasswords(): Promise<NamedPasswordRecord[]> {
   try {
     const [row] = await db.select().from(settingsTable).where(eq(settingsTable.key, "named_passwords"));
     if (row?.value) return JSON.parse(row.value);
@@ -61,11 +69,16 @@ router.get("/auth/me", async (req, res): Promise<void> => {
   // Named user — attach their permissions
   const named = await getNamedPasswords();
   const entry = named.find(np => np.name === base.name);
-  res.json({
-    ...base,
-    canEdit: entry?.canEdit !== false, // default true
-    allowedPages: entry?.allowedPages ?? [],
-  });
+  if (entry?.pagePermissions?.length) {
+    res.json({ ...base, pagePermissions: entry.pagePermissions });
+  } else {
+    // legacy format fallback
+    res.json({
+      ...base,
+      canEdit: entry?.canEdit !== false,
+      allowedPages: entry?.allowedPages ?? [],
+    });
+  }
 });
 
 router.post("/auth/founder-login", async (req, res): Promise<void> => {

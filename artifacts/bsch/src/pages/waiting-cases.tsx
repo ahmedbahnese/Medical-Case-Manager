@@ -135,7 +135,12 @@ function AddForm({ section, onSuccess }: { section: Section; onSuccess: () => vo
 
   const handleSubmit = () => {
     if (!form.patientName.trim()) { toast.error("اسم المريض مطلوب"); return; }
-    create.mutate({ data: { ...form, section } as any }, {
+    create.mutate({ data: {
+      ...form,
+      section,
+      medicalReportName: reportFile?.name ?? null,
+      medicalReportData: reportFile?.data ?? null,
+    } as any }, {
       onSuccess: () => {
         toast.success("تمت الإضافة لقائمة الانتظار");
         setForm({ ...EMPTY_FORM });
@@ -401,16 +406,44 @@ function WaitingCaseActionDialog({
               <div className="space-y-3 pt-1">
                 <div className="space-y-1">
                   <Label>اختر القسم للحجز</Label>
-                  <Select value={deptId} onValueChange={setDeptId}>
-                    <SelectTrigger><SelectValue placeholder="اختر القسم..." /></SelectTrigger>
-                    <SelectContent>
-                      {(departments as any[] ?? []).map((d: any) => (
-                        <SelectItem key={d.id} value={d.id.toString()}>
-                          {d.name} — شاغر: {d.capacity - d.activeCasesCount}
-                        </SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
+                  {(() => {
+                    const allDepts = (departments as any[] ?? []);
+                    const ct = form.careType;
+                    const isCompat = (d: any) => {
+                      if (!ct) return true;
+                      if (ct === "incubator") return d.departmentType?.startsWith("incubator") || d.departmentType === "picu";
+                      return d.departmentType === ct;
+                    };
+                    const compat = allDepts.filter(isCompat);
+                    const others = allDepts.filter(d => !isCompat(d));
+                    return (
+                      <Select value={deptId} onValueChange={setDeptId}>
+                        <SelectTrigger><SelectValue placeholder="اختر القسم..." /></SelectTrigger>
+                        <SelectContent>
+                          {compat.length > 0 && (
+                            <>
+                              <div className="px-2 py-1 text-[10px] text-muted-foreground font-semibold uppercase tracking-wide">أقسام متوافقة مع نوع الرعاية</div>
+                              {compat.map((d: any) => (
+                                <SelectItem key={d.id} value={d.id.toString()}>
+                                  {d.name} — شاغر: {d.capacity - d.activeCasesCount}
+                                </SelectItem>
+                              ))}
+                            </>
+                          )}
+                          {others.length > 0 && (
+                            <>
+                              <div className="px-2 py-1 text-[10px] text-muted-foreground font-semibold uppercase tracking-wide mt-1">أقسام أخرى</div>
+                              {others.map((d: any) => (
+                                <SelectItem key={d.id} value={d.id.toString()}>
+                                  {d.name} — شاغر: {d.capacity - d.activeCasesCount}
+                                </SelectItem>
+                              ))}
+                            </>
+                          )}
+                        </SelectContent>
+                      </Select>
+                    );
+                  })()}
                   <p className="text-xs text-muted-foreground">ستُنشأ حالة نشطة تلقائياً في القسم المختار</p>
                 </div>
                 <div className="space-y-1">
@@ -561,6 +594,27 @@ function CasesTable({ cases, printCases, onAction, onDelete, isLoading, selected
                 </TableCell>
                 <TableCell className="no-print">
                   <div className="flex gap-1 justify-center">
+                    {c.medicalReportData && (
+                      <Button
+                        size="sm"
+                        variant="ghost"
+                        className="h-7 w-7 p-0 text-blue-600 hover:bg-blue-50 dark:hover:bg-blue-950"
+                        title="عرض التقرير المرفق"
+                        onClick={e => {
+                          e.stopPropagation();
+                          const win = window.open("", "_blank");
+                          if (!win) return;
+                          if (c.medicalReportData.startsWith("data:image")) {
+                            win.document.write(`<html><body style="margin:0;background:#111"><img src="${c.medicalReportData}" style="max-width:100%;display:block;margin:auto" /></body></html>`);
+                          } else {
+                            win.document.write(`<html><body style="margin:0"><iframe src="${c.medicalReportData}" style="width:100vw;height:100vh;border:none"></iframe></body></html>`);
+                          }
+                          win.document.title = c.medicalReportName || "تقرير الحالة";
+                        }}
+                      >
+                        <FileText className="h-3.5 w-3.5" />
+                      </Button>
+                    )}
                     <Button size="sm" className="h-7 text-xs gap-0.5 px-2"
                       onClick={() => onAction(c)}>
                       <Edit2 className="h-3 w-3" /> تعديل / إجراء

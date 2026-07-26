@@ -81,12 +81,29 @@ export function Layout({ children }: { children: ReactNode }) {
 
   const userAny = user as any;
   const isFounder: boolean = userAny?.isFounder ?? false;
-  const canEdit: boolean = isFounder ? true : (userAny?.canEdit !== false);
-  const allowedPages: string[] = userAny?.allowedPages ?? [];
+  const pagePermissions: { href: string; access: string }[] = userAny?.pagePermissions ?? [];
+  // Legacy fallback
+  const legacyCanEdit: boolean = userAny?.canEdit !== false;
+  const legacyAllowedPages: string[] = userAny?.allowedPages ?? [];
+
+  const getPageAccess = (href: string): "none" | "view" | "edit" => {
+    if (isFounder) return "edit";
+    if (pagePermissions.length > 0) {
+      const pp = pagePermissions.find(p => p.href === href);
+      return (pp?.access ?? "edit") as "none" | "view" | "edit";
+    }
+    // Legacy
+    if (legacyAllowedPages.length > 0 && !legacyAllowedPages.includes(href)) return "none";
+    return legacyCanEdit ? "edit" : "view";
+  };
+
+  // Derive canEdit for current page (for the sidebar badge)
+  const currentPageAccess = getPageAccess(location);
+  const canEdit = currentPageAccess === "edit";
 
   const isItemVisible = (item: { href: string; founderOnly?: boolean }) => {
     if (item.founderOnly && !isFounder) return false;
-    if (!isFounder && allowedPages.length > 0 && !allowedPages.includes(item.href)) return false;
+    if (!isFounder && getPageAccess(item.href) === "none") return false;
     return true;
   };
 
