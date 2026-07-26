@@ -26,4 +26,9 @@ export interface CaseUpdate {
   status?: CaseUpdateStatus;
   /** @nullable */
   dischargeDate?: Date | null;
+  mobe?: string;
+  ventilationStartDate?: string;
+  ventilationEndDate?: string;
+  dischargeReason?: string;
+  transferDestination?: string;
 }

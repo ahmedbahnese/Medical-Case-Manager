@@ -57,12 +57,14 @@ router.get("/dashboard/stats", async (req, res): Promise<void> => {
     label: respirationLabels[r.type] ?? r.type,
   }));
 
+  const respirationCount = Number(respirationResult?.count ?? 0);
   res.json({
     totalCases: Number(totalResult?.count ?? 0),
     activeCases: Number(activeResult?.count ?? 0),
     criticalCases: Number(criticalResult?.count ?? 0),
     waitingCases: Number(waitingResult?.count ?? 0),
-    onRespiration: Number(respirationResult?.count ?? 0),
+    onRespiration: respirationCount,
+    artificialRespirationCases: respirationCount,
     departmentStats,
     respirationBreakdown,
   });

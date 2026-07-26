@@ -24,4 +24,10 @@ export interface CaseInput {
   caseType?: CaseInputCaseType;
   artificialRespiration?: CaseInputArtificialRespiration;
   status?: CaseInputStatus;
+  mobe?: string;
+  admissionDate?: string;
+  ventilationStartDate?: string;
+  ventilationEndDate?: string;
+  dischargeReason?: string;
+  transferDestination?: string;
 }

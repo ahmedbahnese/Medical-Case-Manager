@@ -73,7 +73,9 @@ export const MedicalCaseArtificialRespiration = {
   high_frequency: 'high_frequency',
   vent: 'vent',
   cpap: 'cpap',
+  hfnc: 'hfnc',
   standby: 'standby',
+  box: 'box',
   no: 'no',
 } as const;
 
@@ -119,6 +121,16 @@ export interface MedicalCase {
   dischargeDate?: string | null;
   createdAt: string;
   updatedAt: string;
+  /** @nullable */
+  mobe?: string | null;
+  /** @nullable */
+  ventilationStartDate?: string | null;
+  /** @nullable */
+  ventilationEndDate?: string | null;
+  /** @nullable */
+  dischargeReason?: string | null;
+  /** @nullable */
+  transferDestination?: string | null;
 }
 
 export interface DepartmentDetail {
@@ -180,6 +192,12 @@ export interface CaseInput {
   caseType?: CaseInputCaseType;
   artificialRespiration?: CaseInputArtificialRespiration;
   status?: CaseInputStatus;
+  mobe?: string;
+  admissionDate?: string;
+  ventilationStartDate?: string;
+  ventilationEndDate?: string;
+  dischargeReason?: string;
+  transferDestination?: string;
 }
 
 export type CaseUpdateCaseType = typeof CaseUpdateCaseType[keyof typeof CaseUpdateCaseType];
@@ -199,7 +217,9 @@ export const CaseUpdateArtificialRespiration = {
   high_frequency: 'high_frequency',
   vent: 'vent',
   cpap: 'cpap',
+  hfnc: 'hfnc',
   standby: 'standby',
+  box: 'box',
   no: 'no',
 } as const;
 
@@ -230,6 +250,11 @@ export interface CaseUpdate {
   status?: CaseUpdateStatus;
   /** @nullable */
   dischargeDate?: string | null;
+  mobe?: string;
+  ventilationStartDate?: string;
+  ventilationEndDate?: string;
+  dischargeReason?: string;
+  transferDestination?: string;
 }
 
 export interface BulkImportInput {
@@ -431,8 +456,11 @@ export interface DashboardStats {
   criticalCases: number;
   waitingCases: number;
   onRespiration: number;
+  /** Alias for onRespiration — used by dashboard UI */
+  artificialRespirationCases?: number;
   departmentStats: DepartmentStat[];
   respirationBreakdown: RespirationStat[];
+  respirationByDept?: Record<string, number>;
 }
 
 export interface Backup {

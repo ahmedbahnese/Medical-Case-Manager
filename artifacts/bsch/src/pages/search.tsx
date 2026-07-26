@@ -15,7 +15,8 @@ export default function Search() {
   const [params, setParams] = useState<GetCasesParams & { departmentId?: number }>({});
   const [submitted, setSubmitted] = useState(false);
 
-  const { data: cases, isLoading, refetch } = useGetCases(params, { enabled: submitted });
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const { data: cases, isLoading, refetch } = useGetCases(params, { query: { enabled: submitted } as any });
   const { data: departments } = useGetDepartments();
 
   const handleSearch = (e: React.FormEvent) => {

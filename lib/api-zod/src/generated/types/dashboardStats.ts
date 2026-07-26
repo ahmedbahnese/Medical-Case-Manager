@@ -14,6 +14,9 @@ export interface DashboardStats {
   criticalCases: number;
   waitingCases: number;
   onRespiration: number;
+  /** Alias for onRespiration — used by dashboard UI */
+  artificialRespirationCases?: number;
   departmentStats: DepartmentStat[];
   respirationBreakdown: RespirationStat[];
+  respirationByDept?: Record<string, number>;
 }
