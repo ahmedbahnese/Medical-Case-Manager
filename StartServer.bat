@@ -1,9 +1,9 @@
 @echo off
 chcp 65001 >nul
+setlocal enabledelayedexpansion
 title BSCH - نظام إدارة الحالات الطبية
 echo ============================================================
 echo  BSCH Hospital Case Management System
-echo  Starting server...
 echo ============================================================
 echo.
 
@@ -29,21 +29,24 @@ if not exist "artifacts\api-server\dist\index.mjs" (
 REM ── Load .env ────────────────────────────────────────────────
 if exist ".env" (
     for /f "usebackq tokens=1,* delims==" %%a in (".env") do (
-        set "line=%%a"
-        if not "!line:~0,1!"=="#" if not "%%a"=="" (
+        set "_k=%%a"
+        if not "!_k:~0,1!"=="#" if not "%%a"=="" (
             set "%%a=%%b"
         )
     )
 ) else (
-    echo [WARNING] .env file not found. Using defaults.
+    echo [WARNING] .env file not found. Defaults will be used.
     echo           Copy .env.example to .env and fill in your values.
     echo.
 )
 
 REM ── Defaults ─────────────────────────────────────────────────
-if "%PORT%"==""         set PORT=8080
-if "%NODE_ENV%"==""     set NODE_ENV=production
-if "%LOG_LEVEL%"==""    set LOG_LEVEL=info
+if "%PORT%"==""      set PORT=8080
+if "%NODE_ENV%"==""  set NODE_ENV=production
+if "%LOG_LEVEL%"=""  set LOG_LEVEL=info
+
+REM ── Tell the API server where the built frontend lives ───────
+set FRONTEND_DIR=artifacts\bsch\dist\public
 
 REM ── Check PostgreSQL ─────────────────────────────────────────
 pg_isready -h localhost -p 5432 >nul 2>&1
@@ -53,8 +56,24 @@ if errorlevel 1 (
     echo.
 )
 
-echo  Server URL: http://localhost:%PORT%
-echo  Press Ctrl+C to stop.
+REM ── Show local IP addresses ───────────────────────────────────
+echo  Server port: %PORT%
+echo.
+echo  Local IP addresses (share one of these with hospital staff):
+echo  ────────────────────────────────────────────────────────────
+for /f "tokens=2 delims=:" %%a in ('ipconfig ^| findstr /R /C:"IPv4 Address"') do (
+    set "_ip=%%a"
+    set "_ip=!_ip: =!"
+    echo    http://!_ip!:%PORT%
+)
+echo.
+echo  If none shown, open Command Prompt and run: ipconfig
+echo.
+echo  How to install as an app on other devices:
+echo    Android / Windows : open the URL in Chrome, tap "Install" when prompted
+echo    iPhone / iPad     : open in Safari -> Share -> Add to Home Screen
+echo.
+echo  Press Ctrl+C to stop the server.
 echo ============================================================
 echo.
 

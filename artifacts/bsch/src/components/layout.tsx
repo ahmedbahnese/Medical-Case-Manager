@@ -14,7 +14,6 @@ import {
   Wind,
   Bot,
   ClipboardList,
-  Clock,
   AlertTriangle,
   Settings,
   FileOutput,
@@ -25,6 +24,7 @@ import { Toaster } from "sonner";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Label } from "@/components/ui/label";
+import { PwaInstallPrompt, useSwUpdateToast } from "@/components/pwa-install-prompt";
 
 const NAV_GROUPS = [
   {
@@ -76,6 +76,8 @@ export function Layout({ children }: { children: ReactNode }) {
   const { hospital_name, logo_base64 } = useAppSettings();
   const [showLogoutDialog, setShowLogoutDialog] = useState(false);
   const [logoutReason, setLogoutReason] = useState("end_shift");
+
+  useSwUpdateToast();
 
   if (isLoading) return <div className="h-screen bg-background" />;
 
@@ -246,6 +248,9 @@ export function Layout({ children }: { children: ReactNode }) {
         duration={4000}
         toastOptions={{ className: "text-sm" }}
       />
+
+      {/* PWA install prompt (Android/Windows banner + iOS instructions) */}
+      <PwaInstallPrompt />
 
       {/* Logout Confirmation Dialog */}
       <Dialog open={showLogoutDialog} onOpenChange={setShowLogoutDialog}>

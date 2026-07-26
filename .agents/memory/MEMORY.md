@@ -1,1 +1,2 @@
 - [BSCH project setup](bsch-setup.md) — workflow env vars, schema additions, new routes, and frontend page inventory.
+- [BSCH PWA + LAN setup](bsch-pwa-lan.md) — icon gen, service worker, install prompt, Express 5 static serving, FRONTEND_DIR env var.
