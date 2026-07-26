@@ -82,6 +82,19 @@ const ACCESS_ACTIVE_CLASS: Record<string, string> = {
   edit: "bg-emerald-100 text-emerald-700 border-emerald-300 dark:bg-emerald-950/40 dark:text-emerald-400",
 };
 
+const ALL_USER_PAGES = [
+  { href: "/dashboard",             label: "لوحة التحكم" },
+  { href: "/add-case",              label: "إضافة حالة" },
+  { href: "/waiting-cases",         label: "قوائم الانتظار" },
+  { href: "/artificial-respiration",label: "التنفس الصناعي" },
+  { href: "/occupancy-report",      label: "بيان الإشغال" },
+  { href: "/print-reports",         label: "التقرير اليومي" },
+  { href: "/incident-report",       label: "بيانات الحوادث" },
+  { href: "/advanced-search",       label: "بحث متقدم" },
+  { href: "/discharge-history",     label: "سجل الخروج" },
+  { href: "/bulk-import",           label: "الاستيراد الذكي" },
+];
+
 const DEFAULT_PAGE_PERMS: PagePermission[] = ALL_USER_PAGES.map(p => ({ href: p.href, access: "edit" as const }));
 
 function migrateUserToPagePerms(np: NamedPassword): PagePermission[] {
@@ -98,19 +111,6 @@ function setPageAccess(perms: PagePermission[], href: string, access: "none" | "
   const existing = perms.filter(p => p.href !== href);
   return [...existing, { href, access }];
 }
-
-const ALL_USER_PAGES = [
-  { href: "/dashboard",             label: "لوحة التحكم" },
-  { href: "/add-case",              label: "إضافة حالة" },
-  { href: "/waiting-cases",         label: "قوائم الانتظار" },
-  { href: "/artificial-respiration",label: "التنفس الصناعي" },
-  { href: "/occupancy-report",      label: "بيان الإشغال" },
-  { href: "/print-reports",         label: "التقرير اليومي" },
-  { href: "/incident-report",       label: "بيانات الحوادث" },
-  { href: "/advanced-search",       label: "بحث متقدم" },
-  { href: "/discharge-history",     label: "سجل الخروج" },
-  { href: "/bulk-import",           label: "الاستيراد الذكي" },
-];
 
 export default function SettingsPage() {
   const { refreshSettings } = useSettingsActions();
