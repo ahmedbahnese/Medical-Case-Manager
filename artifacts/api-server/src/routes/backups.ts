@@ -33,16 +33,22 @@ router.post("/backups", async (req, res): Promise<void> => {
   const backupData = JSON.stringify({ cases, waitingCases, createdAt: new Date().toISOString() });
   const recordCount = cases.length + waitingCases.length;
 
-  const [backup] = await db.insert(backupsTable).values({
+  // MySQL does not support .returning() — use $returningId() + SELECT
+  const [{ id: newId }] = await db.insert(backupsTable).values({
     backupName: parsed.data.backupName,
     backupData,
     recordCount,
-  }).returning({
-    id: backupsTable.id,
-    backupName: backupsTable.backupName,
-    recordCount: backupsTable.recordCount,
-    createdAt: backupsTable.createdAt,
-  });
+  }).$returningId();
+
+  const [backup] = await db
+    .select({
+      id: backupsTable.id,
+      backupName: backupsTable.backupName,
+      recordCount: backupsTable.recordCount,
+      createdAt: backupsTable.createdAt,
+    })
+    .from(backupsTable)
+    .where(eq(backupsTable.id, newId));
 
   res.status(201).json(backup);
 });
@@ -64,11 +70,19 @@ router.get("/backups/:id/download", async (req, res): Promise<void> => {
 // Delete a backup
 router.delete("/backups/:id", async (req, res): Promise<void> => {
   const id = parseInt(req.params.id as string, 10);
-  const [deleted] = await db.delete(backupsTable).where(eq(backupsTable.id, id)).returning();
-  if (!deleted) {
+
+  // MySQL does not support .returning() — select first, then delete
+  const [existing] = await db
+    .select({ id: backupsTable.id })
+    .from(backupsTable)
+    .where(eq(backupsTable.id, id));
+
+  if (!existing) {
     res.status(404).json({ error: "النسخة غير موجودة" });
     return;
   }
+
+  await db.delete(backupsTable).where(eq(backupsTable.id, id));
   res.json({ success: true });
 });
 
@@ -86,16 +100,24 @@ router.post("/backups/import", async (req, res): Promise<void> => {
   try {
     const { backupName, backupData } = req.body as { backupName?: string; backupData?: unknown };
     const data = parseBackupData(backupData);
-    const [backup] = await db.insert(backupsTable).values({
+
+    // MySQL does not support .returning() — use $returningId() + SELECT
+    const [{ id: newId }] = await db.insert(backupsTable).values({
       backupName: String(backupName || "نسخة مستوردة").slice(0, 120),
       backupData: JSON.stringify({ ...data, importedAt: new Date().toISOString() }),
       recordCount: data.cases.length + data.waitingCases.length,
-    }).returning({
-      id: backupsTable.id,
-      backupName: backupsTable.backupName,
-      recordCount: backupsTable.recordCount,
-      createdAt: backupsTable.createdAt,
-    });
+    }).$returningId();
+
+    const [backup] = await db
+      .select({
+        id: backupsTable.id,
+        backupName: backupsTable.backupName,
+        recordCount: backupsTable.recordCount,
+        createdAt: backupsTable.createdAt,
+      })
+      .from(backupsTable)
+      .where(eq(backupsTable.id, newId));
+
     res.status(201).json(backup);
   } catch (error: any) {
     res.status(400).json({ error: error?.message ?? "ملف النسخة غير صالح" });

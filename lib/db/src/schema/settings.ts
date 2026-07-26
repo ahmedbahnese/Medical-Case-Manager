@@ -1,8 +1,8 @@
-import { pgTable, serial, text, timestamp } from "drizzle-orm/pg-core";
+import { mysqlTable, int, text, timestamp } from "drizzle-orm/mysql-core";
 
-export const settingsTable = pgTable("settings", {
-  id: serial("id").primaryKey(),
-  key: text("key").notNull().unique(),
+export const settingsTable = mysqlTable("settings", {
+  id: int("id").autoincrement().primaryKey(),
+  key: text("key").notNull(),
   value: text("value"),
   updatedAt: timestamp("updated_at").defaultNow().notNull(),
 });

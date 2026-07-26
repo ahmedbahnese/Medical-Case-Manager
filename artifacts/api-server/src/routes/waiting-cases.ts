@@ -44,7 +44,8 @@ router.post("/waiting-cases", async (req, res): Promise<void> => {
     return;
   }
 
-  const [newCase] = await db.insert(waitingCasesTable).values({
+  // MySQL does not support .returning() — use $returningId() + SELECT
+  const [{ id: newCaseId }] = await db.insert(waitingCasesTable).values({
     patientName: parsed.data.patientName,
     age: parsed.data.age ?? null,
     diagnosis: parsed.data.diagnosis ?? null,
@@ -59,7 +60,9 @@ router.post("/waiting-cases", async (req, res): Promise<void> => {
     artificialRespiration: (parsed.data.artificialRespiration as any) ?? "no",
     section: (parsed.data.section as any) ?? "reception",
     status: "waiting",
-  }).returning();
+  }).$returningId();
+
+  const [newCase] = await db.select().from(waitingCasesTable).where(eq(waitingCasesTable.id, newCaseId));
 
   await logAction("إضافة لقائمة الانتظار", "waiting_case", newCase.id, newCase.patientName, `القسم: ${newCase.section}`, getCurrentUserName(req.headers.cookie));
 
@@ -80,22 +83,33 @@ router.patch("/waiting-cases/:id", async (req, res): Promise<void> => {
     return;
   }
 
+  // Verify existence before updating
+  const [existing] = await db
+    .select({ id: waitingCasesTable.id })
+    .from(waitingCasesTable)
+    .where(eq(waitingCasesTable.id, params.data.id));
+
+  if (!existing) {
+    res.status(404).json({ error: "الحالة غير موجودة" });
+    return;
+  }
+
   const extraData = req.body as any;
   const updates: Record<string, unknown> = { ...body.data, updatedAt: new Date() };
   for (const key of ["medicalReport", "medicalReportName", "medicalReportData"]) {
     if (extraData[key] !== undefined) updates[key] = extraData[key] || null;
   }
 
-  const [updated] = await db
+  // MySQL does not support .returning() — update then re-select
+  await db
     .update(waitingCasesTable)
     .set(updates)
-    .where(eq(waitingCasesTable.id, params.data.id))
-    .returning();
+    .where(eq(waitingCasesTable.id, params.data.id));
 
-  if (!updated) {
-    res.status(404).json({ error: "الحالة غير موجودة" });
-    return;
-  }
+  const [updated] = await db
+    .select()
+    .from(waitingCasesTable)
+    .where(eq(waitingCasesTable.id, params.data.id));
 
   // If admitting with a specific department, create a medical case
   if (body.data.status === "admitted" && extraData.admitToDepartmentId) {
@@ -138,15 +152,18 @@ router.delete("/waiting-cases/:id", async (req, res): Promise<void> => {
     return;
   }
 
-  const [deleted] = await db
-    .delete(waitingCasesTable)
-    .where(eq(waitingCasesTable.id, params.data.id))
-    .returning();
+  // MySQL does not support .returning() — select first, then delete
+  const [toDelete] = await db
+    .select({ id: waitingCasesTable.id })
+    .from(waitingCasesTable)
+    .where(eq(waitingCasesTable.id, params.data.id));
 
-  if (!deleted) {
+  if (!toDelete) {
     res.status(404).json({ error: "الحالة غير موجودة" });
     return;
   }
+
+  await db.delete(waitingCasesTable).where(eq(waitingCasesTable.id, params.data.id));
 
   res.json({ success: true });
 });

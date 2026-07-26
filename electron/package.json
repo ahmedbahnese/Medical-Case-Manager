@@ -6,6 +6,7 @@
   "scripts": {
     "start": "electron .",
     "build-win": "electron-builder --win",
+    "build-installer": "electron-builder --win nsis",
     "build-portable": "electron-builder --win portable"
   },
   "dependencies": {},
@@ -15,17 +16,15 @@
   },
   "build": {
     "appId": "com.bsch.hospital",
-    "productName": "BSCH - نظام إدارة الحالات الطبية",
+    "productName": "BSCH",
+    "copyright": "مستشفى الأطفال التخصصي بالبحيرة",
     "directories": {
       "output": "dist-electron"
     },
     "files": [
       "main.js",
       "preload.js",
-      "error.html",
-      "../artifacts/api-server/dist/**",
-      "../artifacts/bsch/dist/public/**",
-      "../node_modules/**"
+      "error.html"
     ],
     "extraResources": [
       {
@@ -39,17 +38,23 @@
     ],
     "win": {
       "target": [
-        { "target": "nsis", "arch": ["x64"] },
+        { "target": "nsis",     "arch": ["x64"] },
         { "target": "portable", "arch": ["x64"] }
       ],
-      "icon": "../artifacts/bsch/public/favicon.svg"
+      "requestedExecutionLevel": "asInvoker"
     },
     "nsis": {
       "oneClick": false,
       "allowToChangeInstallationDirectory": true,
       "createDesktopShortcut": true,
       "createStartMenuShortcut": true,
-      "shortcutName": "BSCH"
-    }
+      "shortcutName": "BSCH",
+      "deleteAppDataOnUninstall": false,
+      "license": null
+    },
+    "portable": {
+      "artifactName": "BSCH-Portable-${version}.exe"
+    },
+    "artifactName": "BSCH-Setup-${version}.exe"
   }
 }

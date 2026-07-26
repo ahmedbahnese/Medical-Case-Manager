@@ -1,15 +1,16 @@
-import { pgTable, serial, text, integer, pgEnum, timestamp } from "drizzle-orm/pg-core";
+import { mysqlTable, int, text, timestamp, mysqlEnum } from "drizzle-orm/mysql-core";
 import { createInsertSchema } from "drizzle-zod";
 import { z } from "zod/v4";
 
-export const caseTypeEnum = pgEnum("case_type", [
+// ─── Enum value arrays (exported for runtime validation) ───────────────────
+export const caseTypeValues = [
   "intensive_care_high",
   "intensive_care_medium",
   "picu",
   "incubator",
-]);
+] as const;
 
-export const artificialRespirationEnum = pgEnum("artificial_respiration", [
+export const artificialRespirationValues = [
   "high_frequency",
   "vent",
   "cpap",
@@ -17,26 +18,26 @@ export const artificialRespirationEnum = pgEnum("artificial_respiration", [
   "standby",
   "box",
   "no",
-]);
+] as const;
 
-export const caseStatusEnum = pgEnum("case_status", [
+export const caseStatusValues = [
   "active",
   "recovering",
   "discharged",
   "critical",
-]);
+] as const;
 
-export const dischargeReasonEnum = pgEnum("discharge_reason", [
+export const dischargeReasonValues = [
   "improved",
   "request",
   "transferred",
   "death",
-]);
+] as const;
 
-export const medicalCasesTable = pgTable("medical_cases", {
-  id: serial("id").primaryKey(),
+export const medicalCasesTable = mysqlTable("medical_cases", {
+  id: int("id").autoincrement().primaryKey(),
   patientName: text("patient_name").notNull(),
-  departmentId: integer("department_id").notNull(),
+  departmentId: int("department_id").notNull(),
   age: text("age"),
   diagnosis: text("diagnosis"),
   symptoms: text("symptoms"),
@@ -46,13 +47,13 @@ export const medicalCasesTable = pgTable("medical_cases", {
   parentPhone: text("parent_phone"),
   nationalId: text("national_id"),
   fileNumber: text("file_number"),
-  caseType: caseTypeEnum("case_type").notNull().default("intensive_care_high"),
-  artificialRespiration: artificialRespirationEnum("artificial_respiration").notNull().default("no"),
-  status: caseStatusEnum("status").notNull().default("active"),
+  caseType: mysqlEnum("case_type", caseTypeValues).notNull().default("intensive_care_high"),
+  artificialRespiration: mysqlEnum("artificial_respiration", artificialRespirationValues).notNull().default("no"),
+  status: mysqlEnum("status", caseStatusValues).notNull().default("active"),
   mobe: text("mobe"),
   ventilationStartDate: timestamp("ventilation_start_date"),
   ventilationEndDate: timestamp("ventilation_end_date"),
-  dischargeReason: dischargeReasonEnum("discharge_reason"),
+  dischargeReason: mysqlEnum("discharge_reason", dischargeReasonValues),
   admissionDate: timestamp("admission_date").defaultNow().notNull(),
   dischargeDate: timestamp("discharge_date"),
   createdAt: timestamp("created_at").defaultNow().notNull(),

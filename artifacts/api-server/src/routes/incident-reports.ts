@@ -29,7 +29,8 @@ router.post("/incident-reports", async (req, res): Promise<void> => {
     return;
   }
 
-  const [report] = await db.insert(incidentReportsTable).values({
+  // MySQL does not support .returning() — use $returningId() + SELECT
+  const [{ id: newReportId }] = await db.insert(incidentReportsTable).values({
     incidentType,
     incidentLocation,
     reportDate: new Date(reportDate),
@@ -39,7 +40,9 @@ router.post("/incident-reports", async (req, res): Promise<void> => {
     totalDeaths: totalDeaths ?? 0,
     hospitalsTransferredTo: hospitalsTransferredTo ?? null,
     casesJson: JSON.stringify(cases ?? []),
-  }).returning();
+  }).$returningId();
+
+  const [report] = await db.select().from(incidentReportsTable).where(eq(incidentReportsTable.id, newReportId));
 
   // Auto-save each case as a waiting case in reception
   const casesArr: any[] = cases ?? [];
@@ -66,6 +69,14 @@ router.post("/incident-reports", async (req, res): Promise<void> => {
 
 router.patch("/incident-reports/:id", async (req, res): Promise<void> => {
   const id = parseInt(req.params.id as string, 10);
+
+  // Verify existence
+  const [existing] = await db.select({ id: incidentReportsTable.id }).from(incidentReportsTable).where(eq(incidentReportsTable.id, id));
+  if (!existing) {
+    res.status(404).json({ error: "التقرير غير موجود" });
+    return;
+  }
+
   const { incidentType, incidentLocation, reportDate, reportDay, reportTime, totalInjured, totalDeaths, hospitalsTransferredTo, cases } = req.body as any;
 
   const updates: Record<string, unknown> = { updatedAt: new Date() };
@@ -79,23 +90,27 @@ router.patch("/incident-reports/:id", async (req, res): Promise<void> => {
   if (hospitalsTransferredTo !== undefined) updates.hospitalsTransferredTo = hospitalsTransferredTo;
   if (cases !== undefined) updates.casesJson = JSON.stringify(cases);
 
-  const [updated] = await db.update(incidentReportsTable).set(updates).where(eq(incidentReportsTable.id, id)).returning();
-  if (!updated) {
-    res.status(404).json({ error: "التقرير غير موجود" });
-    return;
-  }
+  // MySQL does not support .returning() — update then re-select
+  await db.update(incidentReportsTable).set(updates).where(eq(incidentReportsTable.id, id));
+  const [updated] = await db.select().from(incidentReportsTable).where(eq(incidentReportsTable.id, id));
+
   res.json({ ...updated, cases: JSON.parse(updated.casesJson ?? "[]") });
   await logAction("تعديل تقرير حادث", "incident_report", updated.id, updated.incidentType, null, getCurrentUserName(req.headers.cookie));
 });
 
 router.delete("/incident-reports/:id", async (req, res): Promise<void> => {
   const id = parseInt(req.params.id as string, 10);
-  const [deleted] = await db.delete(incidentReportsTable).where(eq(incidentReportsTable.id, id)).returning();
-  if (!deleted) {
+
+  // MySQL does not support .returning() — select first, then delete
+  const [toDelete] = await db.select().from(incidentReportsTable).where(eq(incidentReportsTable.id, id));
+  if (!toDelete) {
     res.status(404).json({ error: "التقرير غير موجود" });
     return;
   }
-  await logAction("حذف تقرير حادث", "incident_report", deleted.id, deleted.incidentType, "تم حذف التقرير", getCurrentUserName(req.headers.cookie));
+
+  await db.delete(incidentReportsTable).where(eq(incidentReportsTable.id, id));
+
+  await logAction("حذف تقرير حادث", "incident_report", toDelete.id, toDelete.incidentType, "تم حذف التقرير", getCurrentUserName(req.headers.cookie));
   res.json({ success: true });
 });
 

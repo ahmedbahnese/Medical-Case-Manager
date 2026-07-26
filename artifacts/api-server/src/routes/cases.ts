@@ -1,5 +1,5 @@
 import { Router, type IRouter } from "express";
-import { eq, and, ilike, ne, SQL } from "drizzle-orm";
+import { eq, and, like, ne, SQL } from "drizzle-orm";
 import { db, medicalCasesTable, departmentsTable } from "@workspace/db";
 import {
   GetCasesQueryParams,
@@ -66,14 +66,15 @@ router.get("/cases", async (req, res): Promise<void> => {
   if (query.data.artificialRespiration != null) {
     conditions.push(eq(medicalCasesTable.artificialRespiration, query.data.artificialRespiration as any));
   }
+  // MySQL LIKE is case-insensitive by default (utf8mb4_unicode_ci)
   if (query.data.patientName) {
-    conditions.push(ilike(medicalCasesTable.patientName, `%${query.data.patientName}%`));
+    conditions.push(like(medicalCasesTable.patientName, `%${query.data.patientName}%`));
   }
   if (query.data.nationalId) {
-    conditions.push(ilike(medicalCasesTable.nationalId, `%${query.data.nationalId}%`));
+    conditions.push(like(medicalCasesTable.nationalId, `%${query.data.nationalId}%`));
   }
   if (query.data.fileNumber) {
-    conditions.push(ilike(medicalCasesTable.fileNumber, `%${query.data.fileNumber}%`));
+    conditions.push(like(medicalCasesTable.fileNumber, `%${query.data.fileNumber}%`));
   }
 
   const cases = await db
@@ -104,7 +105,8 @@ router.post("/cases", async (req, res): Promise<void> => {
 
   const extraData = req.body as any;
 
-  const [newCase] = await db.insert(medicalCasesTable).values({
+  // MySQL does not support .returning() — use $returningId() + SELECT
+  const [{ id: newCaseId }] = await db.insert(medicalCasesTable).values({
     patientName,
     departmentId,
     age: age ?? null,
@@ -123,7 +125,9 @@ router.post("/cases", async (req, res): Promise<void> => {
     ventilationStartDate: extraData.ventilationStartDate ? new Date(extraData.ventilationStartDate) : null,
     ventilationEndDate: extraData.ventilationEndDate ? new Date(extraData.ventilationEndDate) : null,
     admissionDate: extraData.admissionDate ? new Date(extraData.admissionDate) : new Date(),
-  }).returning();
+  }).$returningId();
+
+  const [newCase] = await db.select().from(medicalCasesTable).where(eq(medicalCasesTable.id, newCaseId));
 
   await logAction("إضافة حالة", "case", newCase.id, patientName, `تم إضافة حالة جديدة للقسم رقم ${departmentId}`, getCurrentUserName(req.headers.cookie));
 
@@ -180,20 +184,17 @@ function parseArabicCasesText(text: string, defaultDeptId: number | null | undef
   const lines = text.split(/\n+/).map((l) => l.trim()).filter(Boolean);
   let currentCase: ParsedCase | null = null;
 
-  // Strip Arabic/Western digit prefixes (١-, ١., 1-, 1.) from a line
   const stripPrefix = (l: string) => l.replace(/^[\u0660-\u0669\d]+[\.\-\)،\s]*/, "").trim();
 
   for (const line of lines) {
     const stripped = stripPrefix(line);
 
-    // Structured field detection
     const phoneMatch = line.match(/(?:هاتف|تليفون|رقم|موبايل|تلفون|phone)[:\s]*([0-9+\-\s]{8,15})/i)
                     ?? line.match(/\b(01[0-9]{9})\b/);
     const ageMatch = line.match(/(?:العمر|عمره|عمرها|عمر|سن|السن|age)[:\s]*([^\n,،]{1,25})/i);
     const diagMatch = line.match(/(?:التشخيص|تشخيص|الحالة|مرض|dx|diagnosis)[:\s]*([^\n]{3,150})/i);
     const natIdMatch = line.match(/(?:قومي|رقم قومي|هوية)[:\s]*(\d{10,14})/i);
 
-    // Respiration — each mode separately (order matters)
     const respHF     = /(?:تردد عالي|عالي التردد|HFO|HFOV)\b/i.test(line);
     const respVent   = /(?:فنت|تهوية آلية|\bVent\b|\bMV\b|\bPCV\b)/i.test(line);
     const respHFNC   = /\bHFNC\b/i.test(line);
@@ -202,13 +203,11 @@ function parseArabicCasesText(text: string, defaultDeptId: number | null | undef
     const respStandby= /(?:استاندباي|استعداد|\bstandby\b)/i.test(line);
     const hasResp = respHF || respVent || respHFNC || respCpap || respBox || respStandby;
 
-    // Check if line looks like a name (Arabic, length < 70, no structured markers)
     const looksArabic = /[\u0600-\u06FF]/.test(stripped);
     const isNameLine = looksArabic
       && !phoneMatch && !ageMatch && !diagMatch && !natIdMatch && !hasResp
       && stripped.length >= 3 && stripped.length < 70;
 
-    // Also detect "Name، age" pattern on same line (e.g. "محمد احمد، 3 أيام")
     const inlinAgeMatch = isNameLine
       ? stripped.match(/^(.{3,40})[،,]\s*(.{2,20})$/)
       : null;
@@ -235,7 +234,7 @@ function parseArabicCasesText(text: string, defaultDeptId: number | null | undef
       if (diagMatch && !currentCase.diagnosis) currentCase.diagnosis = diagMatch[1].trim();
       if (natIdMatch && !currentCase.nationalId) currentCase.nationalId = natIdMatch[1].trim();
       if (hasResp && !currentCase.artificialRespiration) {
-        if (respHF)      currentCase.artificialRespiration = "high_frequency";
+        if (respHF)           currentCase.artificialRespiration = "high_frequency";
         else if (respVent)    currentCase.artificialRespiration = "vent";
         else if (respHFNC)   currentCase.artificialRespiration = "hfnc";
         else if (respCpap)   currentCase.artificialRespiration = "cpap";
@@ -247,7 +246,6 @@ function parseArabicCasesText(text: string, defaultDeptId: number | null | undef
 
   if (currentCase) results.push(currentCase);
 
-  // Fallback: treat whole block as one patient
   if (results.length === 0 && text.trim().length > 0) {
     const firstLine = lines[0];
     if (firstLine) {
@@ -299,6 +297,17 @@ router.patch("/cases/:id", async (req, res): Promise<void> => {
     return;
   }
 
+  // Verify the case exists before updating
+  const [existing] = await db
+    .select({ id: medicalCasesTable.id })
+    .from(medicalCasesTable)
+    .where(eq(medicalCasesTable.id, params.data.id));
+
+  if (!existing) {
+    res.status(404).json({ error: "الحالة غير موجودة" });
+    return;
+  }
+
   const extraData = req.body as any;
   const updates: Record<string, unknown> = {
     ...body.data,
@@ -313,7 +322,6 @@ router.patch("/cases/:id", async (req, res): Promise<void> => {
     }
   }
 
-  // Handle extra fields not in the Zod schema
   if (extraData.mobe !== undefined) updates.mobe = extraData.mobe;
   if (extraData.ventilationStartDate !== undefined) {
     updates.ventilationStartDate = extraData.ventilationStartDate ? new Date(extraData.ventilationStartDate) : null;
@@ -329,23 +337,22 @@ router.patch("/cases/:id", async (req, res): Promise<void> => {
     updates.departmentId = parseInt(extraData.departmentId, 10);
   }
 
-  // If discharging, set dischargeDate automatically
   if (body.data.status === "discharged" && !extraData.dischargeDate) {
     updates.dischargeDate = new Date();
   } else if (extraData.dischargeDate !== undefined) {
     updates.dischargeDate = extraData.dischargeDate ? new Date(extraData.dischargeDate) : null;
   }
 
-  const [updated] = await db
+  // MySQL does not support .returning() — update then re-select
+  await db
     .update(medicalCasesTable)
     .set(updates)
-    .where(eq(medicalCasesTable.id, params.data.id))
-    .returning();
+    .where(eq(medicalCasesTable.id, params.data.id));
 
-  if (!updated) {
-    res.status(404).json({ error: "الحالة غير موجودة" });
-    return;
-  }
+  const [updated] = await db
+    .select()
+    .from(medicalCasesTable)
+    .where(eq(medicalCasesTable.id, params.data.id));
 
   const action = body.data.status === "discharged" ? "تسجيل خروج" : "تعديل حالة";
   await logAction(action, "case", updated.id, updated.patientName, JSON.stringify(body.data), getCurrentUserName(req.headers.cookie));
@@ -362,17 +369,20 @@ router.delete("/cases/:id", async (req, res): Promise<void> => {
     return;
   }
 
-  const [deleted] = await db
-    .delete(medicalCasesTable)
-    .where(eq(medicalCasesTable.id, params.data.id))
-    .returning();
+  // MySQL does not support .returning() — select first, then delete
+  const [toDelete] = await db
+    .select()
+    .from(medicalCasesTable)
+    .where(eq(medicalCasesTable.id, params.data.id));
 
-  if (!deleted) {
+  if (!toDelete) {
     res.status(404).json({ error: "الحالة غير موجودة" });
     return;
   }
 
-  await logAction("حذف حالة", "case", deleted.id, deleted.patientName, "تم حذف الملف نهائياً", getCurrentUserName(req.headers.cookie));
+  await db.delete(medicalCasesTable).where(eq(medicalCasesTable.id, params.data.id));
+
+  await logAction("حذف حالة", "case", toDelete.id, toDelete.patientName, "تم حذف الملف نهائياً", getCurrentUserName(req.headers.cookie));
 
   res.json({ success: true });
 });

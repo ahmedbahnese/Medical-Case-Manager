@@ -1,15 +1,15 @@
-import { pgTable, serial, text, boolean, pgEnum, timestamp } from "drizzle-orm/pg-core";
+import { mysqlTable, int, text, boolean, timestamp, mysqlEnum } from "drizzle-orm/mysql-core";
 import { createInsertSchema } from "drizzle-zod";
 import { z } from "zod/v4";
 
-export const waitingCareTypeEnum = pgEnum("waiting_care_type", [
+export const waitingCareTypeValues = [
   "intensive_care_high",
   "intensive_care_medium",
   "picu",
   "incubator",
-]);
+] as const;
 
-export const waitingRespirationEnum = pgEnum("waiting_respiration", [
+export const waitingRespirationValues = [
   "high_frequency",
   "vent",
   "cpap",
@@ -17,14 +17,13 @@ export const waitingRespirationEnum = pgEnum("waiting_respiration", [
   "standby",
   "box",
   "no",
-]);
+] as const;
 
-export const waitingSectionEnum = pgEnum("waiting_section", ["servo", "reception"]);
+export const waitingSectionValues = ["servo", "reception"] as const;
+export const waitingStatusValues = ["waiting", "admitted", "cancelled"] as const;
 
-export const waitingStatusEnum = pgEnum("waiting_status", ["waiting", "admitted", "cancelled"]);
-
-export const waitingCasesTable = pgTable("waiting_cases", {
-  id: serial("id").primaryKey(),
+export const waitingCasesTable = mysqlTable("waiting_cases", {
+  id: int("id").autoincrement().primaryKey(),
   patientName: text("patient_name").notNull(),
   age: text("age"),
   diagnosis: text("diagnosis"),
@@ -33,12 +32,12 @@ export const waitingCasesTable = pgTable("waiting_cases", {
   medicalReport: text("medical_report"),
   medicalReportName: text("medical_report_name"),
   medicalReportData: text("medical_report_data"),
-  careType: waitingCareTypeEnum("care_type").notNull(),
+  careType: mysqlEnum("care_type", waitingCareTypeValues).notNull(),
   centralRoomRequired: boolean("central_room_required").notNull().default(false),
   centralRoomCode: text("central_room_code"),
-  artificialRespiration: waitingRespirationEnum("artificial_respiration").notNull().default("no"),
-  section: waitingSectionEnum("section").notNull().default("reception"),
-  status: waitingStatusEnum("status").notNull().default("waiting"),
+  artificialRespiration: mysqlEnum("artificial_respiration", waitingRespirationValues).notNull().default("no"),
+  section: mysqlEnum("section", waitingSectionValues).notNull().default("reception"),
+  status: mysqlEnum("status", waitingStatusValues).notNull().default("waiting"),
   createdAt: timestamp("created_at").defaultNow().notNull(),
   updatedAt: timestamp("updated_at").defaultNow().notNull(),
 });

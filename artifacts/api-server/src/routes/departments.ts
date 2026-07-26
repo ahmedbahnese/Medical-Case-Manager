@@ -10,7 +10,6 @@ const router: IRouter = Router();
 router.get("/departments", async (req, res): Promise<void> => {
   const departments = await db.select().from(departmentsTable).orderBy(departmentsTable.id);
 
-  // Get active cases count per department
   const activeCounts = await db
     .select({
       departmentId: medicalCasesTable.departmentId,
@@ -74,7 +73,9 @@ router.post("/departments", async (req, res): Promise<void> => {
     res.status(400).json({ error: "name, code, departmentType مطلوبة" });
     return;
   }
-  const [dept] = await db.insert(departmentsTable).values({
+
+  // MySQL does not support .returning() — use $returningId() + SELECT
+  const [{ id: newDeptId }] = await db.insert(departmentsTable).values({
     name,
     code: code.toUpperCase(),
     description: description ?? null,
@@ -83,7 +84,10 @@ router.post("/departments", async (req, res): Promise<void> => {
     reportFieldsJson: typeof reportFieldsJson === "string"
       ? reportFieldsJson
       : JSON.stringify(Array.isArray(reportFields) ? reportFields : []),
-  }).returning();
+  }).$returningId();
+
+  const [dept] = await db.select().from(departmentsTable).where(eq(departmentsTable.id, newDeptId));
+
   await logAction("إضافة قسم", "department", dept.id, dept.name, `كود: ${dept.code}`, getCurrentUserName(req.headers.cookie));
   res.status(201).json(dept);
 });
@@ -91,6 +95,11 @@ router.post("/departments", async (req, res): Promise<void> => {
 router.patch("/departments/:id", async (req, res): Promise<void> => {
   const id = parseInt(req.params.id as string, 10);
   if (isNaN(id)) { res.status(400).json({ error: "id غير صالح" }); return; }
+
+  // Verify the department exists
+  const [existing] = await db.select({ id: departmentsTable.id }).from(departmentsTable).where(eq(departmentsTable.id, id));
+  if (!existing) { res.status(404).json({ error: "القسم غير موجود" }); return; }
+
   const { name, code, description, capacity, departmentType, reportFields, reportFieldsJson } = req.body as any;
   const updates: Record<string, any> = { updatedAt: new Date() };
   if (name !== undefined) updates.name = name;
@@ -100,8 +109,11 @@ router.patch("/departments/:id", async (req, res): Promise<void> => {
   if (departmentType !== undefined) updates.departmentType = departmentType;
   if (reportFieldsJson !== undefined) updates.reportFieldsJson = reportFieldsJson;
   else if (reportFields !== undefined) updates.reportFieldsJson = JSON.stringify(Array.isArray(reportFields) ? reportFields : []);
-  const [updated] = await db.update(departmentsTable).set(updates).where(eq(departmentsTable.id, id)).returning();
-  if (!updated) { res.status(404).json({ error: "القسم غير موجود" }); return; }
+
+  // MySQL does not support .returning() — update then re-select
+  await db.update(departmentsTable).set(updates).where(eq(departmentsTable.id, id));
+  const [updated] = await db.select().from(departmentsTable).where(eq(departmentsTable.id, id));
+
   await logAction("تعديل قسم", "department", updated.id, updated.name, null, getCurrentUserName(req.headers.cookie));
   res.json(updated);
 });
@@ -109,7 +121,7 @@ router.patch("/departments/:id", async (req, res): Promise<void> => {
 router.delete("/departments/:id", async (req, res): Promise<void> => {
   const id = parseInt(req.params.id as string, 10);
   if (isNaN(id)) { res.status(400).json({ error: "id غير صالح" }); return; }
-  // Prevent deletion if dept has active cases
+
   const [{ count: activeCount }] = await db
     .select({ count: count() })
     .from(medicalCasesTable)
@@ -118,9 +130,14 @@ router.delete("/departments/:id", async (req, res): Promise<void> => {
     res.status(409).json({ error: "لا يمكن حذف القسم — يحتوي على حالات نشطة" });
     return;
   }
-  const [deleted] = await db.delete(departmentsTable).where(eq(departmentsTable.id, id)).returning();
-  if (!deleted) { res.status(404).json({ error: "القسم غير موجود" }); return; }
-  await logAction("حذف قسم", "department", deleted.id, deleted.name, null, getCurrentUserName(req.headers.cookie));
+
+  // MySQL does not support .returning() — select first, then delete
+  const [toDelete] = await db.select().from(departmentsTable).where(eq(departmentsTable.id, id));
+  if (!toDelete) { res.status(404).json({ error: "القسم غير موجود" }); return; }
+
+  await db.delete(departmentsTable).where(eq(departmentsTable.id, id));
+
+  await logAction("حذف قسم", "department", toDelete.id, toDelete.name, null, getCurrentUserName(req.headers.cookie));
   res.json({ success: true });
 });
 

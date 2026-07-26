@@ -1,10 +1,10 @@
-import { pgTable, serial, text, integer, timestamp } from "drizzle-orm/pg-core";
+import { mysqlTable, int, text, timestamp } from "drizzle-orm/mysql-core";
 
-export const auditLogsTable = pgTable("audit_logs", {
-  id: serial("id").primaryKey(),
+export const auditLogsTable = mysqlTable("audit_logs", {
+  id: int("id").autoincrement().primaryKey(),
   action: text("action").notNull(),
   entityType: text("entity_type").notNull(),
-  entityId: integer("entity_id"),
+  entityId: int("entity_id"),
   entityName: text("entity_name"),
   details: text("details"),
   performedBy: text("performed_by").default("المستخدم"),

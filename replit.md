@@ -1,34 +1,20 @@
 # BSCH — نظام إدارة الحالات الطبية
+# Hospital Case Management System — Windows Desktop Edition
 
-نظام متكامل لإدارة حالات المرضى في غرف الحضانة والعناية المركزة بمستشفى الأطفال المتخصص بالبحيرة.
-
----
-
-## تشغيل النظام
-
-| الخدمة | الأمر |
-|---|---|
-| API Server (dev) | `PORT=8080 DATABASE_URL=... pnpm --filter @workspace/api-server run dev` |
-| Frontend (dev) | `PORT=18429 BASE_PATH=/ pnpm --filter @workspace/bsch run dev` |
-| تطبيق مخطط DB | `pnpm --filter @workspace/db run push` |
-| Typecheck كامل | `pnpm run typecheck` |
-| Build كامل | `pnpm run build` |
-| إعادة توليد API hooks | `pnpm --filter @workspace/api-spec run codegen` |
-
-> **متطلب:** يجب ضبط `DATABASE_URL` (Postgres connection string) قبل تشغيل `db push`.
+نظام متكامل لإدارة حالات المرضى في غرف الحضانة والعناية المركزة
+مستشفى الأطفال التخصصي بالبحيرة — إصدار Windows Desktop (Electron)
 
 ---
 
 ## المكدس التقني (Stack)
 
-- **Monorepo:** pnpm workspaces، Node.js 24، TypeScript 5.9
-- **Backend:** Express 5
-- **Database:** PostgreSQL + Drizzle ORM
+- **Monorepo:** pnpm workspaces، Node.js 20، TypeScript 5.9
+- **Backend:** Express 5 + Drizzle ORM
+- **Database:** **MySQL 8** (تم التحويل من PostgreSQL)
 - **Validation:** Zod (`zod/v4`)، `drizzle-zod`
-- **Frontend:** React + Vite + Tailwind CSS + shadcn/ui
-- **Toast notifications:** Sonner (`<Toaster>` في `layout.tsx`)
+- **Frontend:** React 19 + Vite + Tailwind CSS 4 + shadcn/ui
+- **Desktop Packaging:** Electron 32 + electron-builder (NSIS installer + Portable)
 - **Routing:** Wouter
-- **API codegen:** Orval (OpenAPI → React Query hooks + Zod schemas)
 
 ---
 
@@ -36,107 +22,86 @@
 
 ```
 artifacts/
-  api-server/          ← Express 5 backend (منفذ 8080)
+  api-server/          ← Express 5 backend
     src/routes/        ← جميع مسارات API
-  bsch/                ← React + Vite frontend (منفذ 18429)
-    src/
-      pages/           ← جميع صفحات التطبيق (14 صفحة)
-      components/      ← مكونات مشتركة (layout, confirm-dialog, ui/...)
-      lib/             ← api.ts (fetch helpers)، constants.ts (labels/translate)
+    src/lib/db-init.ts ← إنشاء الجداول + بيانات أولية (MySQL-compatible)
+    build.mjs          ← esbuild bundler (يُدمج mysql2 في الحزمة)
+  bsch/                ← React + Vite frontend
 lib/
-  db/src/schema/       ← مخططات Drizzle لقاعدة البيانات
-  api-client-react/    ← React Query hooks (مولّدة بـ Orval)
-  api-zod/             ← Zod schemas (مولّدة بـ Orval)
-  api-spec/            ← OpenAPI spec
+  db/src/schema/       ← مخططات Drizzle (mysql-core)
+electron/
+  main.js              ← Electron main process (يُشغّل الخادم تلقائياً)
+  bsch.config.example.json ← مثال على إعدادات قاعدة البيانات
+docs/
+  WINDOWS-SETUP.md     ← دليل التثبيت الكامل على Windows
 ```
 
 ---
 
-## مخطط قاعدة البيانات
+## بناء تطبيق Windows
 
-### جداول قائمة (محدَّثة)
+```bash
+# 1. تثبيت الاعتمادات
+pnpm install
 
-| الجدول | التعديلات المضافة |
-|---|---|
-| `medical_cases` | `mobe` (text)، `ventilation_start_date`، `ventilation_end_date`، `discharge_reason` (enum: improved/request/transferred/death) |
+# 2. بناء الخادم والواجهة (إنتاج)
+pnpm build:prod
 
-### جداول جديدة
-
-| الجدول | الوصف |
-|---|---|
-| `settings` | مفاتيح/قيم لإعدادات المستشفى (اسم، شعار base64، كلمة المرور) |
-| `incident_reports` | تقارير الحوادث مع بيانات الحالات (JSON blob في `cases_json`) |
-| `audit_logs` | سجل كل إجراء يقوم به المستخدم في النظام |
-
-> **تنبيه:** بعد إعداد `DATABASE_URL` يجب تشغيل:
-> ```
-> pnpm --filter @workspace/db run push
-> ```
+# 3. بناء مُثبِّت Windows
+cd electron
+npm install
+npm run build-win
+# → electron/dist-electron/BSCH-Setup-1.0.0.exe  (مثبّت NSIS)
+# → electron/dist-electron/BSCH-Portable-1.0.0.exe  (محمول)
+```
 
 ---
 
-## مسارات API
+## إعداد قاعدة البيانات (MySQL)
 
-### قديمة (محدَّثة)
+متغيرات البيئة المطلوبة (يُعينها Electron تلقائياً من bsch.config.json):
 
-| المسار | التحديثات |
-|---|---|
-| `GET/POST/PATCH /api/cases` | حقول جديدة (mobe، ventilationDates، dischargeReason)، كتابة audit log، تدفق الصرف |
-| `GET/POST/PATCH /api/waiting-cases` | تدفق قبول كامل (اختيار قسم → إنشاء حالة طبية)، سبب الخروج |
-| `GET/DELETE /api/backups/:id` | تحميل backup كـ JSON file، حذف backup |
+| المتغير | الافتراضي | الوصف |
+|--------|-----------|-------|
+| `DB_HOST` | `127.0.0.1` | عنوان MySQL |
+| `DB_PORT` | `3306` | منفذ MySQL |
+| `DB_USER` | `bsch_user` | اسم المستخدم |
+| `DB_PASSWORD` | `bsch_password` | كلمة المرور |
+| `DB_NAME` | `bsch_db` | اسم قاعدة البيانات |
 
-### جديدة
+إعداد MySQL (مرة واحدة):
+```sql
+CREATE DATABASE bsch_db CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;
+CREATE USER 'bsch_user'@'localhost' IDENTIFIED BY 'strong_password';
+GRANT ALL PRIVILEGES ON bsch_db.* TO 'bsch_user'@'localhost';
+FLUSH PRIVILEGES;
+```
 
-| المسار | الوصف |
-|---|---|
-| `GET /api/settings` | جلب جميع الإعدادات |
-| `POST /api/settings` | تحديث إعداد (يتطلب كلمة مرور) |
-| `POST /api/settings/verify-password` | التحقق من كلمة مرور الإعدادات |
-| `GET/POST /api/incident-reports` | قائمة + إنشاء تقرير حادث |
-| `GET/PATCH/DELETE /api/incident-reports/:id` | عرض + تعديل + حذف تقرير |
-| `GET /api/audit-logs` | سجل العمليات (محدود بـ limit query param) |
-
----
-
-## صفحات الواجهة الأمامية
-
-| الصفحة | المسار | الوصف |
-|---|---|---|
-| تسجيل الدخول | `/` | كلمة مرور المؤسس |
-| لوحة التحكم | `/dashboard` | KPI cards، بطاقات الأقسام، CSV export، font-size slider |
-| إضافة حالة | `/add-case` | اختيار: إدخال يدوي أو استيراد ذكي |
-| استيراد جماعي | `/bulk-import` | 3 خطوات: إدخال → مراجعة (جدول قابل للتعديل) → تم |
-| حالات الانتظار | `/waiting-cases` | تبويبات سيرفو/استقبال، قبول مع اختيار قسم |
-| تفاصيل الحالة | `/case/:id` | تعديل inline، تصريح مع تأكيد، حذف مع تأكيد |
-| البحث | `/search` | بحث بالاسم/رقم الملف/رقم قومي، فلتر قسم |
-| التقرير اليومي | `/print-reports` | وقت/تاريخ قابل للتعديل، فلتر قسم، قوائم انتظار، طباعة |
-| تقرير الإشغال | `/occupancy-report` | تاريخ/وقت قابل للتعديل، جدول كامل، شعار في الهيدر |
-| النسخ الاحتياطية | `/backup` | قائمة + تحميل + حذف مع تأكيد |
-| تقرير الحوادث | `/incident-report` | إدخال بيانات + طباعة مطابقة للنموذج Word، يحفظ الحالات في الانتظار |
-| الإعدادات | `/settings` | محمي بكلمة مرور (`@Bahnasy`)، اسم المستشفى، رفع شعار، تغيير الوضع |
-| سجل التصريح | `/discharge-history` | آخر 30 يوم، إعادة قبول خلال 24 ساعة، بحث |
-| سجل العمليات | `/audit-log` | محمي بكلمة مرور، جميع إجراءات النظام |
+ملف الإعداد للتطبيق المثبَّت: `%APPDATA%\BSCH\bsch.config.json`
 
 ---
 
-## قرارات معمارية
+## تشغيل Electron (تطوير)
 
-- **Toast:** تم التبديل من `@radix-ui/react-toast` إلى **Sonner** — `<Toaster>` في `layout.tsx`، الاستخدام: `toast.success()` / `toast.error()`.
-- **Plain fetch بدلاً من codegen:** الـ endpoints الجديدة تستخدم helpers في `lib/api.ts` (`apiGet`, `apiPost`, إلخ) بدلاً من إعادة تشغيل Orval.
-- **كلمة مرور الإعدادات:** `@Bahnasy` (افتراضية، قابلة للتغيير من صفحة الإعدادات).
-- **الشعار:** مخزن كـ base64 في جدول `settings` بالمفتاح `logo`.
-- **`ConfirmDialog`:** مكوّن مشترك يغلّف `AlertDialog` لجميع الإجراءات الإتلافية.
-- **Audit log:** كل `create/update/delete/discharge` في routes يستدعي `logAction()` من `audit-logs.ts`.
+```bash
+pnpm build:prod       # بناء الخادم والواجهة أولاً
+cd electron
+npm install
+npm start             # يفتح نافذة Electron + يشغّل الخادم الداخلي
+```
 
 ---
 
 ## نقاط حادة (Gotchas)
 
-- **`PORT` و`BASE_PATH` إلزاميان:** `vite.config.ts` و`api-server/src/index.ts` يرميان خطأ إن لم يُضبطا.
-- **`db push` قبل التشغيل الإنتاجي:** الجداول الأربعة الجديدة والأعمدة الجديدة على `medical_cases` لا تُنشأ تلقائياً.
-- **Sonner فقط:** لا تستخدم `useToast` من `@/components/ui/use-toast` في الصفحات الجديدة — استورد `toast` من `"sonner"` مباشرة.
-- **`typeof fn()` في TypeScript:** غير مسموح في type positions — استخدم interface مسماة بدلاً منها.
-- **`TS6305` errors:** تحذيرات project-reference لا تؤثر على Vite dev server (يحل المصادر مباشرة).
+- **MySQL بدلاً من PostgreSQL:** كل مخططات Drizzle تستخدم `mysql-core`؛ لا تستخدم `pg-core` أو `pg`.
+- **لا يوجد `.returning()` في MySQL:** كل routes تستخدم نمط `$returningId()` + SELECT بعدها.
+- **لا يوجد `ilike` في MySQL:** الاستعلامات تستخدم `like` (LIKE حساس بالحالة بالافتراضي في utf8mb4).
+- **mysql2 مُدمج في bundle:** لا يحتاج تثبيت منفصل عند التغليف.
+- **`PORT` إلزامي:** `api-server/src/index.ts` يرمي خطأ إن لم يُضبط.
+- **الخادم لا يعمل على Replit:** يتطلب MySQL — التطبيق مُصمَّم للتشغيل على Windows.
+- **icon.ico:** يجب وضع ملف ICO في `electron/` قبل البناء للحصول على أيقونة مخصصة.
+- **`TS6305` errors:** ظاهرة طبيعية — تختفي بعد تشغيل `pnpm run typecheck:libs`.
 
 ---
 
