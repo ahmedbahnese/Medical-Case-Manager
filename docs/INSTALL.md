@@ -2,8 +2,8 @@
 
 ## المتطلبات / Requirements
 
-| Component | Minimum Version | Notes |
-|-----------|----------------|-------|
+| Component | Minimum Version | Download |
+|-----------|----------------|----------|
 | Node.js   | 20 LTS         | https://nodejs.org |
 | pnpm      | 9+             | `npm install -g pnpm` |
 | PostgreSQL | 14+           | https://postgresql.org |
@@ -11,27 +11,28 @@
 
 ---
 
-## تثبيت على Windows / Windows Installation
+## Windows — Step by Step
 
-### 1. تثبيت المتطلبات / Install Prerequisites
+### 1. Install Prerequisites
 
-1. Install **Node.js 20 LTS** from https://nodejs.org
-2. Install **pnpm**: open Command Prompt as Administrator and run:
-   ```
+1. Download and install **Node.js 20 LTS** from https://nodejs.org
+2. Open **Command Prompt as Administrator** and install pnpm:
+   ```cmd
    npm install -g pnpm
    ```
-3. Install **PostgreSQL 16** from https://postgresql.org/download/windows/
-   - Remember the password you set for the `postgres` superuser
-4. Install **Git** from https://git-scm.com
+3. Download and install **PostgreSQL 16** from https://www.postgresql.org/download/windows/
+   - During setup, note the password you set for the `postgres` superuser
+   - Add PostgreSQL `bin` directory to PATH (e.g. `C:\Program Files\PostgreSQL\16\bin`)
+4. Download and install **Git** from https://git-scm.com
 
-### 2. استنساخ المستودع / Clone the Repository
+### 2. Clone the Repository
 
 ```cmd
 git clone https://github.com/ahmedbahnese/Medical-Case-Manager.git
 cd Medical-Case-Manager
 ```
 
-### 3. إنشاء قاعدة البيانات / Create Database
+### 3. Create the Database
 
 Open **pgAdmin** or **psql** and run:
 
@@ -41,28 +42,36 @@ CREATE DATABASE bsch_db OWNER bsch_user;
 GRANT ALL PRIVILEGES ON DATABASE bsch_db TO bsch_user;
 ```
 
-### 4. إعداد المتغيرات البيئية / Environment Setup
+### 4. Configure Environment
 
-Copy the example file and edit it:
 ```cmd
 copy .env.example .env
 notepad .env
 ```
 
-Fill in these values:
-```
+Set these values at minimum:
+
+```env
 DATABASE_URL=postgresql://bsch_user:your_strong_password@localhost:5432/bsch_db
-SESSION_SECRET=any_long_random_string_here
+SESSION_SECRET=any_long_random_string_at_least_32_characters
 PORT=8080
+FOUNDER_PASSWORD=bsch2024
+
+REM Also set these for Backup.bat / Restore.bat:
+DB_HOST=localhost
+DB_PORT=5432
+DB_USER=bsch_user
+DB_PASSWORD=your_strong_password
+DB_NAME=bsch_db
 ```
 
-### 5. تثبيت التبعيات / Install Dependencies
+### 5. Install Dependencies
 
 ```cmd
 pnpm install
 ```
 
-### 6. بناء التطبيق / Build the Application
+### 6. Build the Application
 
 ```cmd
 pnpm --filter @workspace/api-server run build
@@ -73,26 +82,26 @@ set BASE_PATH=/
 pnpm --filter @workspace/bsch run build
 ```
 
-### 7. تشغيل الخادم / Start the Server
-
+Or run both at once:
 ```cmd
-scripts\StartServer.bat
+pnpm run build:prod
 ```
 
-Or manually:
+### 7. Start the Server
+
+Double-click **StartServer.bat** in the project root, or run:
+
 ```cmd
-set PORT=8080
-set NODE_ENV=production
 node --enable-source-maps artifacts\api-server\dist\index.mjs
 ```
 
-Open your browser to: **http://localhost:8080**
+Open your browser: **http://localhost:8080**
 
-Default password: **bsch2024** (change immediately in Settings)
+Default password: **bsch2024** — change immediately in **الإعدادات**
 
 ---
 
-## تثبيت على Linux / Ubuntu Linux Installation
+## Linux / Ubuntu — Step by Step
 
 ### 1. Install Prerequisites
 
@@ -111,7 +120,7 @@ sudo apt install -y postgresql postgresql-contrib
 sudo apt install -y git
 ```
 
-### 2. Database Setup
+### 2. Create the Database
 
 ```bash
 sudo -u postgres psql <<EOF
@@ -130,6 +139,8 @@ cp .env.example .env
 nano .env
 ```
 
+Set `DATABASE_URL`, `SESSION_SECRET`, and `PORT` at minimum.
+
 ### 4. Install & Build
 
 ```bash
@@ -144,23 +155,62 @@ BASE_PATH=/ pnpm --filter @workspace/bsch run build
 PORT=8080 NODE_ENV=production node --enable-source-maps artifacts/api-server/dist/index.mjs
 ```
 
----
-
-## تثبيت بـ Docker / Docker Installation
+To keep the server running after logout, use PM2:
 
 ```bash
-cp .env.example .env
-# Edit .env with your values
-
-docker compose up -d
+npm install -g pm2
+pm2 start "node --enable-source-maps artifacts/api-server/dist/index.mjs" \
+  --name bsch --env production
+pm2 startup
+pm2 save
 ```
-
-Application will be available at **http://localhost:80**
 
 ---
 
-## أول تسجيل دخول / First Login
+## Docker — Quickest Setup
 
-- Open http://localhost:8080 in your browser
-- Enter the default password: **bsch2024**
-- Go to **الإعدادات → كلمة مرور الدخول** and change the password immediately
+Requires Docker Desktop (Windows/Mac) or Docker Engine (Linux).
+
+```bash
+# 1. Configure environment
+cp .env.example .env
+# Edit .env: set DB_PASSWORD and SESSION_SECRET
+
+# 2. Start everything (database + app)
+docker compose up -d --build
+
+# 3. Check logs
+docker compose logs -f app
+```
+
+Application is available at **http://localhost** (port 80).
+
+See `docs/DEPLOYMENT.md` for production Docker configuration.
+
+---
+
+## Opening in VS Code
+
+```bash
+# Clone and open
+git clone https://github.com/ahmedbahnese/Medical-Case-Manager.git
+cd Medical-Case-Manager
+code .
+
+# Install recommended extensions when prompted, then:
+pnpm install
+```
+
+The workspace includes TypeScript IntelliSense across all packages.
+Use the integrated terminal to run build and start commands.
+
+Recommended extensions: ESLint, Prettier, Tailwind CSS IntelliSense, PostgreSQL.
+
+---
+
+## First Login
+
+1. Open **http://localhost:8080** in your browser
+2. Enter the password: **bsch2024**
+3. Go to **الإعدادات → كلمة مرور الدخول** and change the password immediately
+4. Set the hospital name under **الإعدادات → اسم المستشفى**

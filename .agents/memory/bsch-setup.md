@@ -1,6 +1,6 @@
 ---
 name: BSCH project setup
-description: Workflow env vars, key files, routes, and frontend page inventory for BSCH medical case manager
+description: Workflow env vars, key files, routes, frontend page inventory, and Replit-independence changes for BSCH medical case manager
 ---
 
 ## Workflows
@@ -9,6 +9,13 @@ description: Workflow env vars, key files, routes, and frontend page inventory f
 - Old "API Server" and "BSCH Frontend" workflows are failed/inactive — ignore them.
 **Why:** The platform registered artifact-managed workflows which supersede the old imported ones.
 **How to apply:** Always restart/check the artifact-managed workflows, never the legacy ones.
+
+## Replit Independence (completed)
+- Removed `@replit/connectors-sdk` from root `package.json`
+- Removed `@replit/vite-plugin-cartographer` and `@replit/vite-plugin-runtime-error-modal` from `pnpm-workspace.yaml` catalog and from `artifacts/mockup-sandbox/package.json` + `vite.config.ts`
+- Removed all platform-specific esbuild/rollup/tailwind/lightningcss overrides from `pnpm-workspace.yaml` (those were linux-x64-only and broke cross-platform builds)
+- Project now builds cleanly on any platform with `pnpm install && pnpm run build:prod`
+**Why:** User requested the project be fully independent from Replit for use outside (VS Code, Windows).
 
 ## Access Control
 - Founder session: cookie `bsch_session=founder`
@@ -44,3 +51,14 @@ interface NamedPassword {
 
 ## TS Error Baseline
 - TS6305 (api-client-react dist not built) and TS7006 (implicit any) are pre-existing — do not fix unless asked.
+
+## Production Artifacts Generated
+- `SCHEMA.sql` — complete current schema (updated with all columns including report_fields_json, medical_report*)
+- `migrations/001_initial_schema.sql` — full initial schema
+- `migrations/002_add_report_fields_to_departments.sql`
+- `migrations/003_add_medical_report_to_waiting_cases.sql`
+- `StartServer.bat`, `StopServer.bat`, `Backup.bat`, `Restore.bat`, `Update.bat` — root-level Windows scripts
+- `Dockerfile` — multi-stage, non-root user, healthcheck
+- `docker-compose.yml` — requires DB_PASSWORD and SESSION_SECRET from .env
+- `docs/API.md`, `docs/ARCHITECTURE.md`, `docs/DATABASE.md`, `docs/INSTALL.md`, `docs/DEPLOYMENT.md`, `docs/UPDATE.md`, `docs/BACKUP.md` — all updated
+- `.env.example` — complete with all vars including SETTINGS_PASSWORD, LOG_LEVEL, DB_* for bat scripts

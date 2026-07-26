@@ -1,95 +1,69 @@
 -- ============================================================
+-- Migration 001 — Initial Schema
 -- BSCH — نظام إدارة الحالات الطبية
--- Complete Database Schema
--- PostgreSQL 14+
---
--- This file reflects the current production schema including
--- all migrations applied to date. Use this to create a fresh
--- database. For incremental migrations see migrations/
+-- Applied: initial setup
 -- ============================================================
 
 -- ─── Enums ────────────────────────────────────────────────────────────────────
 
-CREATE TYPE department_type AS ENUM (
-  'intensive_care_high',
-  'intensive_care_medium',
-  'picu',
-  'incubator_a',
-  'incubator_b',
-  'incubator_c'
-);
+DO $$ BEGIN
+  CREATE TYPE department_type AS ENUM (
+    'intensive_care_high','intensive_care_medium','picu',
+    'incubator_a','incubator_b','incubator_c'
+  );
+EXCEPTION WHEN duplicate_object THEN NULL; END $$;
 
-CREATE TYPE case_type AS ENUM (
-  'intensive_care_high',
-  'intensive_care_medium',
-  'picu',
-  'incubator'
-);
+DO $$ BEGIN
+  CREATE TYPE case_type AS ENUM (
+    'intensive_care_high','intensive_care_medium','picu','incubator'
+  );
+EXCEPTION WHEN duplicate_object THEN NULL; END $$;
 
-CREATE TYPE artificial_respiration AS ENUM (
-  'high_frequency',
-  'vent',
-  'cpap',
-  'hfnc',
-  'standby',
-  'box',
-  'no'
-);
+DO $$ BEGIN
+  CREATE TYPE artificial_respiration AS ENUM (
+    'high_frequency','vent','cpap','hfnc','standby','box','no'
+  );
+EXCEPTION WHEN duplicate_object THEN NULL; END $$;
 
-CREATE TYPE case_status AS ENUM (
-  'active',
-  'recovering',
-  'discharged',
-  'critical'
-);
+DO $$ BEGIN
+  CREATE TYPE case_status AS ENUM ('active','recovering','discharged','critical');
+EXCEPTION WHEN duplicate_object THEN NULL; END $$;
 
-CREATE TYPE discharge_reason AS ENUM (
-  'improved',
-  'request',
-  'transferred',
-  'death'
-);
+DO $$ BEGIN
+  CREATE TYPE discharge_reason AS ENUM ('improved','request','transferred','death');
+EXCEPTION WHEN duplicate_object THEN NULL; END $$;
 
-CREATE TYPE waiting_care_type AS ENUM (
-  'intensive_care_high',
-  'intensive_care_medium',
-  'picu',
-  'incubator'
-);
+DO $$ BEGIN
+  CREATE TYPE waiting_care_type AS ENUM (
+    'intensive_care_high','intensive_care_medium','picu','incubator'
+  );
+EXCEPTION WHEN duplicate_object THEN NULL; END $$;
 
-CREATE TYPE waiting_respiration AS ENUM (
-  'high_frequency',
-  'vent',
-  'cpap',
-  'hfnc',
-  'standby',
-  'box',
-  'no'
-);
+DO $$ BEGIN
+  CREATE TYPE waiting_respiration AS ENUM (
+    'high_frequency','vent','cpap','hfnc','standby','box','no'
+  );
+EXCEPTION WHEN duplicate_object THEN NULL; END $$;
 
-CREATE TYPE waiting_section AS ENUM (
-  'servo',
-  'reception'
-);
+DO $$ BEGIN
+  CREATE TYPE waiting_section AS ENUM ('servo','reception');
+EXCEPTION WHEN duplicate_object THEN NULL; END $$;
 
-CREATE TYPE waiting_status AS ENUM (
-  'waiting',
-  'admitted',
-  'cancelled'
-);
+DO $$ BEGIN
+  CREATE TYPE waiting_status AS ENUM ('waiting','admitted','cancelled');
+EXCEPTION WHEN duplicate_object THEN NULL; END $$;
 
 -- ─── Tables ───────────────────────────────────────────────────────────────────
 
 CREATE TABLE IF NOT EXISTS departments (
-  id                 SERIAL PRIMARY KEY,
-  name               TEXT NOT NULL,
-  code               TEXT NOT NULL UNIQUE,
-  description        TEXT,
-  capacity           INTEGER NOT NULL DEFAULT 10,
-  department_type    department_type NOT NULL,
-  report_fields_json TEXT NOT NULL DEFAULT '[]',
-  created_at         TIMESTAMP NOT NULL DEFAULT NOW(),
-  updated_at         TIMESTAMP NOT NULL DEFAULT NOW()
+  id              SERIAL PRIMARY KEY,
+  name            TEXT NOT NULL,
+  code            TEXT NOT NULL UNIQUE,
+  description     TEXT,
+  capacity        INTEGER NOT NULL DEFAULT 10,
+  department_type department_type NOT NULL,
+  created_at      TIMESTAMP NOT NULL DEFAULT NOW(),
+  updated_at      TIMESTAMP NOT NULL DEFAULT NOW()
 );
 
 CREATE TABLE IF NOT EXISTS medical_cases (
@@ -119,23 +93,20 @@ CREATE TABLE IF NOT EXISTS medical_cases (
 );
 
 CREATE TABLE IF NOT EXISTS waiting_cases (
-  id                     SERIAL PRIMARY KEY,
-  patient_name           TEXT NOT NULL,
-  age                    TEXT,
-  diagnosis              TEXT,
-  parent_phone           TEXT,
-  national_id            TEXT,
-  medical_report         TEXT,
-  medical_report_name    TEXT,
-  medical_report_data    TEXT,
-  care_type              waiting_care_type NOT NULL,
-  central_room_required  BOOLEAN NOT NULL DEFAULT FALSE,
-  central_room_code      TEXT,
+  id                    SERIAL PRIMARY KEY,
+  patient_name          TEXT NOT NULL,
+  age                   TEXT,
+  diagnosis             TEXT,
+  parent_phone          TEXT,
+  national_id           TEXT,
+  care_type             waiting_care_type NOT NULL,
+  central_room_required BOOLEAN NOT NULL DEFAULT FALSE,
+  central_room_code     TEXT,
   artificial_respiration waiting_respiration NOT NULL DEFAULT 'no',
-  section                waiting_section NOT NULL DEFAULT 'reception',
-  status                 waiting_status NOT NULL DEFAULT 'waiting',
-  created_at             TIMESTAMP NOT NULL DEFAULT NOW(),
-  updated_at             TIMESTAMP NOT NULL DEFAULT NOW()
+  section               waiting_section NOT NULL DEFAULT 'reception',
+  status                waiting_status NOT NULL DEFAULT 'waiting',
+  created_at            TIMESTAMP NOT NULL DEFAULT NOW(),
+  updated_at            TIMESTAMP NOT NULL DEFAULT NOW()
 );
 
 CREATE TABLE IF NOT EXISTS settings (
@@ -190,7 +161,7 @@ CREATE INDEX IF NOT EXISTS idx_waiting_cases_section  ON waiting_cases(section);
 CREATE INDEX IF NOT EXISTS idx_audit_logs_created     ON audit_logs(created_at DESC);
 CREATE INDEX IF NOT EXISTS idx_settings_key           ON settings(key);
 
--- ─── Default seed data ────────────────────────────────────────────────────────
+-- ─── Seed data ────────────────────────────────────────────────────────────────
 
 INSERT INTO departments (name, code, description, capacity, department_type) VALUES
   ('العناية المركزة عالية',    'ICU-HIGH', 'وحدة العناية المركزة عالية',    12, 'intensive_care_high'),
