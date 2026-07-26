@@ -1,448 +1,450 @@
-# توثيق واجهة البرمجة — API Documentation
+# BSCH — API Documentation
 
-**Base URL:** `http://localhost:8080/api`
-
-All protected endpoints require an active session cookie (`bsch_session`).
-Obtain a session via `POST /api/auth/founder-login`.
+**Base URL:** `http://localhost:8080` (or `http://<server-ip>:8080` from LAN)  
+**Auth:** Session cookie (`bsch_session`) — set after `POST /api/auth/founder-login`  
+**Content-Type:** `application/json`
 
 ---
 
-## Authentication (المصادقة)
+## Authentication
 
-### POST /api/auth/founder-login
-Login with the founder or named-user password.
+### `POST /api/auth/founder-login`
+Login with the founder password.
 
 **Request:**
 ```json
 { "password": "bsch2024" }
 ```
-
-**Response 200 — Founder:**
+**Response `200`:**
 ```json
-{ "isAuthenticated": true, "isFounder": true, "name": "المؤسس" }
+{ "success": true }
 ```
-
-**Response 200 — Named user:**
-```json
-{
-  "isAuthenticated": true,
-  "isFounder": false,
-  "name": "اسم المستخدم",
-  "pagePermissions": [
-    { "href": "/dashboard", "access": "edit" },
-    { "href": "/waiting-cases", "access": "view" }
-  ]
-}
-```
-
-**Response 401:**
+**Response `401`:**
 ```json
 { "error": "كلمة المرور غير صحيحة" }
 ```
 
 ---
 
-### GET /api/auth/me
-Returns the current session info.
+### `GET /api/auth/me`
+Returns current session info.
 
-**Response:**
+**Response `200` (logged in):**
 ```json
-{
-  "isAuthenticated": true,
-  "isFounder": false,
-  "name": "اسم المستخدم",
-  "pagePermissions": [{ "href": "/dashboard", "access": "edit" }]
-}
+{ "authenticated": true, "role": "founder" }
+```
+**Response `401` (not logged in):**
+```json
+{ "authenticated": false }
 ```
 
 ---
 
-### POST /api/auth/logout
+### `POST /api/auth/logout`
 Clears the session cookie.
 
-**Response:** `{ "success": true }`
-
----
-
-## Departments (الأقسام)
-
-### GET /api/departments
-Returns all departments with their active case count.
-
-**Response:**
+**Response `200`:**
 ```json
-[{
-  "id": 1,
-  "name": "العناية المركزة عالية",
-  "code": "ICU-HIGH",
-  "description": "وحدة العناية المركزة عالية",
-  "capacity": 12,
-  "departmentType": "intensive_care_high",
-  "activeCasesCount": 7,
-  "reportFieldsJson": "[]",
-  "createdAt": "2024-01-01T00:00:00.000Z"
-}]
+{ "success": true }
 ```
 
 ---
 
-### GET /api/departments/:id
-Returns a single department with its active cases list.
+## Health
 
-**Response 404:** `{ "error": "القسم غير موجود" }`
+### `GET /api/health`
+Used by Electron to wait for the server to be ready.
+
+**Response `200`:**
+```json
+{ "status": "ok", "db": "connected" }
+```
 
 ---
 
-### POST /api/departments *(Founder only)*
-Create a new department.
+## Dashboard
 
-**Body:**
+### `GET /api/dashboard`
+Returns aggregated KPI statistics for the dashboard.
+
+**Response `200`:**
 ```json
 {
-  "name": "قسم جديد",
-  "code": "NEW-1",
-  "capacity": 10,
-  "departmentType": "intensive_care_high",
-  "description": "وصف اختياري"
+  "totalActive": 42,
+  "totalDischarged": 128,
+  "totalWaiting": 5,
+  "byDepartment": [
+    { "id": 1, "name": "العناية المركزة عالية الرعاية", "active": 8, "capacity": 10 }
+  ],
+  "respirationStats": {
+    "invasive": 12,
+    "non_invasive": 7,
+    "oxygen": 15,
+    "none": 8
+  },
+  "recentDischarges": 14
 }
 ```
 
-**departmentType values:** `intensive_care_high` | `intensive_care_medium` | `picu` | `incubator_a` | `incubator_b` | `incubator_c`
+---
+
+## Medical Cases
+
+### `GET /api/cases`
+List all cases with optional filters.
+
+**Query Parameters:**
+
+| Param | Type | Description |
+|-------|------|-------------|
+| `department` | number | Filter by department ID |
+| `status` | string | `active` / `recovering` / `critical` / `discharged` |
+| `respiration` | string | `invasive` / `non_invasive` / `oxygen` / `none` |
+| `search` | string | Search by patient name or file number |
+
+**Response `200`:**
+```json
+[
+  {
+    "id": 1,
+    "patientName": "محمد أحمد",
+    "nationalId": "30101010101011",
+    "fileNumber": "2024-001",
+    "age": "3 سنوات",
+    "gender": "male",
+    "departmentId": 1,
+    "departmentName": "العناية المركزة عالية الرعاية",
+    "caseType": "emergency",
+    "status": "active",
+    "diagnosis": "التهاب رئوي حاد",
+    "artificialRespiration": "invasive",
+    "admissionDate": "2026-07-01T08:00:00.000Z",
+    "dischargeDate": null,
+    "dischargeReason": null
+  }
+]
+```
 
 ---
 
-### PATCH /api/departments/:id
-Update department name, capacity, description, or `reportFieldsJson`.
-
----
-
-### DELETE /api/departments/:id *(Founder only)*
-Delete a department. Fails with 409 if the department has active cases.
-
----
-
-## Medical Cases (الحالات الطبية)
-
-### GET /api/cases
-List and search cases.
-
-**Query parameters:**
-
-| Parameter | Type | Description |
-|-----------|------|-------------|
-| `departmentId` | integer | Filter by department |
-| `status` | string | `active` \| `recovering` \| `discharged` \| `critical` |
-| `artificialRespiration` | string | Filter by respiration type |
-| `patientName` | string | Partial name search |
-| `nationalId` | string | Exact match |
-| `fileNumber` | string | Exact match |
-
----
-
-### GET /api/cases/respiration
-Returns all active cases currently on artificial respiration (any value except `no`).
-
-**Query:** `?departmentId=1` (optional)
-
----
-
-### GET /api/cases/:id
-Returns a single case by ID.
-
-**Response 404:** `{ "error": "الحالة غير موجودة" }`
-
----
-
-### POST /api/cases
+### `POST /api/cases`
 Create a new medical case.
 
-**Required fields:** `patientName`, `departmentId`
-
-**Full body:**
+**Request Body:**
 ```json
 {
-  "patientName": "اسم المريض",
+  "patientName": "محمد أحمد",
+  "nationalId": "30101010101011",
+  "fileNumber": "2024-001",
+  "age": "3 سنوات",
+  "gender": "male",
   "departmentId": 1,
-  "age": "3 أشهر",
-  "diagnosis": "التشخيص",
-  "symptoms": "الأعراض",
-  "treatment": "العلاج",
-  "notes": "ملاحظات",
-  "parentName": "اسم ولي الأمر",
-  "parentPhone": "01xxxxxxxxx",
-  "nationalId": "3xxxxxxxxxx",
-  "fileNumber": "12345",
-  "caseType": "intensive_care_high",
-  "artificialRespiration": "vent",
+  "caseType": "emergency",
   "status": "active",
-  "admissionDate": "2024-01-01T08:00:00.000Z"
+  "diagnosis": "التهاب رئوي حاد",
+  "artificialRespiration": "invasive",
+  "admissionDate": "2026-07-01T08:00:00.000Z"
 }
 ```
 
-**caseType values:** `intensive_care_high` | `intensive_care_medium` | `picu` | `incubator`
-
-**artificialRespiration values:** `high_frequency` | `vent` | `cpap` | `hfnc` | `standby` | `box` | `no`
-
-**status values:** `active` | `recovering` | `discharged` | `critical`
-
----
-
-### PATCH /api/cases/:id
-Update a case. All fields are optional.
-
-To discharge a patient, set `status: "discharged"` and optionally `dischargeReason`.
-
-**dischargeReason values:** `improved` | `request` | `transferred` | `death`
-
----
-
-### DELETE /api/cases/:id
-Permanently delete a case record.
-
----
-
-### POST /api/cases/bulk-import
-Parse and import patients from free Arabic text.
-
-**Body:**
+**Response `201`:**
 ```json
-{
-  "text": "أحمد محمد - 3 أشهر - ضيق تنفسي - جهاز تنفس\nعلي خالد - سنة - التهاب رئوي",
-  "departmentId": 1
-}
-```
-
-**Response:**
-```json
-{
-  "parsed": [
-    { "patientName": "أحمد محمد", "age": "3 أشهر", "diagnosis": "ضيق تنفسي", "artificialRespiration": "vent" }
-  ],
-  "imported": 1
-}
+{ "id": 42, "patientName": "محمد أحمد", ... }
 ```
 
 ---
 
-## Waiting Cases (قوائم الانتظار)
+### `PATCH /api/cases/:id`
+Update a case (partial update — send only changed fields).
 
-### GET /api/waiting-cases
+**Request Body (discharge example):**
+```json
+{
+  "status": "discharged",
+  "dischargeDate": "2026-07-10T14:00:00.000Z",
+  "dischargeReason": "improved"
+}
+```
 
-**Query parameters:**
-
-| Parameter | Type | Description |
-|-----------|------|-------------|
-| `section` | string | `servo` \| `reception` |
-| `status` | string | `waiting` \| `admitted` \| `cancelled` |
+**Response `200`:** Updated case object.
 
 ---
 
-### POST /api/waiting-cases
-Add a patient to the waiting list.
+### `DELETE /api/cases/:id`
+Delete a case permanently.
 
-**Required:** `patientName`, `careType`
-
-**Full body:**
+**Response `200`:**
 ```json
-{
-  "patientName": "اسم المريض",
-  "age": "سنة",
-  "diagnosis": "التشخيص",
-  "parentPhone": "01xxxxxxxxx",
-  "nationalId": "3xxxxxxxxxx",
-  "careType": "intensive_care_high",
-  "centralRoomRequired": false,
-  "centralRoomCode": null,
-  "artificialRespiration": "no",
-  "section": "reception",
-  "medicalReportName": "report.pdf",
-  "medicalReportData": "<base64-encoded-file>"
-}
+{ "success": true }
 ```
 
 ---
 
-### PATCH /api/waiting-cases/:id
-Update a waiting case. Use `status: "admitted"` to mark as admitted.
+### `POST /api/cases/bulk-import`
+Import multiple cases at once.
 
----
-
-### DELETE /api/waiting-cases/:id
-Remove a patient from the waiting list.
-
----
-
-## Dashboard (لوحة المعلومات)
-
-### GET /api/dashboard/stats
-Overall statistics for the dashboard.
-
-**Response:**
+**Request Body:**
 ```json
 {
-  "totalCases": 45,
-  "activeCases": 40,
-  "criticalCases": 3,
-  "waitingCases": 8,
-  "onRespiration": 12,
-  "departmentStats": [
-    {
-      "departmentId": 1,
-      "departmentName": "العناية المركزة عالية",
-      "capacity": 12,
-      "activeCases": 10,
-      "criticalCases": 2
-    }
-  ],
-  "respirationBreakdown": [
-    { "type": "vent", "count": 5, "label": "جهاز تنفس" }
+  "cases": [
+    { "patientName": "...", "departmentId": 1, ... },
+    ...
   ]
 }
 ```
 
+**Response `200`:**
+```json
+{ "imported": 15, "errors": [] }
+```
+
 ---
 
-## Settings (الإعدادات)
+## Waiting Cases
 
-### GET /api/settings
-Returns all settings as key-value pairs.
+### `GET /api/waiting-cases`
+List waiting patients.
 
-**Response:**
+**Query Parameters:**
+
+| Param | Type | Description |
+|-------|------|-------------|
+| `status` | string | `waiting` / `admitted` / `cancelled` |
+| `careType` | string | `servo` / `reception` |
+
+---
+
+### `POST /api/waiting-cases`
+Add a patient to the waiting list.
+
+**Request Body:**
 ```json
 {
-  "hospital_name": "مجمع بن صالح الصحي",
-  "hospital_logo": null,
-  "login_password": "bsch2024",
-  "shift_morning_start": "07:00",
-  "shift_morning_end": "14:00",
-  "shift_evening_start": "14:00",
-  "shift_evening_end": "21:00",
-  "shift_night_start": "21:00",
-  "shift_night_end": "07:00",
-  "named_passwords": "[...]",
-  "supervisors": "[...]"
+  "patientName": "فاطمة محمد",
+  "age": "2 سنوات",
+  "gender": "female",
+  "careType": "servo",
+  "requestingDoctor": "د. أحمد علي",
+  "requestingHospital": "مستشفى دسوق",
+  "medicalReportData": { "diagnosis": "...", ... }
 }
 ```
 
 ---
 
-### POST /api/settings
-Upsert a setting value. Sensitive keys require `SETTINGS_PASSWORD`.
+### `PATCH /api/waiting-cases/:id`
+Admit or cancel a waiting case.
 
-**Body:**
-```json
-{ "password": "...", "key": "hospital_name", "value": "اسم المستشفى" }
-```
-
----
-
-### POST /api/settings/verify-password
-Verify the settings page password.
-
-**Body:** `{ "password": "..." }`
-
-**Response:** `{ "valid": true }`
-
----
-
-## Audit Logs (سجل العمليات)
-
-### GET /api/audit-logs
-Returns paginated audit log. Logs older than 1 month are auto-pruned.
-
-**Query:** `page` (default: 1), `limit` (default: 50, max: 200)
-
-**Response:**
+**Admit example:**
 ```json
 {
-  "logs": [
-    {
-      "id": 1,
-      "action": "إضافة حالة",
-      "entityType": "case",
-      "entityId": 42,
-      "entityName": "أحمد محمد",
-      "details": null,
-      "performedBy": "المؤسس",
-      "createdAt": "2024-01-01T08:00:00.000Z"
-    }
-  ],
-  "total": 100,
-  "page": 1,
-  "limit": 50
+  "status": "admitted",
+  "departmentId": 2
 }
 ```
 
 ---
 
-## Incident Reports (بلاغات الحوادث)
+## Departments
 
-### GET /api/incident-reports
+### `GET /api/departments`
+List all departments with current occupancy.
+
+**Response `200`:**
+```json
+[
+  {
+    "id": 1,
+    "name": "العناية المركزة عالية الرعاية",
+    "code": "ICU-HIGH",
+    "capacity": 10,
+    "departmentType": "icu_high",
+    "activeCount": 8,
+    "available": 2
+  }
+]
+```
+
+---
+
+### `POST /api/departments`
+Create a new department.
+
+**Request Body:**
+```json
+{
+  "name": "وحدة جديدة",
+  "code": "NEW-UNIT",
+  "capacity": 8,
+  "departmentType": "general"
+}
+```
+
+---
+
+## Settings
+
+### `GET /api/settings`
+Returns all settings as a key/value object.
+
+**Response `200`:**
+```json
+{
+  "hospital_name": "مستشفى الأطفال التخصصي بالبحيرة",
+  "morning_shift_start": "08:00",
+  "morning_shift_end": "14:00",
+  "logo": "data:image/png;base64,..."
+}
+```
+
+---
+
+### `POST /api/settings`
+Update a setting value. Requires the settings password.
+
+**Request Body:**
+```json
+{
+  "key": "hospital_name",
+  "value": "مستشفى جديد",
+  "password": "@Bahnasy"
+}
+```
+
+**Response `200`:**
+```json
+{ "success": true }
+```
+
+---
+
+### `POST /api/settings/verify-password`
+Check if the settings password is correct.
+
+**Request Body:**
+```json
+{ "password": "@Bahnasy" }
+```
+
+**Response `200`:**
+```json
+{ "valid": true }
+```
+
+---
+
+## Incident Reports
+
+### `GET /api/incident-reports`
 List all incident reports.
 
-### POST /api/incident-reports
-Create an incident report. Automatically adds cases to the waiting list.
+### `POST /api/incident-reports`
+Create a new incident report.
 
-**Body:**
+**Request Body:**
 ```json
 {
-  "incidentType": "حادث مروري",
-  "incidentLocation": "طريق القاهرة",
-  "reportDate": "2024-01-01T14:00:00.000Z",
-  "reportDay": "الاثنين",
-  "reportTime": "14:00",
-  "totalInjured": 5,
-  "totalDeaths": 1,
-  "hospitalsTransferredTo": "مستشفى النيل",
-  "casesJson": "[{\"patientName\":\"مريض 1\",\"age\":\"30\"}]"
+  "incidentType": "حادث مروري جماعي",
+  "incidentDate": "2026-07-15T10:00:00.000Z",
+  "totalInjured": 12,
+  "totalDeaths": 2,
+  "notes": "...",
+  "casesJson": [{ "name": "...", "age": "..." }]
 }
 ```
 
-### PATCH /api/incident-reports/:id
-Update an incident report.
+### `GET /api/incident-reports/:id`
+Get a single report.
 
-### DELETE /api/incident-reports/:id
-Delete an incident report.
+### `PATCH /api/incident-reports/:id`
+Update a report.
+
+### `DELETE /api/incident-reports/:id`
+Delete a report.
 
 ---
 
-## Backups (النسخ الاحتياطية)
+## Backups
 
-### POST /api/backups
-Creates a full JSON backup of all system data.
+### `GET /api/backups`
+List all saved backups.
 
-**Body:** `{ "backupName": "backup before update" }`
-
-**Response 201:**
+**Response `200`:**
 ```json
-{ "id": 1, "backupName": "backup before update", "recordCount": 145, "createdAt": "..." }
+[
+  { "id": 1, "backupName": "نسخة 2026-07-01", "createdAt": "2026-07-01T..." }
+]
 ```
 
 ---
 
-### GET /api/backups
-List all available backups (metadata only, no data payload).
+### `POST /api/backups`
+Create a new backup snapshot of all data.
+
+**Request Body:**
+```json
+{ "backupName": "نسخة يولية 2026" }
+```
 
 ---
 
-### GET /api/backups/:id/download
-Download a backup as a JSON file.
+### `GET /api/backups/:id/download`
+Download a backup as a `.json` file (binary response).
 
 ---
 
-### DELETE /api/backups/:id
+### `POST /api/backups/:id/restore`
+Restore the database from a saved backup. **⚠ Destructive — clears all current data.**
+
+---
+
+### `DELETE /api/backups/:id`
 Delete a backup record.
 
 ---
 
-### POST /api/backups/:id/restore *(Founder only)*
-Restore the entire system state from a backup. **Destructive — overwrites all current data.**
+## Audit Logs
+
+### `GET /api/audit-logs`
+Returns the most recent audit log entries.
+
+**Query Parameters:**
+
+| Param | Type | Default | Description |
+|-------|------|---------|-------------|
+| `limit` | number | 100 | Max rows to return |
+| `entityType` | string | — | Filter by entity type |
+
+**Response `200`:**
+```json
+[
+  {
+    "id": 1,
+    "action": "create",
+    "entityType": "medical_case",
+    "entityId": 42,
+    "details": "{\"patientName\":\"محمد\"}",
+    "performedBy": "founder",
+    "createdAt": "2026-07-01T..."
+  }
+]
+```
 
 ---
 
-## Health Check
+## Error Responses
 
-### GET /api/healthz
-Always returns 200. No authentication required.
+All endpoints return consistent error shapes:
 
-**Response:** `{ "status": "ok" }`
+```json
+{ "error": "رسالة الخطأ باللغة العربية" }
+```
+
+| HTTP Code | Meaning |
+|-----------|---------|
+| `400` | Bad request / validation error |
+| `401` | Not authenticated |
+| `403` | Forbidden (wrong password) |
+| `404` | Record not found |
+| `409` | Conflict (duplicate entry) |
+| `500` | Internal server error |

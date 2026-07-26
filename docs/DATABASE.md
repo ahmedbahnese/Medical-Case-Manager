@@ -1,222 +1,248 @@
-# توثيق قاعدة البيانات — Database Documentation
+# BSCH — Database Documentation
 
-## Connection
+**Engine:** MySQL 8.0+  
+**Database:** `bsch_db`  
+**Character Set:** `utf8mb4` / `utf8mb4_unicode_ci`  
+**ORM:** Drizzle ORM (`drizzle-orm/mysql-core`)  
+**Schema files:** `lib/db/src/schema/`
 
+---
+
+## Connection Configuration
+
+Credentials are read from environment variables (set by Electron from `bsch.config.json`):
+
+| Variable | Default | Description |
+|----------|---------|-------------|
+| `DB_HOST` | `127.0.0.1` | MySQL host |
+| `DB_PORT` | `3306` | MySQL port |
+| `DB_USER` | `bsch_user` | MySQL username |
+| `DB_PASSWORD` | `bsch_password` | MySQL password |
+| `DB_NAME` | `bsch_db` | Database name |
+
+The connection pool is initialized in `lib/db/src/index.ts` using `mysql2/promise`.
+
+---
+
+## Initial Setup SQL
+
+Run once before first launch:
+
+```sql
+CREATE DATABASE bsch_db CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;
+CREATE USER 'bsch_user'@'localhost' IDENTIFIED BY 'your_password';
+GRANT ALL PRIVILEGES ON bsch_db.* TO 'bsch_user'@'localhost';
+FLUSH PRIVILEGES;
 ```
-Host:     localhost (or your server IP)
-Port:     5432
-Database: bsch_db
-User:     bsch_user
-```
 
-Connection string: `postgresql://bsch_user:PASSWORD@localhost:5432/bsch_db`
-
-The application reads this from the `DATABASE_URL` environment variable.
+Tables are **created automatically** on first startup via `db-init.ts`.
 
 ---
 
 ## Tables
 
-### `departments` — الأقسام
+### `departments`
+
+Stores ICU/PICU/Incubator department definitions.
 
 | Column | Type | Notes |
 |--------|------|-------|
-| id | SERIAL PK | Auto-increment |
-| name | TEXT | Arabic department name |
-| code | TEXT UNIQUE | Short code (e.g. `ICU-HIGH`) |
-| description | TEXT | Optional description |
-| capacity | INTEGER | Max beds (default 10) |
-| department_type | ENUM | See values below |
-| report_fields_json | TEXT | JSON array of enabled report field keys (default `[]`) |
-| created_at | TIMESTAMP | Auto |
-| updated_at | TIMESTAMP | Auto |
+| `id` | `INT AUTO_INCREMENT` | Primary key |
+| `name` | `VARCHAR(255)` | Arabic department name |
+| `code` | `VARCHAR(50)` | Unique short code (e.g. `ICU-HIGH`) |
+| `capacity` | `INT` | Maximum patient capacity |
+| `department_type` | `ENUM` | See enum values below |
+| `created_at` | `DATETIME` | Auto-set on insert |
 
-**department_type values:** `intensive_care_high` | `intensive_care_medium` | `picu` | `incubator_a` | `incubator_b` | `incubator_c`
+**`department_type` ENUM values:**
+- `icu_high` — العناية المركزة عالية الرعاية
+- `icu_medium` — العناية المركزة متوسطة الرعاية
+- `picu` — عناية مركزة أطفال
+- `incubators` — حضانات
+- `nicu` — وحدة مكثف حديثي الولادة
+- `general` — عام
 
-**report_fields_json** controls which columns appear in department reports. Possible field keys:
-`fileNumber`, `age`, `diagnosis`, `admissionDate`, `stayDays`, `status`, `artificialRespiration`, `mobe`, `parentName`, `parentPhone`, `nationalId`
+**Seed data (auto-inserted on first run):**
+| Name | Code | Capacity | Type |
+|------|------|----------|------|
+| العناية المركزة عالية الرعاية | ICU-HIGH | 10 | icu_high |
+| العناية المركزة متوسطة الرعاية | ICU-MED | 15 | icu_medium |
+| عناية مركزة الأطفال | PICU | 12 | picu |
+| الحضانات | INC | 20 | incubators |
+| وحدة مكثف حديثي الولادة | NICU | 10 | nicu |
+| عام | GEN | 50 | general |
 
 ---
 
-### `medical_cases` — الحالات الطبية
+### `medical_cases`
+
+Core table — one row per admitted patient.
 
 | Column | Type | Notes |
 |--------|------|-------|
-| id | SERIAL PK | |
-| patient_name | TEXT | Required |
-| department_id | INTEGER FK | → departments.id (RESTRICT delete) |
-| age | TEXT | Free-form (e.g. "3 أشهر", "سنتان") |
-| diagnosis | TEXT | |
-| symptoms | TEXT | |
-| treatment | TEXT | |
-| notes | TEXT | Free notes |
-| parent_name | TEXT | Guardian name |
-| parent_phone | TEXT | |
-| national_id | TEXT | Egyptian National ID |
-| file_number | TEXT | Hospital file number |
-| case_type | ENUM | `intensive_care_high` \| `intensive_care_medium` \| `picu` \| `incubator` |
-| artificial_respiration | ENUM | `high_frequency` \| `vent` \| `cpap` \| `hfnc` \| `standby` \| `box` \| `no` |
-| status | ENUM | `active` \| `recovering` \| `discharged` \| `critical` |
-| mobe | TEXT | Mobility/movement notes |
-| ventilation_start_date | TIMESTAMP | When artificial ventilation started |
-| ventilation_end_date | TIMESTAMP | When artificial ventilation ended |
-| discharge_reason | ENUM | `improved` \| `request` \| `transferred` \| `death` |
-| admission_date | TIMESTAMP | Default: NOW() |
-| discharge_date | TIMESTAMP | Set when status = discharged |
-| created_at | TIMESTAMP | Auto |
-| updated_at | TIMESTAMP | Auto |
+| `id` | `INT AUTO_INCREMENT` | Primary key |
+| `patient_name` | `VARCHAR(255)` | Full name in Arabic |
+| `national_id` | `VARCHAR(50)` | National ID or passport |
+| `file_number` | `VARCHAR(100)` | Hospital file number |
+| `age` | `VARCHAR(50)` | Age (stored as text for flexibility) |
+| `gender` | `ENUM('male','female')` | Gender |
+| `department_id` | `INT` | FK → `departments.id` |
+| `case_type` | `ENUM` | `elective` / `emergency` |
+| `status` | `ENUM` | See below |
+| `diagnosis` | `TEXT` | Primary diagnosis (Arabic) |
+| `artificial_respiration` | `ENUM` | Ventilation type |
+| `mobe` | `TEXT` | Medical observation notes |
+| `admission_date` | `DATETIME` | Date/time of admission |
+| `discharge_date` | `DATETIME` | Date/time of discharge (nullable) |
+| `discharge_reason` | `ENUM` | See below (nullable) |
+| `ventilation_start_date` | `DATETIME` | Ventilation start (nullable) |
+| `ventilation_end_date` | `DATETIME` | Ventilation end (nullable) |
+| `created_at` | `DATETIME` | Auto-set on insert |
+| `updated_at` | `DATETIME` | Auto-updated on change |
+
+**`status` ENUM values:**
+- `active` — نشط
+- `recovering` — في طور التعافي
+- `critical` — حالة حرجة
+- `discharged` — تم الصرف
+
+**`artificial_respiration` ENUM values:**
+- `none` — لا يوجد
+- `invasive` — جهاز تنفس اصطناعي (invasive)
+- `non_invasive` — جهاز تنفس غير جراحي (CPAP/BiPAP)
+- `oxygen` — أكسجين فقط
+
+**`discharge_reason` ENUM values:**
+- `improved` — تحسّن حالته
+- `request` — بناءً على طلب الأسرة
+- `transferred` — تحويل لمستشفى آخر
+- `death` — وفاة
 
 ---
 
-### `waiting_cases` — قوائم الانتظار
+### `waiting_cases`
+
+Patients waiting for an ICU/PICU bed.
 
 | Column | Type | Notes |
 |--------|------|-------|
-| id | SERIAL PK | |
-| patient_name | TEXT | Required |
-| age | TEXT | |
-| diagnosis | TEXT | |
-| parent_phone | TEXT | |
-| national_id | TEXT | |
-| medical_report | TEXT | Report description/text |
-| medical_report_name | TEXT | Uploaded file name |
-| medical_report_data | TEXT | Base64-encoded file content |
-| care_type | ENUM | Same values as medical_cases.case_type |
-| central_room_required | BOOLEAN | Default false |
-| central_room_code | TEXT | Room code if central room needed |
-| artificial_respiration | ENUM | Same values as medical_cases |
-| section | ENUM | `servo` \| `reception` |
-| status | ENUM | `waiting` \| `admitted` \| `cancelled` |
-| created_at | TIMESTAMP | Auto |
-| updated_at | TIMESTAMP | Auto |
+| `id` | `INT AUTO_INCREMENT` | Primary key |
+| `patient_name` | `VARCHAR(255)` | Patient name |
+| `age` | `VARCHAR(50)` | Age |
+| `gender` | `ENUM('male','female')` | Gender |
+| `care_type` | `ENUM` | `servo` (servo/ventilated) / `reception` (regular) |
+| `status` | `ENUM` | `waiting` / `admitted` / `cancelled` |
+| `medical_report_data` | `LONGTEXT` | JSON blob — full patient report data |
+| `requesting_doctor` | `VARCHAR(255)` | Referring doctor name |
+| `requesting_hospital` | `VARCHAR(255)` | Referring hospital |
+| `created_at` | `DATETIME` | |
+| `updated_at` | `DATETIME` | |
 
 ---
 
-### `settings` — الإعدادات
+### `settings`
+
+Key/value store for system-wide configuration.
 
 | Column | Type | Notes |
 |--------|------|-------|
-| id | SERIAL PK | |
-| key | TEXT UNIQUE | Setting identifier |
-| value | TEXT | Setting value (JSON for complex types) |
-| updated_at | TIMESTAMP | Auto |
+| `id` | `INT AUTO_INCREMENT` | Primary key |
+| `key` | `VARCHAR(255)` | Unique setting key |
+| `value` | `TEXT` | Setting value (string/JSON) |
+| `updated_at` | `DATETIME` | |
 
-**Standard setting keys:**
+**Default settings (auto-seeded):**
 
-| Key | Type | Description |
-|-----|------|-------------|
-| `hospital_name` | string | Hospital display name |
-| `hospital_logo` | string/null | Base64-encoded logo image |
-| `login_password` | string | Founder login password |
-| `named_passwords` | JSON array | Named user accounts with permissions |
-| `supervisors` | JSON array | Supervisor names list |
-| `shift_morning_start` | `HH:mm` | Morning shift start time |
-| `shift_morning_end` | `HH:mm` | Morning shift end time |
-| `shift_evening_start` | `HH:mm` | Evening shift start time |
-| `shift_evening_end` | `HH:mm` | Evening shift end time |
-| `shift_night_start` | `HH:mm` | Night shift start time |
-| `shift_night_end` | `HH:mm` | Night shift end time |
+| Key | Default Value | Description |
+|-----|--------------|-------------|
+| `hospital_name` | مستشفى الأطفال التخصصي بالبحيرة | Displayed in reports/header |
+| `founder_password` | bsch2024 | Main login password |
+| `settings_password` | @Bahnasy | Password to access Settings page |
+| `logo` | _(empty)_ | Base64-encoded logo image |
+| `morning_shift_start` | 08:00 | Morning shift start time |
+| `morning_shift_end` | 14:00 | Morning shift end time |
+| `afternoon_shift_start` | 14:00 | Afternoon shift start |
+| `afternoon_shift_end` | 20:00 | Afternoon shift end |
+| `night_shift_start` | 20:00 | Night shift start |
+| `night_shift_end` | 08:00 | Night shift end |
 
 ---
 
-### `audit_logs` — سجل العمليات
+### `audit_logs`
+
+Immutable record of every user action.
 
 | Column | Type | Notes |
 |--------|------|-------|
-| id | SERIAL PK | |
-| action | TEXT | Arabic action description |
-| entity_type | TEXT | `case`, `department`, `auth`, `settings`, `backup`, etc. |
-| entity_id | INTEGER | ID of affected record |
-| entity_name | TEXT | Name of affected record |
-| details | TEXT | JSON string with extra context |
-| performed_by | TEXT | Who performed the action (default: 'المستخدم') |
-| created_at | TIMESTAMP | Auto (pruned after 1 month) |
+| `id` | `INT AUTO_INCREMENT` | Primary key |
+| `action` | `VARCHAR(100)` | e.g. `create`, `update`, `delete`, `discharge`, `login` |
+| `entity_type` | `VARCHAR(100)` | e.g. `medical_case`, `department` |
+| `entity_id` | `INT` | ID of the affected record |
+| `details` | `TEXT` | JSON blob — changed fields / context |
+| `performed_by` | `VARCHAR(255)` | User identifier (session) |
+| `created_at` | `DATETIME` | |
 
 ---
 
-### `incident_reports` — بلاغات الحوادث
+### `incident_reports`
+
+Mass-casualty and incident documentation.
 
 | Column | Type | Notes |
 |--------|------|-------|
-| id | SERIAL PK | |
-| incident_type | TEXT | Type of mass-casualty incident |
-| incident_location | TEXT | Location description |
-| report_date | TIMESTAMP | When the incident occurred |
-| report_day | TEXT | Day of week (Arabic) |
-| report_time | TEXT | Time string |
-| total_injured | INTEGER | Total injured count |
-| total_deaths | INTEGER | Total deaths |
-| hospitals_transferred_to | TEXT | Transfer destination hospital(s) |
-| cases_json | TEXT | JSON array of individual case details |
-| created_at | TIMESTAMP | Auto |
-| updated_at | TIMESTAMP | Auto |
+| `id` | `INT AUTO_INCREMENT` | Primary key |
+| `incident_type` | `VARCHAR(255)` | Type of incident |
+| `incident_date` | `DATETIME` | When it occurred |
+| `total_injured` | `INT` | Total injured count |
+| `total_deaths` | `INT` | Total fatalities |
+| `cases_json` | `LONGTEXT` | JSON array of involved patient records |
+| `notes` | `TEXT` | Free-form notes |
+| `created_at` | `DATETIME` | |
 
 ---
 
-### `backups` — النسخ الاحتياطية
+### `backups`
+
+Application-level JSON backups (full database snapshots stored in-DB).
 
 | Column | Type | Notes |
 |--------|------|-------|
-| id | SERIAL PK | |
-| backup_name | TEXT | Backup label |
-| backup_data | TEXT | Full JSON export of all data |
-| record_count | INTEGER | Total number of records backed up |
-| created_at | TIMESTAMP | Auto |
+| `id` | `INT AUTO_INCREMENT` | Primary key |
+| `backup_name` | `VARCHAR(255)` | Human-readable backup name |
+| `backup_data` | `LONGTEXT` | Full JSON export of all tables |
+| `created_at` | `DATETIME` | |
+
+> **Note:** For large deployments, consider exporting backups to `.json` files on disk rather than storing in the database. The Backup page supports download to local disk.
 
 ---
 
-## Migrations
+## Entity Relationships
 
-Incremental schema changes are tracked in `migrations/`:
+```
+departments ──┐
+              │ department_id (FK)
+              ▼
+       medical_cases
+              │
+              │ (waiting_cases → medical_cases on admission)
+              ▼
+       waiting_cases
 
-| File | Description |
-|------|-------------|
-| `001_initial_schema.sql` | Full initial schema + seed data |
-| `002_add_report_fields_to_departments.sql` | Adds `report_fields_json` column |
-| `003_add_medical_report_to_waiting_cases.sql` | Adds `medical_report*` columns |
-
-To apply migrations to an existing database:
-```bash
-psql -h localhost -U bsch_user -d bsch_db -f migrations/002_add_report_fields_to_departments.sql
-psql -h localhost -U bsch_user -d bsch_db -f migrations/003_add_medical_report_to_waiting_cases.sql
+settings      (no FK — standalone key/value)
+audit_logs    (entity_id references any table — soft FK)
+incident_reports (cases_json — denormalized copy of case data)
+backups       (full snapshot — no FK)
 ```
 
-The application also applies `ALTER TABLE ... ADD COLUMN IF NOT EXISTS` automatically at startup,
-so fresh installs using `SCHEMA.sql` do not need to run migrations separately.
-
 ---
 
-## Useful Queries
+## Schema Migration
 
-```sql
--- Active cases by department with occupancy %
-SELECT d.name, COUNT(m.id) AS active, d.capacity,
-       ROUND(COUNT(m.id) * 100.0 / d.capacity, 1) AS occupancy_pct
-FROM departments d
-LEFT JOIN medical_cases m ON m.department_id = d.id AND m.status IN ('active','recovering','critical')
-GROUP BY d.id, d.name, d.capacity
-ORDER BY occupancy_pct DESC;
+The app uses **runtime migration** via `db-init.ts` (not Drizzle Kit push in production):
 
--- Cases on artificial respiration (active only)
-SELECT patient_name, artificial_respiration, admission_date,
-       EXTRACT(DAY FROM NOW() - admission_date) AS days_admitted
-FROM medical_cases
-WHERE artificial_respiration != 'no' AND status != 'discharged'
-ORDER BY admission_date;
-
--- Waiting queue summary
-SELECT section, care_type, COUNT(*) AS count
-FROM waiting_cases WHERE status = 'waiting'
-GROUP BY section, care_type ORDER BY section, count DESC;
-
--- Recent audit log
-SELECT action, entity_name, performed_by, created_at
-FROM audit_logs ORDER BY created_at DESC LIMIT 20;
-
--- Discharge statistics this month
-SELECT discharge_reason, COUNT(*) AS count
-FROM medical_cases
-WHERE status = 'discharged'
-  AND discharge_date >= DATE_TRUNC('month', NOW())
-GROUP BY discharge_reason;
-```
+- Tables are created with `CREATE TABLE IF NOT EXISTS` on every startup
+- New columns are added with `addColumnSafe()` which catches MySQL error 1060 (duplicate column) silently
+- **To add a new column in a future version:**
+  1. Add the column to the Drizzle schema file in `lib/db/src/schema/`
+  2. Add an `addColumnSafe(...)` call in `db-init.ts`
+  3. Rebuild and distribute — the column is added automatically on next launch
