@@ -7,6 +7,7 @@ export const waitingCareTypeValues = [
   "intensive_care_medium",
   "picu",
   "incubator",
+  "internal",
 ] as const;
 
 export const waitingRespirationValues = [

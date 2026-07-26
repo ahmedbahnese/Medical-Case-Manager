@@ -32,6 +32,7 @@ export const dischargeReasonValues = [
   "request",
   "transferred",
   "death",
+  "internal_transfer",
 ] as const;
 
 export const medicalCasesTable = mysqlTable("medical_cases", {
@@ -54,6 +55,7 @@ export const medicalCasesTable = mysqlTable("medical_cases", {
   ventilationStartDate: timestamp("ventilation_start_date"),
   ventilationEndDate: timestamp("ventilation_end_date"),
   dischargeReason: mysqlEnum("discharge_reason", dischargeReasonValues),
+  transferDestination: text("transfer_destination"),
   admissionDate: timestamp("admission_date").defaultNow().notNull(),
   dischargeDate: timestamp("discharge_date"),
   createdAt: timestamp("created_at").defaultNow().notNull(),

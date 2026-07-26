@@ -164,6 +164,7 @@ export default function DischargeHistory() {
                   <TableHead>تاريخ الدخول</TableHead>
                   <TableHead>تاريخ الخروج</TableHead>
                   <TableHead>مدة الإقامة</TableHead>
+                  <TableHead>سبب الخروج</TableHead>
                   <TableHead>التشخيص</TableHead>
                   <TableHead></TableHead>
                 </TableRow>
@@ -171,11 +172,11 @@ export default function DischargeHistory() {
               <TableBody>
                 {isLoading ? (
                   <TableRow>
-                    <TableCell colSpan={7} className="text-center h-20 text-muted-foreground">جاري التحميل...</TableCell>
+                    <TableCell colSpan={8} className="text-center h-20 text-muted-foreground">جاري التحميل...</TableCell>
                   </TableRow>
                 ) : visible.length === 0 ? (
                   <TableRow>
-                    <TableCell colSpan={7} className="text-center h-24 text-muted-foreground">
+                    <TableCell colSpan={8} className="text-center h-24 text-muted-foreground">
                       لا توجد حالات خروج مسجلة في آخر شهر
                     </TableCell>
                   </TableRow>
@@ -186,13 +187,32 @@ export default function DischargeHistory() {
                     <TableCell className="text-sm">{formatDateAr(c.admissionDate)}</TableCell>
                     <TableCell className="text-sm">{formatDateAr(c.dischargeDate)}</TableCell>
                     <TableCell className="text-sm">{calcStayLabel(c.admissionDate)}</TableCell>
-                    <TableCell className="text-xs max-w-[160px] truncate">{c.diagnosis ?? "—"}</TableCell>
+                    <TableCell className="text-sm">
+                      {c.dischargeReason === "internal_transfer" ? (
+                        <span className="inline-flex items-center gap-1 text-blue-600 font-medium">
+                          ⇄ تحويل داخلي
+                          {c.transferDestination && (
+                            <span className="text-xs text-muted-foreground font-normal">→ {c.transferDestination}</span>
+                          )}
+                        </span>
+                      ) : c.dischargeReason === "transferred" ? (
+                        <span className="inline-flex items-center gap-1 text-amber-600 font-medium">
+                          ↗ تحويل خارجي
+                          {c.transferDestination && (
+                            <span className="text-xs text-muted-foreground font-normal">→ {c.transferDestination}</span>
+                          )}
+                        </span>
+                      ) : (
+                        <span>{translate(c.dischargeReason ?? "", LABELS.DISCHARGE_REASON) || "—"}</span>
+                      )}
+                    </TableCell>
+                    <TableCell className="text-xs max-w-[140px] truncate">{c.diagnosis ?? "—"}</TableCell>
                     <TableCell>
                       <div className="flex gap-2 items-center">
                         <Link href={`/case/${c.id}`} className="text-primary text-xs hover:underline flex items-center gap-1">
                           عرض <ArrowLeft className="h-3 w-3" />
                         </Link>
-                        {canReadmit(c) && (
+                        {canReadmit(c) && c.dischargeReason !== "internal_transfer" && (
                           <ConfirmDialog
                             trigger={
                               <Button size="sm" variant="outline" className="text-xs h-7 gap-1">
@@ -206,8 +226,10 @@ export default function DischargeHistory() {
                             onConfirm={() => handleReadmit(c.id, c.patientName)}
                           />
                         )}
-                        {!canReadmit(c) && (
-                          <span className="text-xs text-muted-foreground">انتهت مهلة الإعادة</span>
+                        {(!canReadmit(c) || c.dischargeReason === "internal_transfer") && (
+                          <span className="text-xs text-muted-foreground">
+                            {c.dischargeReason === "internal_transfer" ? "تم التحويل" : "انتهت مهلة الإعادة"}
+                          </span>
                         )}
                       </div>
                     </TableCell>

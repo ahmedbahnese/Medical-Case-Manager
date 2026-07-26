@@ -233,15 +233,17 @@ export default function OccupancyReport() {
     newShift0.icu_med.occupied   = getCount(["intensive_care_medium"]);
     newShift0.icu_vents.occupied = getCount(["intensive_care_high","intensive_care_medium"], true);
 
-    const totalInc = (departments ?? []).filter((d: any) => ["incubator_a","incubator_b","incubator_c"].includes(d.departmentType)).reduce((s: number, d: any) => s + d.capacity, 0);
-    const totalPicu = (departments ?? []).find((d: any) => d.departmentType === "picu")?.capacity ?? 12;
-    const totalIcuH = (departments ?? []).find((d: any) => d.departmentType === "intensive_care_high")?.capacity ?? 10;
-    const totalIcuM = (departments ?? []).find((d: any) => d.departmentType === "intensive_care_medium")?.capacity ?? 6;
+    const totalInc      = (departments ?? []).filter((d: any) => ["incubator_a","incubator_b","incubator_c"].includes(d.departmentType)).reduce((s: number, d: any) => s + d.capacity, 0);
+    const totalPicu     = (departments ?? []).find((d: any) => d.departmentType === "picu")?.capacity ?? 12;
+    const totalIcuH     = (departments ?? []).find((d: any) => d.departmentType === "intensive_care_high")?.capacity ?? 10;
+    const totalIcuM     = (departments ?? []).find((d: any) => d.departmentType === "intensive_care_medium")?.capacity ?? 6;
+    const totalInternal = (departments ?? []).find((d: any) => d.departmentType === "internal")?.capacity;
 
-    if (totalInc) newShift0.inc_beds.total = totalInc;
-    if (totalPicu) newShift0.picu_beds.total = totalPicu;
-    if (totalIcuH) newShift0.icu_high.total = totalIcuH;
-    if (totalIcuM) newShift0.icu_med.total = totalIcuM;
+    if (totalInc)      newShift0.inc_beds.total  = totalInc;
+    if (totalPicu)     newShift0.picu_beds.total  = totalPicu;
+    if (totalIcuH)     newShift0.icu_high.total   = totalIcuH;
+    if (totalIcuM)     newShift0.icu_med.total    = totalIcuM;
+    if (totalInternal) newShift0.internal.total   = totalInternal;
 
     setShifts([newShift0, { ...newShift0 }, { ...newShift0 }]);
   }

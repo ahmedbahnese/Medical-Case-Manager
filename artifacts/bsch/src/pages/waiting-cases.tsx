@@ -41,11 +41,12 @@ const EXIT_REASONS = [
 
 // Reception care type filter options
 const RECEPTION_FILTERS = [
-  { value: "all", label: "الكل" },
-  { value: "intensive_care_high", label: "العناية الكبرى" },
-  { value: "intensive_care_medium", label: "العناية المتوسطة" },
-  { value: "picu", label: "البيكيو (PICU)" },
-  { value: "incubator", label: "الداخلي" },
+  { value: "all",                   label: "الكل"                 },
+  { value: "intensive_care_high",   label: "العناية الكبرى"       },
+  { value: "intensive_care_medium", label: "العناية المتوسطة"     },
+  { value: "picu",                  label: "البيكيو (PICU)"       },
+  { value: "incubator",             label: "حضانة"                },
+  { value: "internal",              label: "الداخلي"              },
 ];
 
 const EMPTY_FORM = {

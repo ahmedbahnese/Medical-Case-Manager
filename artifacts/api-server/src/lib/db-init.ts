@@ -32,7 +32,7 @@ export async function initDatabase(): Promise<void> {
         \`code\`               VARCHAR(64) NOT NULL,
         \`description\`        TEXT,
         \`capacity\`           INT NOT NULL DEFAULT 10,
-        \`department_type\`    ENUM('intensive_care_high','intensive_care_medium','picu','incubator_a','incubator_b','incubator_c') NOT NULL,
+        \`department_type\`    ENUM('intensive_care_high','intensive_care_medium','picu','incubator_a','incubator_b','incubator_c','internal') NOT NULL,
         \`report_fields_json\` TEXT NOT NULL DEFAULT '[]',
         \`created_at\`         TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
         \`updated_at\`         TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
@@ -60,7 +60,7 @@ export async function initDatabase(): Promise<void> {
         \`mobe\`                   TEXT,
         \`ventilation_start_date\` TIMESTAMP NULL DEFAULT NULL,
         \`ventilation_end_date\`   TIMESTAMP NULL DEFAULT NULL,
-        \`discharge_reason\`       ENUM('improved','request','transferred','death') DEFAULT NULL,
+        \`discharge_reason\`       ENUM('improved','request','transferred','death','internal_transfer') DEFAULT NULL,
         \`admission_date\`         TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
         \`discharge_date\`         TIMESTAMP NULL DEFAULT NULL,
         \`created_at\`             TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
@@ -79,7 +79,7 @@ export async function initDatabase(): Promise<void> {
         \`medical_report\`         TEXT,
         \`medical_report_name\`    TEXT,
         \`medical_report_data\`    LONGTEXT,
-        \`care_type\`              ENUM('intensive_care_high','intensive_care_medium','picu','incubator') NOT NULL,
+        \`care_type\`              ENUM('intensive_care_high','intensive_care_medium','picu','incubator','internal') NOT NULL,
         \`central_room_required\`  TINYINT(1) NOT NULL DEFAULT 0,
         \`central_room_code\`      TEXT,
         \`artificial_respiration\` ENUM('high_frequency','vent','cpap','hfnc','standby','box','no') NOT NULL DEFAULT 'no',
@@ -141,10 +141,23 @@ export async function initDatabase(): Promise<void> {
     `));
 
     // ── Schema migration: add columns introduced in later versions ─────────────
+    await addColumnSafe("medical_cases", "transfer_destination", "TEXT");
     await addColumnSafe("departments",   "report_fields_json",  "TEXT NOT NULL DEFAULT '[]'");
     await addColumnSafe("waiting_cases", "medical_report",      "TEXT");
     await addColumnSafe("waiting_cases", "medical_report_name", "TEXT");
     await addColumnSafe("waiting_cases", "medical_report_data", "LONGTEXT");
+
+    // ── Schema migration: extend ENUMs with new values ─────────────────────────
+    // These MODIFY COLUMN statements are idempotent — safe to re-run.
+    try {
+      await db.execute(sql.raw(`ALTER TABLE \`departments\` MODIFY COLUMN \`department_type\` ENUM('intensive_care_high','intensive_care_medium','picu','incubator_a','incubator_b','incubator_c','internal') NOT NULL`));
+    } catch { /* already up to date */ }
+    try {
+      await db.execute(sql.raw(`ALTER TABLE \`waiting_cases\` MODIFY COLUMN \`care_type\` ENUM('intensive_care_high','intensive_care_medium','picu','incubator','internal') NOT NULL`));
+    } catch { /* already up to date */ }
+    try {
+      await db.execute(sql.raw(`ALTER TABLE \`medical_cases\` MODIFY COLUMN \`discharge_reason\` ENUM('improved','request','transferred','death','internal_transfer') DEFAULT NULL`));
+    } catch { /* already up to date */ }
 
     // ── Seed departments if table is empty ────────────────────────────────────
     const [{ value: deptCount }] = await db
@@ -162,6 +175,11 @@ export async function initDatabase(): Promise<void> {
       ]).onDuplicateKeyUpdate({ set: { capacity: sql`capacity` } });
       logger.info("Seeded 6 departments");
     }
+
+    // Always ensure the internal department exists (may be missing on old installs)
+    await db.insert(departmentsTable).values([
+      { name: "الداخلي", code: "INTERNAL", description: "القسم الداخلي", capacity: 24, departmentType: "internal" },
+    ]).onDuplicateKeyUpdate({ set: { capacity: sql`capacity` } });
 
     // ── Seed default settings ─────────────────────────────────────────────────
     await db.insert(settingsTable).values([

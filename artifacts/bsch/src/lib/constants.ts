@@ -6,6 +6,7 @@ export const LABELS = {
     incubator_a: "حضانات أ",
     incubator_b: "حضانات ب",
     incubator_c: "حضانات ج",
+    internal: "الداخلي",
   },
   ARTIFICIAL_RESPIRATION: {
     high_frequency: "تردد عالي (HFO)",
@@ -36,12 +37,14 @@ export const LABELS = {
     request: "بناءً على الطلب",
     transferred: "تحويل لمستشفى أخرى",
     death: "وفاة",
+    internal_transfer: "تحويل داخلي",
   },
   CARE_TYPES: {
     intensive_care_high: "العناية المركزة الكبرى",
     intensive_care_medium: "العناية المركزة المتوسطة",
     picu: "عناية مركزة أطفال (PICU)",
     incubator: "حضانة",
+    internal: "الداخلي",
   },
 };
 
@@ -61,6 +64,7 @@ export function getBedType(departmentType: string): "محضن" | "سرير" {
 // Mapping from departmentType → caseType (for add-case form)
 export function deptTypeToCaseType(departmentType: string): string {
   if (departmentType.startsWith("incubator")) return "incubator";
+  if (departmentType === "internal") return "internal";
   return departmentType;
 }
 

@@ -1,8 +1,9 @@
-import { useState, useEffect, memo } from "react";
+import { useState, useEffect, memo, type ReactNode } from "react";
 import { useLocation, useParams } from "wouter";
-import { useGetCase, useUpdateCase, useDeleteCase } from "@workspace/api-client-react";
+import { useGetCase, useUpdateCase, useDeleteCase, useCreateCase, useGetDepartments } from "@workspace/api-client-react";
 import {
-  ArrowLeft, User, Phone, Activity, Calendar, FileText, Wind, Trash2, Edit, Save, X, AlertTriangle, Clock, Stethoscope
+  ArrowLeft, User, Calendar, Wind, Trash2, Edit, Save, X, Stethoscope,
+  ArrowRightLeft, CheckCircle, XCircle, HeartPulse, Building2, Hospital
 } from "lucide-react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -35,10 +36,11 @@ const RESP_OPTIONS = [
 ];
 
 const DISCHARGE_OPTIONS = [
-  { value: "improved",    label: "تحسن" },
-  { value: "request",     label: "بناءً على الطلب" },
-  { value: "transferred", label: "تحويل لمستشفى أخرى" },
-  { value: "death",       label: "وفاة" },
+  { value: "improved",           label: "تحسن" },
+  { value: "request",            label: "بناءً على الطلب" },
+  { value: "transferred",        label: "تحويل لمستشفى أخرى" },
+  { value: "internal_transfer",  label: "تحويل داخلي" },
+  { value: "death",              label: "وفاة" },
 ];
 
 /* ─── CaseField: MUST be defined OUTSIDE the parent component ────────
@@ -92,6 +94,9 @@ CaseField.displayName = "CaseField";
 
 /* ─────────────────────────────────────────────────────────────────── */
 
+type DischargeMode = "improved" | "transfer" | "request" | "death" | null;
+type TransferType  = "internal" | "external";
+
 export default function CaseDetail() {
   const { id } = useParams();
   const caseId = parseInt(id || "0");
@@ -99,12 +104,17 @@ export default function CaseDetail() {
 
   const [isEditing, setIsEditing] = useState(false);
   const { data: patient, isLoading, refetch } = useGetCase(caseId);
-  const updateCase = useUpdateCase();
-  const deleteCase = useDeleteCase();
+  const updateCase  = useUpdateCase();
+  const deleteCase  = useDeleteCase();
+  const createCase  = useCreateCase();
+  const { data: allDepartments } = useGetDepartments();
 
   const [editData, setEditData] = useState<Record<string, any>>({});
   const [showDischargeDialog, setShowDischargeDialog] = useState(false);
-  const [dischargeReason, setDischargeReason] = useState("");
+  const [dischargeMode,    setDischargeMode]    = useState<DischargeMode>(null);
+  const [transferType,     setTransferType]     = useState<TransferType>("internal");
+  const [transferDeptId,   setTransferDeptId]   = useState("");
+  const [transferHospital, setTransferHospital] = useState("");
 
   // Only sync from server when NOT actively editing
   useEffect(() => {
@@ -149,18 +159,94 @@ export default function CaseDetail() {
     });
   };
 
-  const handleDischarge = (reason: string) => {
-    if (!reason) {
-      toast.error("يجب اختيار سبب الخروج");
-      return;
+  const isPendingDischarge = updateCase.isPending || createCase.isPending;
+
+  const openDischargeDialog = () => {
+    setDischargeMode(null);
+    setTransferType("internal");
+    setTransferDeptId("");
+    setTransferHospital("");
+    setShowDischargeDialog(true);
+  };
+
+  const canConfirmDischarge = (() => {
+    if (!dischargeMode) return false;
+    if (dischargeMode === "transfer") {
+      if (transferType === "internal") return !!transferDeptId;
+      if (transferType === "external") return !!transferHospital.trim();
     }
-    updateCase.mutate({
-      id: caseId,
-      data: { status: "discharged", ...(reason ? { dischargeReason: reason } : {}) } as any
-    }, {
-      onSuccess: () => { toast.success("تم تسجيل خروج المريض"); refetch(); },
-      onError: (e: any) => toast.error("حدث خطأ: " + (e?.message ?? ""))
-    });
+    return true;
+  })();
+
+  const handleConfirmDischarge = () => {
+    if (!dischargeMode) return;
+
+    if (dischargeMode === "improved") {
+      updateCase.mutate({ id: caseId, data: { status: "discharged", dischargeReason: "improved" } as any }, {
+        onSuccess: () => { toast.success("تم تسجيل خروج المريض — تحسن"); setShowDischargeDialog(false); refetch(); },
+        onError: (e: any) => toast.error("خطأ: " + (e?.message ?? "")),
+      });
+
+    } else if (dischargeMode === "request") {
+      updateCase.mutate({ id: caseId, data: { status: "discharged", dischargeReason: "request" } as any }, {
+        onSuccess: () => { toast.success("تم تسجيل الخروج حسب الطلب"); setShowDischargeDialog(false); refetch(); },
+        onError: (e: any) => toast.error("خطأ: " + (e?.message ?? "")),
+      });
+
+    } else if (dischargeMode === "death") {
+      updateCase.mutate({ id: caseId, data: { status: "discharged", dischargeReason: "death" } as any }, {
+        onSuccess: () => { toast.success("تم تسجيل الوفاة"); setShowDischargeDialog(false); refetch(); },
+        onError: (e: any) => toast.error("خطأ: " + (e?.message ?? "")),
+      });
+
+    } else if (dischargeMode === "transfer" && transferType === "external") {
+      updateCase.mutate({
+        id: caseId,
+        data: { status: "discharged", dischargeReason: "transferred", transferDestination: transferHospital.trim() } as any
+      }, {
+        onSuccess: () => { toast.success(`تم تسجيل التحويل إلى ${transferHospital}`); setShowDischargeDialog(false); refetch(); },
+        onError: (e: any) => toast.error("خطأ: " + (e?.message ?? "")),
+      });
+
+    } else if (dischargeMode === "transfer" && transferType === "internal") {
+      const targetDept = (allDepartments as any[] ?? []).find((d: any) => d.id.toString() === transferDeptId);
+      // 1. Create new case in target department with same patient data
+      createCase.mutate({
+        data: {
+          departmentId: parseInt(transferDeptId),
+          patientName:           patient.patientName,
+          age:                   patient.age           || undefined,
+          diagnosis:             patient.diagnosis     || undefined,
+          symptoms:              patient.symptoms      || undefined,
+          treatment:             patient.treatment     || undefined,
+          notes:                 patient.notes         || undefined,
+          parentName:            patient.parentName    || undefined,
+          parentPhone:           patient.parentPhone   || undefined,
+          nationalId:            patient.nationalId    || undefined,
+          fileNumber:            patient.fileNumber    || undefined,
+          mobe:                  patient.mobe          || undefined,
+          artificialRespiration: (patient.artificialRespiration ?? "no") as any,
+          caseType:              (patient.caseType     ?? "intensive_care_high") as any,
+          status:                "active"              as any,
+        }
+      }, {
+        onSuccess: () => {
+          // 2. Discharge current case as internal transfer
+          updateCase.mutate({
+            id: caseId,
+            data: { status: "discharged", dischargeReason: "internal_transfer", transferDestination: targetDept?.name ?? "" } as any
+          }, {
+            onSuccess: () => {
+              toast.success(`تم تحويل الحالة إلى ${targetDept?.name ?? "القسم المختار"}`);
+              setShowDischargeDialog(false);
+              refetch();
+            },
+            onError: (e: any) => toast.error("خطأ في تسجيل الخروج: " + (e?.message ?? "")),
+          });
+        },
+        onError: (e: any) => toast.error("خطأ في إنشاء الحالة بالقسم الجديد: " + (e?.response?.data?.error ?? e?.message ?? "")),
+      });
+    }
   };
 
   const handleDelete = () => {
@@ -203,8 +289,8 @@ export default function CaseDetail() {
                     <Edit className="h-4 w-4" /> تعديل
                   </Button>
                   <Button variant="outline" size="sm" className="gap-1 border-orange-300 text-orange-600 hover:bg-orange-50"
-                    onClick={() => { setDischargeReason(""); setShowDischargeDialog(true); }}>
-                    تسجيل خروج
+                    onClick={openDischargeDialog}>
+                    تسجيل خروج / تحويل
                   </Button>
                 </>
               )}
@@ -229,28 +315,97 @@ export default function CaseDetail() {
         </div>
       </div>
 
-      <Dialog open={showDischargeDialog} onOpenChange={setShowDischargeDialog}>
+      {/* ── Discharge / Transfer Dialog ── */}
+      <Dialog open={showDischargeDialog} onOpenChange={open => { if (!isPendingDischarge) setShowDischargeDialog(open); }}>
         <DialogContent className="max-w-md">
           <DialogHeader>
-            <DialogTitle>تسجيل خروج الحالة</DialogTitle>
+            <DialogTitle className="flex items-center gap-2">
+              تسجيل خروج / تحويل
+              <span className="text-sm font-normal text-muted-foreground">— {patient.patientName}</span>
+            </DialogTitle>
           </DialogHeader>
+
           <div className="space-y-3">
-            <p className="text-sm text-muted-foreground">اختر سبب الخروج قبل اعتماد الإجراء.</p>
-            <Label>سبب الخروج <span className="text-destructive">*</span></Label>
-            <Select value={dischargeReason} onValueChange={setDischargeReason}>
-              <SelectTrigger><SelectValue placeholder="اختر سبب الخروج" /></SelectTrigger>
-              <SelectContent>
-                {DISCHARGE_OPTIONS.map(option => (
-                  <SelectItem key={option.value} value={option.value}>{option.label}</SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
+            {/* 4 mode buttons */}
+            {(
+              [
+                { key: "improved",  icon: <CheckCircle  className="h-5 w-5 text-green-600"  />, label: "تحسن",               color: "border-green-300 bg-green-50/60 hover:bg-green-100" },
+                { key: "transfer",  icon: <ArrowRightLeft className="h-5 w-5 text-blue-600" />, label: "تحويل",              color: "border-blue-300 bg-blue-50/60 hover:bg-blue-100"   },
+                { key: "request",   icon: <XCircle       className="h-5 w-5 text-amber-600" />, label: "خروج حسب الطلب",    color: "border-amber-300 bg-amber-50/60 hover:bg-amber-100" },
+                { key: "death",     icon: <HeartPulse    className="h-5 w-5 text-red-700"   />, label: "وفاة",               color: "border-red-300 bg-red-50/60 hover:bg-red-100"       },
+              ] as { key: DischargeMode; icon: ReactNode; label: string; color: string }[]
+            ).map(opt => (
+              <button
+                key={String(opt.key)}
+                onClick={() => setDischargeMode(opt.key)}
+                className={`w-full flex items-center gap-3 p-3 rounded-lg border-2 text-right transition-colors
+                  ${dischargeMode === opt.key ? opt.color + " border-opacity-100" : "border-muted bg-background hover:bg-muted/40"}`}
+              >
+                {opt.icon}
+                <span className="font-medium">{opt.label}</span>
+              </button>
+            ))}
+
+            {/* Transfer sub-options */}
+            {dischargeMode === "transfer" && (
+              <div className="rounded-lg border bg-muted/30 p-3 space-y-3">
+                {/* Internal / External toggle */}
+                <div className="flex gap-2">
+                  <Button size="sm" variant={transferType === "internal" ? "default" : "outline"}
+                    className="flex-1 gap-1" onClick={() => { setTransferType("internal"); setTransferDeptId(""); setTransferHospital(""); }}>
+                    <Building2 className="h-4 w-4" /> داخل المستشفى
+                  </Button>
+                  <Button size="sm" variant={transferType === "external" ? "default" : "outline"}
+                    className="flex-1 gap-1" onClick={() => { setTransferType("external"); setTransferDeptId(""); setTransferHospital(""); }}>
+                    <Hospital className="h-4 w-4" /> خارج المستشفى
+                  </Button>
+                </div>
+
+                {transferType === "internal" && (
+                  <div className="space-y-1">
+                    <Label className="text-xs">اختر القسم المستقبل</Label>
+                    <Select value={transferDeptId} onValueChange={setTransferDeptId}>
+                      <SelectTrigger><SelectValue placeholder="اختر القسم..." /></SelectTrigger>
+                      <SelectContent>
+                        {(allDepartments as any[] ?? [])
+                          .filter((d: any) => d.id !== patient.departmentId)
+                          .map((d: any) => (
+                            <SelectItem key={d.id} value={d.id.toString()}>
+                              {d.name}
+                              {d.capacity != null && <span className="text-muted-foreground text-xs mr-1"> — شاغر: {d.capacity - (d.activeCasesCount ?? 0)}</span>}
+                            </SelectItem>
+                          ))}
+                      </SelectContent>
+                    </Select>
+                    <p className="text-xs text-muted-foreground">ستُنشأ حالة جديدة في القسم المختار بنفس بيانات المريض</p>
+                  </div>
+                )}
+
+                {transferType === "external" && (
+                  <div className="space-y-1">
+                    <Label className="text-xs">اسم المستشفى المحوّل إليها</Label>
+                    <Input
+                      value={transferHospital}
+                      onChange={e => setTransferHospital(e.target.value)}
+                      placeholder="مثال: مستشفى الحميات…"
+                      autoFocus
+                    />
+                  </div>
+                )}
+              </div>
+            )}
           </div>
-          <DialogFooter>
-            <Button variant="outline" onClick={() => setShowDischargeDialog(false)}>إلغاء</Button>
-            <Button variant="destructive" disabled={!dischargeReason || updateCase.isPending}
-              onClick={() => { handleDischarge(dischargeReason); setShowDischargeDialog(false); }}>
-              تأكيد الخروج
+
+          <DialogFooter className="gap-2">
+            <Button variant="outline" onClick={() => setShowDischargeDialog(false)} disabled={isPendingDischarge}>
+              إلغاء
+            </Button>
+            <Button
+              variant={dischargeMode === "death" ? "destructive" : "default"}
+              disabled={!canConfirmDischarge || isPendingDischarge}
+              onClick={handleConfirmDischarge}
+            >
+              {isPendingDischarge ? "جاري التنفيذ..." : "تأكيد"}
             </Button>
           </DialogFooter>
         </DialogContent>

@@ -333,6 +333,9 @@ router.patch("/cases/:id", async (req, res): Promise<void> => {
   if (extraData.admissionDate !== undefined) {
     updates.admissionDate = extraData.admissionDate ? new Date(extraData.admissionDate) : undefined;
   }
+  if (extraData.transferDestination !== undefined) {
+    updates.transferDestination = extraData.transferDestination || null;
+  }
   if (extraData.departmentId !== undefined) {
     updates.departmentId = parseInt(extraData.departmentId, 10);
   }

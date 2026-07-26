@@ -9,6 +9,7 @@ export const departmentTypeValues = [
   "incubator_a",
   "incubator_b",
   "incubator_c",
+  "internal",
 ] as const;
 
 export const departmentsTable = mysqlTable("departments", {
