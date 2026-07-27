@@ -160,7 +160,7 @@ export const CreateCaseBody = zod.object({
   "medicalReportName": zod.string().optional(),
   "medicalReportData": zod.string().optional(),
   "fileNumber": zod.string().optional(),
-  "caseType": zod.enum(['intensive_care_high', 'intensive_care_medium', 'picu', 'incubator', 'internal']).optional(),
+  "caseType": zod.string().optional(),
   "artificialRespiration": zod.enum(['high_frequency', 'vent', 'cpap', 'hfnc', 'standby', 'box', 'no']).optional(),
   "status": zod.enum(['active', 'recovering', 'discharged', 'critical']).optional()
 })
@@ -293,7 +293,7 @@ export const UpdateCaseBody = zod.object({
   "medicalReportName": zod.string().optional(),
   "medicalReportData": zod.string().optional(),
   "fileNumber": zod.string().optional(),
-  "caseType": zod.enum(['intensive_care_high', 'intensive_care_medium', 'picu', 'incubator', 'internal']).optional(),
+  "caseType": zod.string().optional(),
   "artificialRespiration": zod.enum(['high_frequency', 'vent', 'cpap', 'hfnc', 'standby', 'box', 'no']).optional(),
   "status": zod.enum(['active', 'recovering', 'discharged', 'critical']).optional(),
   "dischargeDate": zod.coerce.date().nullish()
