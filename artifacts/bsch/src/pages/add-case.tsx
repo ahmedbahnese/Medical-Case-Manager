@@ -12,7 +12,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Card, CardContent, CardHeader, CardTitle, CardFooter, CardDescription } from "@/components/ui/card";
 import { Checkbox } from "@/components/ui/checkbox";
 import { toast } from "sonner";
-import { LABELS } from "@/lib/constants";
+import { LABELS, deptTypeToCaseType } from "@/lib/constants";
 import { Plus, Bot, ArrowRight, CheckCircle2, Edit } from "lucide-react";
 import BulkImport from "./bulk-import";
 
@@ -79,7 +79,7 @@ function ManualEntryForm() {
       {
         data: {
           ...submitData,
-          caseType: (selectedDept?.departmentType?.startsWith("incubator") ? "incubator" : (selectedDept?.departmentType ?? "intensive_care_high")) as CaseInputCaseType,
+          caseType: deptTypeToCaseType(selectedDept?.departmentType ?? "intensive_care_high") as CaseInputCaseType,
           artificialRespiration: submitData.artificialRespiration as CaseInputArtificialRespiration,
           status: submitData.status as CaseInputStatus,
           admissionDate: submitData.admissionDate ? new Date(submitData.admissionDate).toISOString() : undefined,

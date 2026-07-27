@@ -16,4 +16,5 @@ export const DepartmentDetailDepartmentType = {
   incubator_a: 'incubator_a',
   incubator_b: 'incubator_b',
   incubator_c: 'incubator_c',
+  internal: 'internal',
 } as const;

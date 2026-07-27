@@ -14,4 +14,5 @@ export const WaitingCaseInputCareType = {
   intensive_care_medium: 'intensive_care_medium',
   picu: 'picu',
   incubator: 'incubator',
+  internal: 'internal',
 } as const;

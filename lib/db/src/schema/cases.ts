@@ -8,6 +8,7 @@ export const caseTypeValues = [
   "intensive_care_medium",
   "picu",
   "incubator",
+  "internal",
 ] as const;
 
 export const artificialRespirationValues = [
