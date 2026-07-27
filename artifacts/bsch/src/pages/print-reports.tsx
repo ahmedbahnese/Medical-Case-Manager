@@ -20,11 +20,15 @@ import { ReportWatermark } from "@/components/report-watermark";
 
 const DAYS_AR = ["الأحد", "الاثنين", "الثلاثاء", "الأربعاء", "الخميس", "الجمعة", "السبت"];
 
-const DEPT_GROUPS = [
-  { key: "icu", label: "العناية المركزة", types: ["intensive_care_high", "intensive_care_medium"] },
-  { key: "picu", label: "البيكيو (PICU)", types: ["picu"] },
-  { key: "inc", label: "الحضانات", types: ["incubator_a", "incubator_b", "incubator_c"] },
+const FIXED_DEPT_GROUPS = [
+  { key: "icu",      label: "العناية المركزة", types: ["intensive_care_high", "intensive_care_medium"] },
+  { key: "picu",     label: "البيكيو (PICU)",  types: ["picu"] },
+  { key: "inc",      label: "الحضانات",         types: ["incubator_a", "incubator_b", "incubator_c"] },
+  { key: "internal", label: "الداخلي",          types: ["internal"] },
 ];
+
+// All known fixed types — departments with other types go into a dynamic "أخرى" group
+const FIXED_TYPES = new Set(FIXED_DEPT_GROUPS.flatMap(g => g.types));
 
 const RESP_OPTIONS = [
   { value: "high_frequency", label: "تردد عالي (HFO)" },
@@ -402,36 +406,47 @@ export default function PrintReports() {
           </CardHeader>
           <CardContent className="pb-4">
             <div className="grid md:grid-cols-3 gap-4">
-              {DEPT_GROUPS.map(group => {
-                const groupDepts = depts.filter(d => group.types.includes(d.departmentType));
-                const allSel = groupDepts.length > 0 && groupDepts.every(d => selectedDeptIds.has(d.id));
-                return (
-                  <div key={group.key} className="space-y-2 p-3 rounded-lg bg-muted/30 border">
-                    <div className="flex items-center gap-2">
-                      <Checkbox
-                        checked={allSel}
-                        onCheckedChange={() => toggleGroup(group.types)}
-                        id={`group-${group.key}`}
-                      />
-                      <label htmlFor={`group-${group.key}`} className="text-sm font-semibold cursor-pointer">{group.label}</label>
+              {(() => {
+                // Build groups: fixed + a dynamic "أخرى" group for custom types
+                const otherDepts = depts.filter(d => !FIXED_TYPES.has(d.departmentType as string));
+                const allGroups = [
+                  ...FIXED_DEPT_GROUPS,
+                  ...(otherDepts.length > 0
+                    ? [{ key: "__other__", label: "أخرى", types: [...new Set(otherDepts.map(d => d.departmentType as string))] }]
+                    : []),
+                ];
+                return allGroups.map(group => {
+                  const groupDepts = depts.filter(d => group.types.includes(d.departmentType as string));
+                  if (groupDepts.length === 0) return null;
+                  const allSel = groupDepts.every(d => selectedDeptIds.has(d.id));
+                  return (
+                    <div key={group.key} className="space-y-2 p-3 rounded-lg bg-muted/30 border">
+                      <div className="flex items-center gap-2">
+                        <Checkbox
+                          checked={allSel}
+                          onCheckedChange={() => toggleGroup(group.types as string[])}
+                          id={`group-${group.key}`}
+                        />
+                        <label htmlFor={`group-${group.key}`} className="text-sm font-semibold cursor-pointer">{group.label}</label>
+                      </div>
+                      <div className="space-y-1 pr-6">
+                        {groupDepts.map(d => (
+                          <div key={d.id} className="flex items-center gap-2">
+                            <Checkbox
+                              checked={selectedDeptIds.has(d.id)}
+                              onCheckedChange={() => toggleDept(d.id)}
+                              id={`dept-${d.id}`}
+                            />
+                            <label htmlFor={`dept-${d.id}`} className="text-xs cursor-pointer">
+                              {d.name} <span className="text-muted-foreground">({d.activeCasesCount}/{d.capacity})</span>
+                            </label>
+                          </div>
+                        ))}
+                      </div>
                     </div>
-                    <div className="space-y-1 pr-6">
-                      {groupDepts.map(d => (
-                        <div key={d.id} className="flex items-center gap-2">
-                          <Checkbox
-                            checked={selectedDeptIds.has(d.id)}
-                            onCheckedChange={() => toggleDept(d.id)}
-                            id={`dept-${d.id}`}
-                          />
-                          <label htmlFor={`dept-${d.id}`} className="text-xs cursor-pointer">
-                            {d.name} <span className="text-muted-foreground">({d.activeCasesCount}/{d.capacity})</span>
-                          </label>
-                        </div>
-                      ))}
-                    </div>
-                  </div>
-                );
-              })}
+                  );
+                });
+              })()}
             </div>
           </CardContent>
         </Card>

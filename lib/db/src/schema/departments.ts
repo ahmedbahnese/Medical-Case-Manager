@@ -1,7 +1,8 @@
-import { mysqlTable, int, text, timestamp, mysqlEnum } from "drizzle-orm/mysql-core";
+import { mysqlTable, int, text, varchar, timestamp } from "drizzle-orm/mysql-core";
 import { createInsertSchema } from "drizzle-zod";
 import { z } from "zod/v4";
 
+// Known standard types — kept for reference and frontend display
 export const departmentTypeValues = [
   "intensive_care_high",
   "intensive_care_medium",
@@ -18,7 +19,8 @@ export const departmentsTable = mysqlTable("departments", {
   code: text("code").notNull(),
   description: text("description"),
   capacity: int("capacity").notNull().default(10),
-  departmentType: mysqlEnum("department_type", departmentTypeValues).notNull(),
+  // VARCHAR instead of ENUM — allows institutions to define custom department types freely
+  departmentType: varchar("department_type", { length: 64 }).notNull(),
   reportFieldsJson: text("report_fields_json").notNull().default("[]"),
   createdAt: timestamp("created_at").defaultNow().notNull(),
   updatedAt: timestamp("updated_at").defaultNow().notNull(),

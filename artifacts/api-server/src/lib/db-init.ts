@@ -149,8 +149,10 @@ export async function initDatabase(): Promise<void> {
 
     // ── Schema migration: extend ENUMs with new values ─────────────────────────
     // These MODIFY COLUMN statements are idempotent — safe to re-run.
+
+    // Migrate department_type from ENUM to VARCHAR(64) to allow custom types
     try {
-      await db.execute(sql.raw(`ALTER TABLE \`departments\` MODIFY COLUMN \`department_type\` ENUM('intensive_care_high','intensive_care_medium','picu','incubator_a','incubator_b','incubator_c','internal') NOT NULL`));
+      await db.execute(sql.raw(`ALTER TABLE \`departments\` MODIFY COLUMN \`department_type\` VARCHAR(64) NOT NULL`));
     } catch { /* already up to date */ }
     try {
       await db.execute(sql.raw(`ALTER TABLE \`waiting_cases\` MODIFY COLUMN \`care_type\` ENUM('intensive_care_high','intensive_care_medium','picu','incubator','internal') NOT NULL`));

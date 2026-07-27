@@ -25,7 +25,21 @@ const DEPT_TYPE_OPTIONS = [
   { value: "incubator_a",           label: "حاضنات أ" },
   { value: "incubator_b",           label: "حاضنات ب" },
   { value: "incubator_c",           label: "حاضنات ج" },
+  { value: "internal",              label: "الداخلي" },
+  { value: "__custom__",            label: "نوع مخصص (حسب رغبة المؤسسة)..." },
 ];
+
+const KNOWN_TYPE_VALUES = new Set(DEPT_TYPE_OPTIONS.map(o => o.value).filter(v => v !== "__custom__"));
+
+/** Return the Select value: known type → its value, unknown/custom → "__custom__" */
+function toSelectValue(type: string): string {
+  return KNOWN_TYPE_VALUES.has(type) ? type : "__custom__";
+}
+
+/** Return human-readable label for display in the badge */
+function deptTypeLabel(type: string): string {
+  return DEPT_TYPE_OPTIONS.find(o => o.value === type)?.label ?? type;
+}
 
 const REPORT_FIELD_OPTIONS = [
   { key: "fileNumber",            label: "رقم الملف" },
@@ -149,6 +163,8 @@ export default function SettingsPage() {
   const [editingDept, setEditingDept] = useState<number | null>(null);
   const [editDeptData, setEditDeptData] = useState<Partial<Department>>({});
   const [newDept, setNewDept] = useState({ name: "", code: "", capacity: 10, departmentType: "intensive_care_high", description: "" });
+  const [newDeptCustomType, setNewDeptCustomType] = useState("");
+  const [editDeptCustomType, setEditDeptCustomType] = useState("");
   const [showAddDept, setShowAddDept] = useState(false);
   const [newDeptFields, setNewDeptFields] = useState<string[]>(ALL_REPORT_FIELD_KEYS);
   const [showNewDeptFields, setShowNewDeptFields] = useState(false);
@@ -266,19 +282,23 @@ export default function SettingsPage() {
   };
 
   /* ─── Departments ─── */
+  const resolvedNewDeptType = newDept.departmentType === "__custom__" ? newDeptCustomType.trim() : newDept.departmentType;
+
   const handleAddDept = async () => {
     if (!newDept.name.trim() || !newDept.code.trim()) { toast.error("الاسم والكود مطلوبان"); return; }
+    if (!resolvedNewDeptType) { toast.error("يرجى تحديد نوع القسم"); return; }
     setDeptLoading(true);
     try {
       const res = await fetch("/api/departments", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ ...newDept, reportFieldsJson: JSON.stringify(newDeptFields) }),
+        body: JSON.stringify({ ...newDept, departmentType: resolvedNewDeptType, reportFieldsJson: JSON.stringify(newDeptFields) }),
         credentials: "include",
       });
       if (!res.ok) { const d = await res.json(); throw new Error(d.error); }
       toast.success("تم إضافة القسم");
       setNewDept({ name: "", code: "", capacity: 10, departmentType: "intensive_care_high", description: "" });
+      setNewDeptCustomType("");
       setNewDeptFields(ALL_REPORT_FIELD_KEYS);
       setShowAddDept(false);
       setShowNewDeptFields(false);
@@ -287,13 +307,19 @@ export default function SettingsPage() {
     finally { setDeptLoading(false); }
   };
 
-  const handleSaveDept = async (id: number) => {
+  const handleSaveDept = async (id: number, dept: Department) => {
     setDeptLoading(true);
+    // Resolve custom type if needed
+    const resolvedEditType = editDeptData.departmentType === "__custom__"
+      ? editDeptCustomType.trim()
+      : editDeptData.departmentType;
+    const payload = { ...editDeptData };
+    if (resolvedEditType !== undefined) payload.departmentType = resolvedEditType;
     try {
       const res = await fetch(`/api/departments/${id}`, {
         method: "PATCH",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(editDeptData),
+        body: JSON.stringify(payload),
         credentials: "include",
       });
       if (!res.ok) { const d = await res.json(); throw new Error(d.error); }
@@ -481,6 +507,14 @@ export default function SettingsPage() {
                       {DEPT_TYPE_OPTIONS.map(o => <SelectItem key={o.value} value={o.value}>{o.label}</SelectItem>)}
                     </SelectContent>
                   </Select>
+                  {newDept.departmentType === "__custom__" && (
+                    <Input
+                      value={newDeptCustomType}
+                      onChange={e => setNewDeptCustomType(e.target.value)}
+                      placeholder="اكتب نوع القسم مثال: جراحة، باطنة..."
+                      className="h-8 text-sm mt-1"
+                    />
+                  )}
                 </div>
                 <div className="space-y-1">
                   <Label className="text-xs">الطاقة الاستيعابية</Label>
@@ -549,13 +583,25 @@ export default function SettingsPage() {
                         </div>
                         <div className="space-y-1">
                           <Label className="text-xs">النوع</Label>
-                          <Select value={editDeptData.departmentType ?? dept.departmentType}
-                            onValueChange={v => setEditDeptData(p => ({ ...p, departmentType: v }))}>
+                          <Select
+                            value={toSelectValue(editDeptData.departmentType ?? dept.departmentType)}
+                            onValueChange={v => {
+                              setEditDeptData(p => ({ ...p, departmentType: v }));
+                              if (v !== "__custom__") setEditDeptCustomType("");
+                            }}>
                             <SelectTrigger className="h-8 text-sm"><SelectValue /></SelectTrigger>
                             <SelectContent>
                               {DEPT_TYPE_OPTIONS.map(o => <SelectItem key={o.value} value={o.value}>{o.label}</SelectItem>)}
                             </SelectContent>
                           </Select>
+                          {(editDeptData.departmentType === "__custom__") && (
+                            <Input
+                              value={editDeptCustomType}
+                              onChange={e => setEditDeptCustomType(e.target.value)}
+                              placeholder="اكتب نوع القسم مثال: جراحة، باطنة..."
+                              className="h-8 text-sm mt-1"
+                            />
+                          )}
                         </div>
                         <div className="space-y-1">
                           <Label className="text-xs">الطاقة الاستيعابية</Label>
@@ -596,7 +642,7 @@ export default function SettingsPage() {
                         <Button variant="ghost" size="sm" onClick={() => { setEditingDept(null); setEditDeptData({}); }}>
                           <X className="h-4 w-4" />
                         </Button>
-                        <Button size="sm" onClick={() => handleSaveDept(dept.id)} disabled={deptLoading} className="gap-1">
+                        <Button size="sm" onClick={() => handleSaveDept(dept.id, dept)} disabled={deptLoading} className="gap-1">
                           <Check className="h-4 w-4" /> حفظ
                         </Button>
                       </div>
@@ -609,7 +655,7 @@ export default function SettingsPage() {
                           <span className="font-medium text-sm">{dept.name}</span>
                           <Badge variant="outline" className="text-[10px] h-4 px-1">{dept.code}</Badge>
                           <Badge variant="secondary" className="text-[10px] h-4 px-1">
-                            {DEPT_TYPE_OPTIONS.find(o => o.value === dept.departmentType)?.label ?? dept.departmentType}
+                            {deptTypeLabel(dept.departmentType)}
                           </Badge>
                           <span className="text-xs text-muted-foreground">
                             طاقة: {dept.capacity} | مشغول: {dept.activeCasesCount ?? 0}
@@ -622,7 +668,17 @@ export default function SettingsPage() {
                       </div>
                       <div className="flex gap-1 shrink-0">
                         <Button size="sm" variant="ghost" className="h-7 w-7 p-0"
-                          onClick={() => { setEditingDept(dept.id); setEditDeptData({ reportFieldsJson: dept.reportFieldsJson ?? "[]" }); }}>
+                          onClick={() => {
+                            setEditingDept(dept.id);
+                            setEditDeptData({ reportFieldsJson: dept.reportFieldsJson ?? "[]" });
+                            // Pre-fill custom type input if dept has a non-standard type
+                            if (!KNOWN_TYPE_VALUES.has(dept.departmentType)) {
+                              setEditDeptCustomType(dept.departmentType);
+                              setEditDeptData({ reportFieldsJson: dept.reportFieldsJson ?? "[]", departmentType: "__custom__" });
+                            } else {
+                              setEditDeptCustomType("");
+                            }
+                          }}>
                           <Edit2 className="h-3.5 w-3.5" />
                         </Button>
                         <ConfirmDialog
