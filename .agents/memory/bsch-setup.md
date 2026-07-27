@@ -1,49 +1,39 @@
 ---
 name: BSCH project setup
-description: Stack overview, database config, and key architectural decisions for the BSCH Hospital Case Management System.
+description: Schema, routes, env vars, and critical mysql→pg migration that was needed to make the codebase consistent.
 ---
 
-# BSCH project setup
+## DB Connection
+- `lib/db/src/index.ts` — uses pg (node-postgres) + drizzle-orm/node-postgres
+- Supports both `DATABASE_URL` (single URL) and `DB_HOST/PORT/USER/PASSWORD/NAME` vars
+- The `DATABASE_URL` takes precedence; individual vars are the fallback
 
-## Database
-- **MySQL 8** (converted from PostgreSQL)
-- Drizzle ORM with `drizzle-orm/mysql-core` — all schema files in `lib/db/src/schema/`
-- Connection via `mysql2` using individual env vars: `DB_HOST`, `DB_PORT`, `DB_USER`, `DB_PASSWORD`, `DB_NAME`
-- mysql2 is **bundled by esbuild** (not external) — works in the Electron packaged app
-- Replit's DATABASE_URL is PostgreSQL and is **ignored** by the app — MySQL creds must be set separately
+## Schema — IMPORTANT: was mysql-core, now pg-core
+- ALL schema files in `lib/db/src/schema/` use **drizzle-orm/pg-core** (`pgTable`, `serial`, `integer`, `text`, `boolean`, `timestamp`)
+- Previously they incorrectly used `mysql-core` (mysqlTable, mysqlEnum, int autoincrement) — this was a latent bug
+- ENUM columns are stored as **TEXT** (not pgEnum) for flexibility — enum values enforced at app layer via TS const arrays
+- `departments.code` and `settings.key` have `.unique()` on the Drizzle field (needed for `onConflictDoUpdate`)
 
-## Key MySQL migration patterns
-- No `.returning()` in MySQL — routes use `$returningId()` + SELECT, or pre-check then mutate
-- No `ilike` — use `like` (MySQL LIKE is case-insensitive for utf8mb4_unicode_ci)
-- `addColumnSafe()` helper in db-init.ts catches errno 1060 (duplicate column) for migrations
-- ENUM extension uses `MODIFY COLUMN` in a try/catch (idempotent, safe to re-run)
-- Seed data uses `.onDuplicateKeyUpdate({ set: { id: sql\`id\` } })` as no-op on conflict
+## db-init.ts — PostgreSQL DDL
+- Uses plain PostgreSQL SQL (no backticks, no ENGINE=InnoDB, no AUTO_INCREMENT)
+- `SERIAL PRIMARY KEY`, `BOOLEAN`, `TIMESTAMPTZ`, `TEXT`
+- `ALTER TABLE ... ADD COLUMN IF NOT EXISTS ...` for migrations (PostgreSQL 9.6+)
+- **ENUM→TEXT migration**: early DB setups used pgEnum types; db-init.ts now runs `ALTER TABLE t ALTER COLUMN c TYPE TEXT USING c::TEXT` for all known ENUM columns (wrapped in try/catch — silently ignores if already TEXT)
+- Seeding uses `onConflictDoUpdate` (not `onDuplicateKeyUpdate`)
 
-## Department types (lib/db/src/schema/departments.ts)
-- `intensive_care_high`, `intensive_care_medium`, `picu`, `incubator_a`, `incubator_b`, `incubator_c`, `internal`
-- "الداخلي" (internal) added — seeded always via onDuplicateKeyUpdate with code "INTERNAL"
+## Auth Route
+- Login endpoint: `POST /api/auth/founder-login` (not `/api/auth/login`)
+- Password lookup: checks `settings` table key `login_password` first, falls back to `FOUNDER_PASSWORD` env var, then hardcoded default `bsch2024`
+- Session cookie: `bsch_session`, HttpOnly, SameSite=Lax, 24h expiry
+- Named user login: same endpoint, checks named_passwords JSON in settings table
 
-## Waiting cases care types (lib/db/src/schema/waiting-cases.ts)
-- `intensive_care_high`, `intensive_care_medium`, `picu`, `incubator`, `internal`
+## Security Headers (added in app.ts)
+- `X-Content-Type-Options: nosniff`
+- `X-Frame-Options: SAMEORIGIN`
+- `Referrer-Policy: strict-origin-when-cross-origin`
+- `X-XSS-Protection: 1; mode=block`
+- `X-Powered-By` removed
+- API routes get `Cache-Control: no-store, no-cache, must-revalidate`
 
-## Discharge reasons (lib/db/src/schema/cases.ts)
-- `improved`, `request`, `transferred`, `death`, `internal_transfer`
-- `transfer_destination` TEXT column added — stores hospital name (external) or dept name (internal)
-- `internal_transfer` = case moved to another dept within same hospital; new case created in target dept
-
-## Discharge / Transfer dialog (artifacts/bsch/src/pages/case-detail.tsx)
-- 4 mode buttons: تحسن | تحويل | خروج حسب الطلب | وفاة
-- "تحويل" expands to: داخل المستشفى (dept dropdown) | خارج المستشفى (hospital name input)
-- Internal transfer: creates new active case in target dept + discharges current with reason=internal_transfer
-- External transfer: discharges with reason=transferred + saves hospital name in transferDestination
-
-## Electron (Windows Desktop)
-- `electron/main.js` — spawns api-server as child process, shows splash while waiting
-- DB config read from `%APPDATA%\BSCH\bsch.config.json` (created by user on first run)
-- Builds: NSIS installer + Portable via electron-builder in `electron/dist-electron/`
-- Build sequence: `pnpm build:prod` → `cd electron && npm run build-win`
-
-## Build notes
-- TypeScript typecheck requires `pnpm run typecheck:libs` first to build lib declarations
-- esbuild bundles produce: `artifacts/api-server/dist/index.mjs` (2.8MB, includes mysql2)
-- Frontend: `artifacts/bsch/dist/public/` (served by Express in production)
+## Frontend Pages (from Vite dev server)
+Login, Dashboard, Add Case, Department, Waiting Cases, Search, Respiration, Discharge History, Audit Log, Incident Report, Print Reports, Occupancy Report, Settings, Backup, Bulk Import

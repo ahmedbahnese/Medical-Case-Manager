@@ -1,165 +1,171 @@
 /**
  * Database initialization: creates all tables and seeds required data.
- * Runs once at server startup — MySQL 8+ compatible.
- * No PostgreSQL-specific syntax (no DO $$, no SERIAL, no ON CONFLICT).
+ * Runs once at server startup — PostgreSQL compatible.
  */
 import { sql, count } from "drizzle-orm";
 import { db, settingsTable, departmentsTable } from "@workspace/db";
 import { logger } from "./logger";
 
-// Helper: ALTER TABLE ADD COLUMN only when the column doesn't already exist.
-// MySQL (unlike PostgreSQL) has no IF NOT EXISTS clause for ALTER TABLE.
+// Helper: ADD COLUMN only when the column doesn't already exist.
+// PostgreSQL supports ADD COLUMN IF NOT EXISTS since 9.6.
 async function addColumnSafe(table: string, column: string, definition: string): Promise<void> {
-  try {
-    await db.execute(sql.raw(`ALTER TABLE \`${table}\` ADD COLUMN \`${column}\` ${definition}`));
-  } catch (e: any) {
-    // Error 1060 = "Duplicate column name" — column already exists, safe to ignore.
-    if (e?.errno !== 1060 && !String(e?.message ?? "").includes("Duplicate column name")) {
-      throw e;
-    }
-  }
+  await db.execute(
+    sql.raw(`ALTER TABLE ${table} ADD COLUMN IF NOT EXISTS ${column} ${definition}`)
+  );
 }
 
 export async function initDatabase(): Promise<void> {
   try {
     // ── Create tables ─────────────────────────────────────────────────────────
-    // MySQL uses inline ENUMs — no separate type declarations needed.
 
     await db.execute(sql.raw(`
-      CREATE TABLE IF NOT EXISTS \`departments\` (
-        \`id\`                 INT NOT NULL AUTO_INCREMENT PRIMARY KEY,
-        \`name\`               TEXT NOT NULL,
-        \`code\`               VARCHAR(64) NOT NULL,
-        \`description\`        TEXT,
-        \`capacity\`           INT NOT NULL DEFAULT 10,
-        \`department_type\`    ENUM('intensive_care_high','intensive_care_medium','picu','incubator_a','incubator_b','incubator_c','internal') NOT NULL,
-        \`report_fields_json\` TEXT NOT NULL DEFAULT '[]',
-        \`created_at\`         TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
-        \`updated_at\`         TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
-        UNIQUE KEY \`departments_code_unique\` (\`code\`(64))
-      ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci
+      CREATE TABLE IF NOT EXISTS departments (
+        id                 SERIAL PRIMARY KEY,
+        name               TEXT NOT NULL,
+        code               TEXT NOT NULL,
+        description        TEXT,
+        capacity           INTEGER NOT NULL DEFAULT 10,
+        department_type    TEXT NOT NULL,
+        report_fields_json TEXT NOT NULL DEFAULT '[]',
+        created_at         TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+        updated_at         TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+        CONSTRAINT departments_code_unique UNIQUE (code)
+      )
     `));
 
     await db.execute(sql.raw(`
-      CREATE TABLE IF NOT EXISTS \`medical_cases\` (
-        \`id\`                     INT NOT NULL AUTO_INCREMENT PRIMARY KEY,
-        \`patient_name\`           TEXT NOT NULL,
-        \`department_id\`          INT NOT NULL,
-        \`age\`                    TEXT,
-        \`diagnosis\`              TEXT,
-        \`symptoms\`               TEXT,
-        \`treatment\`              TEXT,
-        \`notes\`                  TEXT,
-        \`parent_name\`            TEXT,
-        \`parent_phone\`           TEXT,
-        \`national_id\`            TEXT,
-        \`file_number\`            TEXT,
-        \`case_type\`              ENUM('intensive_care_high','intensive_care_medium','picu','incubator') NOT NULL DEFAULT 'intensive_care_high',
-        \`artificial_respiration\` ENUM('high_frequency','vent','cpap','hfnc','standby','box','no') NOT NULL DEFAULT 'no',
-        \`status\`                 ENUM('active','recovering','discharged','critical') NOT NULL DEFAULT 'active',
-        \`mobe\`                   TEXT,
-        \`ventilation_start_date\` TIMESTAMP NULL DEFAULT NULL,
-        \`ventilation_end_date\`   TIMESTAMP NULL DEFAULT NULL,
-        \`discharge_reason\`       ENUM('improved','request','transferred','death','internal_transfer') DEFAULT NULL,
-        \`admission_date\`         TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
-        \`discharge_date\`         TIMESTAMP NULL DEFAULT NULL,
-        \`created_at\`             TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
-        \`updated_at\`             TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP
-      ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci
+      CREATE TABLE IF NOT EXISTS medical_cases (
+        id                     SERIAL PRIMARY KEY,
+        patient_name           TEXT NOT NULL,
+        department_id          INTEGER NOT NULL,
+        age                    TEXT,
+        diagnosis              TEXT,
+        symptoms               TEXT,
+        treatment              TEXT,
+        notes                  TEXT,
+        parent_name            TEXT,
+        parent_phone           TEXT,
+        national_id            TEXT,
+        file_number            TEXT,
+        case_type              TEXT NOT NULL DEFAULT 'intensive_care_high',
+        artificial_respiration TEXT NOT NULL DEFAULT 'no',
+        status                 TEXT NOT NULL DEFAULT 'active',
+        mobe                   TEXT,
+        ventilation_start_date TIMESTAMPTZ,
+        ventilation_end_date   TIMESTAMPTZ,
+        discharge_reason       TEXT,
+        transfer_destination   TEXT,
+        admission_date         TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+        discharge_date         TIMESTAMPTZ,
+        created_at             TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+        updated_at             TIMESTAMPTZ NOT NULL DEFAULT NOW()
+      )
     `));
 
     await db.execute(sql.raw(`
-      CREATE TABLE IF NOT EXISTS \`waiting_cases\` (
-        \`id\`                     INT NOT NULL AUTO_INCREMENT PRIMARY KEY,
-        \`patient_name\`           TEXT NOT NULL,
-        \`age\`                    TEXT,
-        \`diagnosis\`              TEXT,
-        \`parent_phone\`           TEXT,
-        \`national_id\`            TEXT,
-        \`medical_report\`         TEXT,
-        \`medical_report_name\`    TEXT,
-        \`medical_report_data\`    LONGTEXT,
-        \`care_type\`              ENUM('intensive_care_high','intensive_care_medium','picu','incubator','internal') NOT NULL,
-        \`central_room_required\`  TINYINT(1) NOT NULL DEFAULT 0,
-        \`central_room_code\`      TEXT,
-        \`artificial_respiration\` ENUM('high_frequency','vent','cpap','hfnc','standby','box','no') NOT NULL DEFAULT 'no',
-        \`section\`                ENUM('servo','reception') NOT NULL DEFAULT 'reception',
-        \`status\`                 ENUM('waiting','admitted','cancelled') NOT NULL DEFAULT 'waiting',
-        \`created_at\`             TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
-        \`updated_at\`             TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP
-      ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci
+      CREATE TABLE IF NOT EXISTS waiting_cases (
+        id                     SERIAL PRIMARY KEY,
+        patient_name           TEXT NOT NULL,
+        age                    TEXT,
+        diagnosis              TEXT,
+        parent_phone           TEXT,
+        national_id            TEXT,
+        medical_report         TEXT,
+        medical_report_name    TEXT,
+        medical_report_data    TEXT,
+        care_type              TEXT NOT NULL,
+        central_room_required  BOOLEAN NOT NULL DEFAULT FALSE,
+        central_room_code      TEXT,
+        artificial_respiration TEXT NOT NULL DEFAULT 'no',
+        section                TEXT NOT NULL DEFAULT 'reception',
+        status                 TEXT NOT NULL DEFAULT 'waiting',
+        created_at             TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+        updated_at             TIMESTAMPTZ NOT NULL DEFAULT NOW()
+      )
     `));
 
     await db.execute(sql.raw(`
-      CREATE TABLE IF NOT EXISTS \`settings\` (
-        \`id\`         INT NOT NULL AUTO_INCREMENT PRIMARY KEY,
-        \`key\`        VARCHAR(255) NOT NULL,
-        \`value\`      TEXT,
-        \`updated_at\` TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
-        UNIQUE KEY \`settings_key_unique\` (\`key\`)
-      ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci
+      CREATE TABLE IF NOT EXISTS settings (
+        id         SERIAL PRIMARY KEY,
+        key        TEXT NOT NULL,
+        value      TEXT,
+        updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+        CONSTRAINT settings_key_unique UNIQUE (key)
+      )
     `));
 
     await db.execute(sql.raw(`
-      CREATE TABLE IF NOT EXISTS \`audit_logs\` (
-        \`id\`           INT NOT NULL AUTO_INCREMENT PRIMARY KEY,
-        \`action\`       TEXT NOT NULL,
-        \`entity_type\`  TEXT NOT NULL,
-        \`entity_id\`    INT DEFAULT NULL,
-        \`entity_name\`  TEXT,
-        \`details\`      TEXT,
-        \`performed_by\` TEXT DEFAULT 'المستخدم',
-        \`created_at\`   TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP
-      ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci
+      CREATE TABLE IF NOT EXISTS audit_logs (
+        id           SERIAL PRIMARY KEY,
+        action       TEXT NOT NULL,
+        entity_type  TEXT NOT NULL,
+        entity_id    INTEGER,
+        entity_name  TEXT,
+        details      TEXT,
+        performed_by TEXT DEFAULT 'المستخدم',
+        created_at   TIMESTAMPTZ NOT NULL DEFAULT NOW()
+      )
     `));
 
     await db.execute(sql.raw(`
-      CREATE TABLE IF NOT EXISTS \`incident_reports\` (
-        \`id\`                        INT NOT NULL AUTO_INCREMENT PRIMARY KEY,
-        \`incident_type\`             TEXT NOT NULL,
-        \`incident_location\`         TEXT NOT NULL,
-        \`report_date\`               TIMESTAMP NOT NULL,
-        \`report_day\`                TEXT,
-        \`report_time\`               TEXT,
-        \`total_injured\`             INT NOT NULL DEFAULT 0,
-        \`total_deaths\`              INT NOT NULL DEFAULT 0,
-        \`hospitals_transferred_to\`  TEXT,
-        \`cases_json\`                TEXT NOT NULL DEFAULT '[]',
-        \`created_at\`                TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
-        \`updated_at\`                TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP
-      ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci
+      CREATE TABLE IF NOT EXISTS incident_reports (
+        id                       SERIAL PRIMARY KEY,
+        incident_type            TEXT NOT NULL,
+        incident_location        TEXT NOT NULL,
+        report_date              TIMESTAMPTZ NOT NULL,
+        report_day               TEXT,
+        report_time              TEXT,
+        total_injured            INTEGER NOT NULL DEFAULT 0,
+        total_deaths             INTEGER NOT NULL DEFAULT 0,
+        hospitals_transferred_to TEXT,
+        cases_json               TEXT NOT NULL DEFAULT '[]',
+        created_at               TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+        updated_at               TIMESTAMPTZ NOT NULL DEFAULT NOW()
+      )
     `));
 
     await db.execute(sql.raw(`
-      CREATE TABLE IF NOT EXISTS \`backups\` (
-        \`id\`           INT NOT NULL AUTO_INCREMENT PRIMARY KEY,
-        \`backup_name\`  TEXT NOT NULL,
-        \`backup_data\`  LONGTEXT NOT NULL,
-        \`record_count\` INT NOT NULL DEFAULT 0,
-        \`created_at\`   TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP
-      ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci
+      CREATE TABLE IF NOT EXISTS backups (
+        id           SERIAL PRIMARY KEY,
+        backup_name  TEXT NOT NULL,
+        backup_data  TEXT NOT NULL,
+        record_count INTEGER NOT NULL DEFAULT 0,
+        created_at   TIMESTAMPTZ NOT NULL DEFAULT NOW()
+      )
     `));
 
-    // ── Schema migration: add columns introduced in later versions ─────────────
+    // ── Schema migrations: add columns introduced in later versions ────────────
+    // PostgreSQL supports ADD COLUMN IF NOT EXISTS — no try/catch needed
     await addColumnSafe("medical_cases", "transfer_destination", "TEXT");
     await addColumnSafe("departments",   "report_fields_json",  "TEXT NOT NULL DEFAULT '[]'");
     await addColumnSafe("waiting_cases", "medical_report",      "TEXT");
     await addColumnSafe("waiting_cases", "medical_report_name", "TEXT");
-    await addColumnSafe("waiting_cases", "medical_report_data", "LONGTEXT");
+    await addColumnSafe("waiting_cases", "medical_report_data", "TEXT");
 
-    // ── Schema migration: extend ENUMs with new values ─────────────────────────
-    // These MODIFY COLUMN statements are idempotent — safe to re-run.
-
-    // Migrate department_type from ENUM to VARCHAR(64) to allow custom types
-    try {
-      await db.execute(sql.raw(`ALTER TABLE \`departments\` MODIFY COLUMN \`department_type\` VARCHAR(64) NOT NULL`));
-    } catch { /* already up to date */ }
-    try {
-      await db.execute(sql.raw(`ALTER TABLE \`waiting_cases\` MODIFY COLUMN \`care_type\` ENUM('intensive_care_high','intensive_care_medium','picu','incubator','internal') NOT NULL`));
-    } catch { /* already up to date */ }
-    try {
-      await db.execute(sql.raw(`ALTER TABLE \`medical_cases\` MODIFY COLUMN \`discharge_reason\` ENUM('improved','request','transferred','death','internal_transfer') DEFAULT NULL`));
-    } catch { /* already up to date */ }
+    // ── Convert legacy PostgreSQL ENUM columns to TEXT ────────────────────────
+    // Early versions of the schema used pgEnum types. TEXT is now used instead
+    // so that custom values (like 'internal') can be stored freely.
+    // These ALTERs are idempotent — silently ignored if the column is already TEXT.
+    const enumToTextMigrations: Array<[string, string]> = [
+      ["departments",   "department_type"],
+      ["medical_cases", "case_type"],
+      ["medical_cases", "artificial_respiration"],
+      ["medical_cases", "status"],
+      ["medical_cases", "discharge_reason"],
+      ["waiting_cases", "care_type"],
+      ["waiting_cases", "artificial_respiration"],
+      ["waiting_cases", "section"],
+      ["waiting_cases", "status"],
+    ];
+    for (const [table, column] of enumToTextMigrations) {
+      try {
+        await db.execute(
+          sql.raw(`ALTER TABLE ${table} ALTER COLUMN ${column} TYPE TEXT USING ${column}::TEXT`)
+        );
+      } catch {
+        // Already TEXT or column doesn't exist — safe to continue
+      }
+    }
 
     // ── Seed departments if table is empty ────────────────────────────────────
     const [{ value: deptCount }] = await db
@@ -174,14 +180,20 @@ export async function initDatabase(): Promise<void> {
         { name: "الحاضنات أ",              code: "INC-A",    description: "وحدة الحاضنات أ",              capacity: 15, departmentType: "incubator_a"           },
         { name: "الحاضنات ب",              code: "INC-B",    description: "وحدة الحاضنات ب",              capacity: 15, departmentType: "incubator_b"           },
         { name: "الحاضنات ج",              code: "INC-C",    description: "وحدة الحاضنات ج",              capacity: 15, departmentType: "incubator_c"           },
-      ]).onDuplicateKeyUpdate({ set: { capacity: sql`capacity` } });
+      ]).onConflictDoUpdate({
+        target: departmentsTable.code,
+        set: { capacity: sql`EXCLUDED.capacity` },
+      });
       logger.info("Seeded 6 departments");
     }
 
-    // Always ensure the internal department exists (may be missing on old installs)
+    // Always ensure the internal department exists (safe to re-run)
     await db.insert(departmentsTable).values([
       { name: "الداخلي", code: "INTERNAL", description: "القسم الداخلي", capacity: 24, departmentType: "internal" },
-    ]).onDuplicateKeyUpdate({ set: { capacity: sql`capacity` } });
+    ]).onConflictDoUpdate({
+      target: departmentsTable.code,
+      set: { capacity: sql`EXCLUDED.capacity` },
+    });
 
     // ── Seed default settings ─────────────────────────────────────────────────
     await db.insert(settingsTable).values([
@@ -194,7 +206,10 @@ export async function initDatabase(): Promise<void> {
       { key: "shift_evening_end",   value: "21:00" },
       { key: "shift_night_start",   value: "21:00" },
       { key: "shift_night_end",     value: "07:00" },
-    ]).onDuplicateKeyUpdate({ set: { value: sql`value` } });
+    ]).onConflictDoUpdate({
+      target: settingsTable.key,
+      set: { value: sql`EXCLUDED.value` },
+    });
 
     logger.info("Database initialization complete");
   } catch (err) {

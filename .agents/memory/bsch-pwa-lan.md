@@ -10,7 +10,7 @@ description: PWA icons, service worker, install prompt, production static servin
 - favicon.svg updated to teal (#0f766e) medical cross (was red/orange)
 
 ## Service Worker
-- `artifacts/bsch/public/sw.js` — CACHE_VERSION constant; bump it to force cache invalidation on deploy
+- `artifacts/bsch/public/sw.js` — CACHE_VERSION constant (`v3`); bump it to force cache invalidation on deploy
 - Strategies: API (/api/*) → network-only; navigation → network-first + offline.html fallback; static assets → cache-first auto-caching
 - Push notification handler + notificationclick handler ready (no server-side VAPID wired yet)
 - SKIP_WAITING message handler for the SW update flow
@@ -28,9 +28,10 @@ description: PWA icons, service worker, install prompt, production static servin
 ## Production Static Serving (Hospital LAN)
 - `artifacts/api-server/src/app.ts` serves the React SPA in `NODE_ENV=production`
 - **Why:** hospital staff access the system from any device on the LAN via one URL/port (8080); no separate frontend server needed in production
-- Frontend dir resolution: `FRONTEND_DIR` env var → `<cwd>/public` (Docker) → `<dist>/../../../bsch/dist/public` (local monorepo)
+- Frontend dir resolution: `FRONTEND_DIR` env var → `<cwd>/public` (Docker) → `<bundle>/../../bsch/dist/public` (monorepo: 2 levels up from dist)
 - `StartServer.bat` sets `FRONTEND_DIR=artifacts\bsch\dist\public` so local Windows installs find the built frontend
 - **Express 5 wildcard:** `app.get("/{*splat}", ...)` — the old `app.get("*", ...)` syntax throws a PathError in Express 5 / path-to-regexp v8
+- sw.js and manifest.json get `Cache-Control: no-cache` in static serving (must always be fresh for PWA updates)
 
 ## Network Guide
 - `docs/NETWORK.md` — LAN topology, firewall rule (port 8080), static IP, hostname tricks, NSSM Windows service, PWA install per platform

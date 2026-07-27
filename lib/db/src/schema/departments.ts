@@ -1,4 +1,4 @@
-import { mysqlTable, int, text, varchar, timestamp } from "drizzle-orm/mysql-core";
+import { pgTable, serial, text, integer, timestamp } from "drizzle-orm/pg-core";
 import { createInsertSchema } from "drizzle-zod";
 import { z } from "zod/v4";
 
@@ -13,14 +13,14 @@ export const departmentTypeValues = [
   "internal",
 ] as const;
 
-export const departmentsTable = mysqlTable("departments", {
-  id: int("id").autoincrement().primaryKey(),
+export const departmentsTable = pgTable("departments", {
+  id: serial("id").primaryKey(),
   name: text("name").notNull(),
-  code: text("code").notNull(),
+  code: text("code").notNull().unique(),
   description: text("description"),
-  capacity: int("capacity").notNull().default(10),
-  // VARCHAR instead of ENUM — allows institutions to define custom department types freely
-  departmentType: varchar("department_type", { length: 64 }).notNull(),
+  capacity: integer("capacity").notNull().default(10),
+  // TEXT instead of ENUM — allows custom department types
+  departmentType: text("department_type").notNull(),
   reportFieldsJson: text("report_fields_json").notNull().default("[]"),
   createdAt: timestamp("created_at").defaultNow().notNull(),
   updatedAt: timestamp("updated_at").defaultNow().notNull(),
