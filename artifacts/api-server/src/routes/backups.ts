@@ -33,12 +33,11 @@ router.post("/backups", async (req, res): Promise<void> => {
   const backupData = JSON.stringify({ cases, waitingCases, createdAt: new Date().toISOString() });
   const recordCount = cases.length + waitingCases.length;
 
-  // MySQL does not support .returning() — use $returningId() + SELECT
   const [{ id: newId }] = await db.insert(backupsTable).values({
     backupName: parsed.data.backupName,
     backupData,
     recordCount,
-  }).$returningId();
+  }).returning({ id: backupsTable.id });
 
   const [backup] = await db
     .select({
@@ -101,12 +100,11 @@ router.post("/backups/import", async (req, res): Promise<void> => {
     const { backupName, backupData } = req.body as { backupName?: string; backupData?: unknown };
     const data = parseBackupData(backupData);
 
-    // MySQL does not support .returning() — use $returningId() + SELECT
     const [{ id: newId }] = await db.insert(backupsTable).values({
       backupName: String(backupName || "نسخة مستوردة").slice(0, 120),
       backupData: JSON.stringify({ ...data, importedAt: new Date().toISOString() }),
       recordCount: data.cases.length + data.waitingCases.length,
-    }).$returningId();
+    }).returning({ id: backupsTable.id });
 
     const [backup] = await db
       .select({

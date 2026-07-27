@@ -44,7 +44,6 @@ router.post("/waiting-cases", async (req, res): Promise<void> => {
     return;
   }
 
-  // MySQL does not support .returning() — use $returningId() + SELECT
   const [{ id: newCaseId }] = await db.insert(waitingCasesTable).values({
     patientName: parsed.data.patientName,
     age: parsed.data.age ?? null,
@@ -60,7 +59,7 @@ router.post("/waiting-cases", async (req, res): Promise<void> => {
     artificialRespiration: (parsed.data.artificialRespiration as any) ?? "no",
     section: (parsed.data.section as any) ?? "reception",
     status: "waiting",
-  }).$returningId();
+  }).returning({ id: waitingCasesTable.id });
 
   const [newCase] = await db.select().from(waitingCasesTable).where(eq(waitingCasesTable.id, newCaseId));
 

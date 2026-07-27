@@ -74,7 +74,6 @@ router.post("/departments", async (req, res): Promise<void> => {
     return;
   }
 
-  // MySQL does not support .returning() — use $returningId() + SELECT
   const [{ id: newDeptId }] = await db.insert(departmentsTable).values({
     name,
     code: code.toUpperCase(),
@@ -84,7 +83,7 @@ router.post("/departments", async (req, res): Promise<void> => {
     reportFieldsJson: typeof reportFieldsJson === "string"
       ? reportFieldsJson
       : JSON.stringify(Array.isArray(reportFields) ? reportFields : []),
-  }).$returningId();
+  }).returning({ id: departmentsTable.id });
 
   const [dept] = await db.select().from(departmentsTable).where(eq(departmentsTable.id, newDeptId));
 

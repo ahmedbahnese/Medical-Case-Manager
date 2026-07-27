@@ -10,7 +10,7 @@
 
 - **Monorepo:** pnpm workspaces، Node.js 20، TypeScript 5.9
 - **Backend:** Express 5 + Drizzle ORM
-- **Database:** **MySQL 8** (تم التحويل من PostgreSQL)
+- **Database:** **PostgreSQL** (Replit built-in — `DATABASE_URL` env var)
 - **Validation:** Zod (`zod/v4`)، `drizzle-zod`
 - **Frontend:** React 19 + Vite + Tailwind CSS 4 + shadcn/ui
 - **Desktop Packaging:** Electron 32 + electron-builder (NSIS installer + Portable)
