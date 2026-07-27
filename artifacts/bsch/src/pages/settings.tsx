@@ -56,6 +56,16 @@ const REPORT_FIELD_OPTIONS = [
 ];
 const ALL_REPORT_FIELD_KEYS = REPORT_FIELD_OPTIONS.map(f => f.key);
 
+type ReportFieldEntry = string | { key: string; label: string; isCustom: true };
+function parseReportFields(json: string | null | undefined): ReportFieldEntry[] {
+  try { const p = JSON.parse(json ?? "[]"); return Array.isArray(p) && p.length > 0 ? p : [...ALL_REPORT_FIELD_KEYS]; }
+  catch { return [...ALL_REPORT_FIELD_KEYS]; }
+}
+function rfKey(f: ReportFieldEntry) { return typeof f === "string" ? f : f.key; }
+function rfIsCustom(f: ReportFieldEntry): f is { key: string; label: string; isCustom: true } {
+  return typeof f !== "string" && (f as any).isCustom === true;
+}
+
 interface SettingsData {
   hospital_name?: string;
   logo_base64?: string;
@@ -166,7 +176,9 @@ export default function SettingsPage() {
   const [newDeptCustomType, setNewDeptCustomType] = useState("");
   const [editDeptCustomType, setEditDeptCustomType] = useState("");
   const [showAddDept, setShowAddDept] = useState(false);
-  const [newDeptFields, setNewDeptFields] = useState<string[]>(ALL_REPORT_FIELD_KEYS);
+  const [newDeptFields, setNewDeptFields] = useState<ReportFieldEntry[]>([...ALL_REPORT_FIELD_KEYS]);
+  const [newCustomFieldLabel, setNewCustomFieldLabel] = useState("");
+  const [editCustomFieldLabel, setEditCustomFieldLabel] = useState("");
   const [showNewDeptFields, setShowNewDeptFields] = useState(false);
 
   const loadDepartments = async () => {
@@ -299,7 +311,8 @@ export default function SettingsPage() {
       toast.success("تم إضافة القسم");
       setNewDept({ name: "", code: "", capacity: 10, departmentType: "intensive_care_high", description: "" });
       setNewDeptCustomType("");
-      setNewDeptFields(ALL_REPORT_FIELD_KEYS);
+      setNewDeptFields([...ALL_REPORT_FIELD_KEYS]);
+      setNewCustomFieldLabel("");
       setShowAddDept(false);
       setShowNewDeptFields(false);
       loadDepartments();
@@ -530,22 +543,64 @@ export default function SettingsPage() {
                   className="text-xs text-primary underline underline-offset-2"
                   onClick={() => setShowNewDeptFields(s => !s)}
                 >
-                  {showNewDeptFields ? "إخفاء" : "تخصيص"} حقول البيان ({newDeptFields.length}/{REPORT_FIELD_OPTIONS.length})
+                  {showNewDeptFields ? "إخفاء" : "تخصيص"} حقول البيان ({newDeptFields.length} حقل)
                 </button>
                 {showNewDeptFields && (
-                  <div className="grid grid-cols-3 gap-1.5 p-2 border rounded-lg bg-background">
-                    {REPORT_FIELD_OPTIONS.map(opt => (
-                      <div key={opt.key} className="flex items-center gap-1.5">
-                        <Checkbox
-                          id={`nf-${opt.key}`}
-                          checked={newDeptFields.includes(opt.key)}
-                          onCheckedChange={v => setNewDeptFields(prev =>
-                            v ? [...prev, opt.key] : prev.filter(k => k !== opt.key)
-                          )}
-                        />
-                        <Label htmlFor={`nf-${opt.key}`} className="text-xs cursor-pointer">{opt.label}</Label>
+                  <div className="space-y-2 p-2 border rounded-lg bg-background">
+                    {/* Standard fields */}
+                    <div className="grid grid-cols-3 gap-1.5">
+                      {REPORT_FIELD_OPTIONS.map(opt => (
+                        <div key={opt.key} className="flex items-center gap-1.5">
+                          <Checkbox
+                            id={`nf-${opt.key}`}
+                            checked={newDeptFields.some(f => rfKey(f) === opt.key)}
+                            onCheckedChange={v => setNewDeptFields(prev =>
+                              v ? [...prev, opt.key] : prev.filter(f => rfKey(f) !== opt.key)
+                            )}
+                          />
+                          <Label htmlFor={`nf-${opt.key}`} className="text-xs cursor-pointer">{opt.label}</Label>
+                        </div>
+                      ))}
+                    </div>
+                    {/* Custom fields */}
+                    {newDeptFields.filter(rfIsCustom).length > 0 && (
+                      <div className="flex flex-wrap gap-1.5 pt-1 border-t">
+                        {newDeptFields.filter(rfIsCustom).map(f => (
+                          <span key={f.key} className="inline-flex items-center gap-1 text-xs bg-primary/10 text-primary px-2 py-0.5 rounded-full border border-primary/20">
+                            {f.label}
+                            <button type="button" onClick={() => setNewDeptFields(prev => prev.filter(x => rfKey(x) !== f.key))} className="hover:text-destructive">
+                              <X className="h-3 w-3" />
+                            </button>
+                          </span>
+                        ))}
                       </div>
-                    ))}
+                    )}
+                    {/* Add custom field */}
+                    <div className="flex gap-1.5 pt-1 border-t">
+                      <Input
+                        value={newCustomFieldLabel}
+                        onChange={e => setNewCustomFieldLabel(e.target.value)}
+                        placeholder="اسم حقل مخصص (مثال: فصيلة الدم)"
+                        className="h-7 text-xs flex-1"
+                        onKeyDown={e => {
+                          if (e.key === "Enter" && newCustomFieldLabel.trim()) {
+                            e.preventDefault();
+                            const key = `custom_${Date.now()}`;
+                            setNewDeptFields(prev => [...prev, { key, label: newCustomFieldLabel.trim(), isCustom: true as const }]);
+                            setNewCustomFieldLabel("");
+                          }
+                        }}
+                      />
+                      <Button type="button" size="sm" variant="outline" className="h-7 text-xs px-2"
+                        onClick={() => {
+                          if (!newCustomFieldLabel.trim()) return;
+                          const key = `custom_${Date.now()}`;
+                          setNewDeptFields(prev => [...prev, { key, label: newCustomFieldLabel.trim(), isCustom: true as const }]);
+                          setNewCustomFieldLabel("");
+                        }}>
+                        <Plus className="h-3 w-3" />
+                      </Button>
+                    </div>
                   </div>
                 )}
               </div>

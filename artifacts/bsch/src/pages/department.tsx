@@ -201,7 +201,7 @@ export default function DepartmentDetail() {
         </div>
 
         <div className="flex flex-wrap gap-2">
-          <Button variant="outline" size="sm" className="gap-1" onClick={() => exportToExcelFormatted(dept.name, filteredCases, hospital_name)}>
+          <Button variant="outline" size="sm" className="gap-1" onClick={() => exportToExcelFormatted(dept.name, filteredCases, hospital_name, rfJson)}>
             <FileSpreadsheet className="h-4 w-4" /> Excel
           </Button>
           <Button variant="outline" size="sm" className="gap-1" onClick={handleExportWord}>

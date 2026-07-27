@@ -57,7 +57,8 @@ export const GetDepartmentsResponseItem = zod.object({
   "code": zod.string(),
   "description": zod.string().nullish(),
   "capacity": zod.number(),
-  "departmentType": zod.enum(['intensive_care_high', 'intensive_care_medium', 'picu', 'incubator_a', 'incubator_b', 'incubator_c', 'internal']),
+  "departmentType": zod.string(),
+  "reportFieldsJson": zod.string().nullish(),
   "activeCasesCount": zod.number(),
   "createdAt": zod.coerce.date()
 })
@@ -77,7 +78,8 @@ export const GetDepartmentResponse = zod.object({
   "code": zod.string(),
   "description": zod.string().nullish(),
   "capacity": zod.number(),
-  "departmentType": zod.enum(['intensive_care_high', 'intensive_care_medium', 'picu', 'incubator_a', 'incubator_b', 'incubator_c', 'internal']),
+  "departmentType": zod.string(),
+  "reportFieldsJson": zod.string().nullish(),
   "activeCasesCount": zod.number(),
   "cases": zod.array(zod.object({
   "id": zod.number(),
