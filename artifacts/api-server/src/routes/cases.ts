@@ -314,7 +314,7 @@ router.patch("/cases/:id", async (req, res): Promise<void> => {
   };
 
   if (body.data.status === "discharged") {
-    const allowedReasons = ["improved", "request", "transferred", "death"];
+    const allowedReasons = ["improved", "request", "transferred", "death", "internal_transfer"];
     if (!allowedReasons.includes(extraData.dischargeReason)) {
       res.status(400).json({ error: "سبب الخروج مطلوب ويجب أن يكون صحيحاً" });
       return;
