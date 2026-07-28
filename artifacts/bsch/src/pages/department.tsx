@@ -58,9 +58,18 @@ const DEFAULT_DEPT_FIELD_KEYS = ALL_DEPT_FIELDS.map(f => f.key);
 function getActiveFields(reportFieldsJson: string | null | undefined) {
   try {
     const parsed = JSON.parse(reportFieldsJson ?? "[]");
-    return Array.isArray(parsed) && parsed.length > 0
-      ? ALL_DEPT_FIELDS.filter(f => parsed.includes(f.key))
-      : ALL_DEPT_FIELDS;
+    if (!Array.isArray(parsed) || parsed.length === 0) return ALL_DEPT_FIELDS;
+    const result: { key: string; label: string; getText: (c: any) => string }[] = [];
+    for (const entry of parsed) {
+      if (typeof entry === "string") {
+        const found = ALL_DEPT_FIELDS.find(f => f.key === entry);
+        if (found) result.push(found);
+      } else if (entry && typeof entry === "object" && entry.isCustom && entry.key && entry.label) {
+        // Custom field — show "—" since case records don't carry custom values
+        result.push({ key: entry.key, label: entry.label, getText: () => "—" });
+      }
+    }
+    return result.length > 0 ? result : ALL_DEPT_FIELDS;
   } catch { return ALL_DEPT_FIELDS; }
 }
 
