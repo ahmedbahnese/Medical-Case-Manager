@@ -149,11 +149,13 @@ export default function DepartmentDetail() {
 
   if (!dept) return <div>القسم غير موجود</div>;
 
-  const filteredCases = dept.cases?.filter(c =>
+  const activeCases = dept.cases?.filter(c => c.status !== "discharged") ?? [];
+  const filteredCases = activeCases.filter(c =>
+    !searchFilter ||
     c.patientName.includes(searchFilter) ||
     (c.fileNumber && c.fileNumber.includes(searchFilter)) ||
     (c.diagnosis && c.diagnosis.includes(searchFilter))
-  ) || [];
+  );
 
   const rfJson = (dept as any).reportFieldsJson as string | undefined;
   const activeFields = getActiveFields(rfJson);

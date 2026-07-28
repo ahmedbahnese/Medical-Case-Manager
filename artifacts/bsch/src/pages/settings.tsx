@@ -180,6 +180,8 @@ export default function SettingsPage() {
   const [newCustomFieldLabel, setNewCustomFieldLabel] = useState("");
   const [editCustomFieldLabel, setEditCustomFieldLabel] = useState("");
   const [showNewDeptFields, setShowNewDeptFields] = useState(false);
+  const [editDeptFields, setEditDeptFields] = useState<ReportFieldEntry[]>([...ALL_REPORT_FIELD_KEYS]);
+  const [showEditDeptFields, setShowEditDeptFields] = useState(false);
 
   const loadDepartments = async () => {
     try {
@@ -328,6 +330,8 @@ export default function SettingsPage() {
       : editDeptData.departmentType;
     const payload = { ...editDeptData };
     if (resolvedEditType !== undefined) payload.departmentType = resolvedEditType;
+    // Always use editDeptFields for report fields
+    payload.reportFieldsJson = JSON.stringify(editDeptFields);
     try {
       const res = await fetch(`/api/departments/${id}`, {
         method: "PATCH",
@@ -668,33 +672,74 @@ export default function SettingsPage() {
                       </div>
                       {/* Report fields config for edit */}
                       <div className="space-y-1.5">
-                        <p className="text-xs font-medium text-muted-foreground">حقول البيان — اختر ما يظهر في بيان هذا القسم:</p>
-                        <div className="grid grid-cols-3 gap-1.5 p-2 border rounded-lg bg-muted/20">
-                          {REPORT_FIELD_OPTIONS.map(opt => {
-                            const currentJson = editDeptData.reportFieldsJson ?? dept.reportFieldsJson ?? "[]";
-                            let currentFields: string[];
-                            try { const p = JSON.parse(currentJson); currentFields = Array.isArray(p) && p.length > 0 ? p : ALL_REPORT_FIELD_KEYS; }
-                            catch { currentFields = ALL_REPORT_FIELD_KEYS; }
-                            return (
-                              <div key={opt.key} className="flex items-center gap-1.5">
-                                <Checkbox
-                                  id={`ef-${dept.id}-${opt.key}`}
-                                  checked={currentFields.includes(opt.key)}
-                                  onCheckedChange={v => {
-                                    const updated = v
-                                      ? [...currentFields, opt.key]
-                                      : currentFields.filter(k => k !== opt.key);
-                                    setEditDeptData(p => ({ ...p, reportFieldsJson: JSON.stringify(updated) }));
-                                  }}
-                                />
-                                <Label htmlFor={`ef-${dept.id}-${opt.key}`} className="text-xs cursor-pointer">{opt.label}</Label>
+                        <button
+                          type="button"
+                          className="text-xs text-primary underline underline-offset-2"
+                          onClick={() => setShowEditDeptFields(s => !s)}
+                        >
+                          {showEditDeptFields ? "إخفاء" : "تخصيص"} حقول البيان ({editDeptFields.length} حقل)
+                        </button>
+                        {showEditDeptFields && (
+                          <div className="space-y-2 p-2 border rounded-lg bg-background">
+                            {/* Standard fields */}
+                            <div className="grid grid-cols-3 gap-1.5">
+                              {REPORT_FIELD_OPTIONS.map(opt => (
+                                <div key={opt.key} className="flex items-center gap-1.5">
+                                  <Checkbox
+                                    id={`ef-${dept.id}-${opt.key}`}
+                                    checked={editDeptFields.some(f => rfKey(f) === opt.key)}
+                                    onCheckedChange={v => setEditDeptFields(prev =>
+                                      v ? [...prev, opt.key] : prev.filter(f => rfKey(f) !== opt.key)
+                                    )}
+                                  />
+                                  <Label htmlFor={`ef-${dept.id}-${opt.key}`} className="text-xs cursor-pointer">{opt.label}</Label>
+                                </div>
+                              ))}
+                            </div>
+                            {/* Custom fields */}
+                            {editDeptFields.filter(rfIsCustom).length > 0 && (
+                              <div className="flex flex-wrap gap-1.5 pt-1 border-t">
+                                {editDeptFields.filter(rfIsCustom).map(f => (
+                                  <span key={f.key} className="inline-flex items-center gap-1 text-xs bg-primary/10 text-primary px-2 py-0.5 rounded-full border border-primary/20">
+                                    {f.label}
+                                    <button type="button" onClick={() => setEditDeptFields(prev => prev.filter(x => rfKey(x) !== f.key))} className="hover:text-destructive">
+                                      <X className="h-3 w-3" />
+                                    </button>
+                                  </span>
+                                ))}
                               </div>
-                            );
-                          })}
-                        </div>
+                            )}
+                            {/* Add custom field */}
+                            <div className="flex gap-1.5 pt-1 border-t">
+                              <Input
+                                value={editCustomFieldLabel}
+                                onChange={e => setEditCustomFieldLabel(e.target.value)}
+                                placeholder="اسم حقل مخصص (مثال: فصيلة الدم)"
+                                className="h-7 text-xs flex-1"
+                                onKeyDown={e => {
+                                  if (e.key === "Enter" && editCustomFieldLabel.trim()) {
+                                    e.preventDefault();
+                                    const key = `custom_${Date.now()}`;
+                                    setEditDeptFields(prev => [...prev, { key, label: editCustomFieldLabel.trim(), isCustom: true as const }]);
+                                    setEditCustomFieldLabel("");
+                                  }
+                                }}
+                              />
+                              <Button type="button" size="sm" variant="outline" className="h-7 text-xs px-2"
+                                onClick={() => {
+                                  if (!editCustomFieldLabel.trim()) return;
+                                  const key = `custom_${Date.now()}`;
+                                  setEditDeptFields(prev => [...prev, { key, label: editCustomFieldLabel.trim(), isCustom: true as const }]);
+                                  setEditCustomFieldLabel("");
+                                }}>
+                                <Plus className="h-3 w-3" />
+                              </Button>
+                            </div>
+                          </div>
+                        )}
                       </div>
                       <div className="flex gap-2 justify-end">
-                        <Button variant="ghost" size="sm" onClick={() => { setEditingDept(null); setEditDeptData({}); }}>
+                        <Button variant="ghost" size="sm" onClick={() => { setEditingDept(null); setEditDeptData({}); setEditDeptFields([...ALL_REPORT_FIELD_KEYS]); setShowEditDeptFields(false); }}>
                           <X className="h-4 w-4" />
                         </Button>
                         <Button size="sm" onClick={() => handleSaveDept(dept.id, dept)} disabled={deptLoading} className="gap-1">
@@ -726,6 +771,9 @@ export default function SettingsPage() {
                           onClick={() => {
                             setEditingDept(dept.id);
                             setEditDeptData({ reportFieldsJson: dept.reportFieldsJson ?? "[]" });
+                            setEditDeptFields(parseReportFields(dept.reportFieldsJson));
+                            setShowEditDeptFields(false);
+                            setEditCustomFieldLabel("");
                             // Pre-fill custom type input if dept has a non-standard type
                             if (!KNOWN_TYPE_VALUES.has(dept.departmentType)) {
                               setEditDeptCustomType(dept.departmentType);
