@@ -55,28 +55,38 @@ const ALL_DEPT_FIELDS: { key: string; label: string; getText: (c: any) => string
 
 const DEFAULT_DEPT_FIELD_KEYS = ALL_DEPT_FIELDS.map(f => f.key);
 
-function getActiveFields(reportFieldsJson: string | null | undefined) {
+type ActiveField = { key: string; label: string; getText: (c: any) => string; isCustom?: boolean };
+
+function getActiveFields(
+  reportFieldsJson: string | null | undefined,
+  customValues?: Record<number, Record<string, string>>
+): ActiveField[] {
   try {
     const parsed = JSON.parse(reportFieldsJson ?? "[]");
     if (!Array.isArray(parsed) || parsed.length === 0) return ALL_DEPT_FIELDS;
-    const result: { key: string; label: string; getText: (c: any) => string }[] = [];
+    const result: ActiveField[] = [];
     for (const entry of parsed) {
       if (typeof entry === "string") {
         const found = ALL_DEPT_FIELDS.find(f => f.key === entry);
         if (found) result.push(found);
       } else if (entry && typeof entry === "object" && entry.isCustom && entry.key && entry.label) {
-        // Custom field — show "—" since case records don't carry custom values
-        result.push({ key: entry.key, label: entry.label, getText: () => "—" });
+        const fKey = entry.key as string;
+        result.push({
+          key: fKey,
+          label: entry.label as string,
+          isCustom: true,
+          getText: (c: any) => customValues?.[c.id]?.[fKey] ?? "",
+        });
       }
     }
     return result.length > 0 ? result : ALL_DEPT_FIELDS;
   } catch { return ALL_DEPT_FIELDS; }
 }
 
-function buildDeptHtml(deptName: string, cases: any[], hospitalName: string, reportFieldsJson?: string): string {
+function buildDeptHtml(deptName: string, cases: any[], hospitalName: string, reportFieldsJson?: string, customValues?: Record<number, Record<string, string>>): string {
   const now = new Date();
   const dateStr = now.toLocaleDateString("ar-EG", { weekday: "long", day: "2-digit", month: "2-digit", year: "numeric" });
-  const activeFields = getActiveFields(reportFieldsJson);
+  const activeFields = getActiveFields(reportFieldsJson, customValues);
   const headers = activeFields.map(f => `<th>${f.label}</th>`).join("");
   const rows = cases.map((c, i) => {
     const cells = activeFields.map(f => `<td>${f.getText(c)}</td>`).join("");
@@ -96,10 +106,10 @@ function buildDeptHtml(deptName: string, cases: any[], hospitalName: string, rep
     </table>`;
 }
 
-function exportToExcelFormatted(deptName: string, cases: any[], hospitalName: string, reportFieldsJson?: string): void {
+function exportToExcelFormatted(deptName: string, cases: any[], hospitalName: string, reportFieldsJson?: string, customValues?: Record<number, Record<string, string>>): void {
   const now = new Date();
   const dateStr = now.toLocaleDateString("ar-EG", { weekday: "long", day: "2-digit", month: "2-digit", year: "numeric" });
-  const activeFields = getActiveFields(reportFieldsJson);
+  const activeFields = getActiveFields(reportFieldsJson, customValues);
   const headers = activeFields.map(f => `<th>${f.label}</th>`).join("");
   const rows = cases.map((c, i) => {
     const cells = activeFields.map(f => `<td>${f.getText(c)}</td>`).join("");
@@ -132,7 +142,7 @@ function exportToExcelFormatted(deptName: string, cases: any[], hospitalName: st
   URL.revokeObjectURL(a.href);
 }
 
-import { Activity, ArrowLeft, Bed, Calendar, FileText, Plus, User, AlertTriangle, Search, Printer, FileSpreadsheet, Download, FileDown } from "lucide-react";
+import { Activity, ArrowLeft, Bed, Calendar, FileText, Plus, User, AlertTriangle, Search, Printer, FileSpreadsheet, Download, FileDown, PenLine, CheckCheck } from "lucide-react";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
@@ -148,6 +158,8 @@ export default function DepartmentDetail() {
   const departmentId = parseInt(id || "0");
   const [, setLocation] = useLocation();
   const [searchFilter, setSearchFilter] = useState("");
+  const [isFillingCustom, setIsFillingCustom] = useState(false);
+  const [customValues, setCustomValues] = useState<Record<number, Record<string, string>>>({});
   const { hospital_name, logo_base64, watermark_enabled } = useAppSettings();
 
   const { data: dept, isLoading } = useGetDepartment(departmentId);
@@ -167,11 +179,15 @@ export default function DepartmentDetail() {
   );
 
   const rfJson = (dept as any).reportFieldsJson as string | undefined;
-  const activeFields = getActiveFields(rfJson);
+  const activeFields = getActiveFields(rfJson, customValues);
+  const hasCustomFields = activeFields.some(f => f.isCustom);
+
+  const setCustomVal = (caseId: number, fieldKey: string, value: string) =>
+    setCustomValues(prev => ({ ...prev, [caseId]: { ...prev[caseId], [fieldKey]: value } }));
 
   const handlePrint = () => window.print();
   const handleExportWord = () => {
-    const html = buildDeptHtml(dept.name, filteredCases, hospital_name, rfJson);
+    const html = buildDeptHtml(dept.name, filteredCases, hospital_name, rfJson, customValues);
     const full = `<html xmlns:o="urn:schemas-microsoft-com:office:office" dir="rtl"><head><meta charset="utf-8">
       <style>body{font-family:Arial;direction:rtl;}table{border-collapse:collapse;width:100%}
       th,td{border:1px solid #ccc;padding:6px 8px;text-align:right}th{background:#2563eb;color:white;}
@@ -182,7 +198,7 @@ export default function DepartmentDetail() {
     a.download = `بيان-${dept.name}-${new Date().toISOString().slice(0,10)}.doc`; a.click();
   };
   const handleExportPDF = () => {
-    exportPDF(buildDeptHtml(dept.name, filteredCases, hospital_name, rfJson), `dept-${dept.name}.pdf`, logo_base64, watermark_enabled ? logo_base64 : null);
+    exportPDF(buildDeptHtml(dept.name, filteredCases, hospital_name, rfJson, customValues), `dept-${dept.name}.pdf`, logo_base64, watermark_enabled ? logo_base64 : null);
   };
 
   return (
@@ -212,7 +228,19 @@ export default function DepartmentDetail() {
         </div>
 
         <div className="flex flex-wrap gap-2">
-          <Button variant="outline" size="sm" className="gap-1" onClick={() => exportToExcelFormatted(dept.name, filteredCases, hospital_name, rfJson)}>
+          {hasCustomFields && (
+            <Button
+              variant={isFillingCustom ? "default" : "outline"}
+              size="sm"
+              className="gap-1"
+              onClick={() => setIsFillingCustom(s => !s)}
+            >
+              {isFillingCustom
+                ? <><CheckCheck className="h-4 w-4" /> إنهاء التعبئة</>
+                : <><PenLine className="h-4 w-4" /> تعبئة الحقول</>}
+            </Button>
+          )}
+          <Button variant="outline" size="sm" className="gap-1" onClick={() => exportToExcelFormatted(dept.name, filteredCases, hospital_name, rfJson, customValues)}>
             <FileSpreadsheet className="h-4 w-4" /> Excel
           </Button>
           <Button variant="outline" size="sm" className="gap-1" onClick={handleExportWord}>
@@ -273,6 +301,14 @@ export default function DepartmentDetail() {
         </Card>
       </div>
 
+      {/* Fill-mode hint */}
+      {isFillingCustom && (
+        <div className="no-print flex items-center gap-2 rounded-lg border border-primary/30 bg-primary/5 px-4 py-2 text-sm text-primary">
+          <PenLine className="h-4 w-4 shrink-0" />
+          اكتب القيم في الحقول المخصصة (باللون الأصفر) ثم اضغط <strong>طباعة</strong> أو <strong>تصدير</strong>.
+        </div>
+      )}
+
       {/* Cases Table — print-area so print starts here */}
       <Card className="print-area">
         <CardHeader className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
@@ -295,7 +331,11 @@ export default function DepartmentDetail() {
             <TableHeader>
               <TableRow className="bg-muted/30">
                 <TableHead>اسم المريض</TableHead>
-                {activeFields.map(f => <TableHead key={f.key}>{f.label}</TableHead>)}
+                {activeFields.map(f => (
+                  <TableHead key={f.key} className={f.isCustom ? "text-amber-600" : ""}>
+                    {f.label}
+                  </TableHead>
+                ))}
                 <TableHead className="no-print"></TableHead>
               </TableRow>
             </TableHeader>
@@ -310,18 +350,33 @@ export default function DepartmentDetail() {
                 filteredCases.map((c) => (
                   <TableRow
                     key={c.id}
-                    className="cursor-pointer hover:bg-muted/50"
-                    onClick={() => setLocation(`/case/${c.id}`)}
+                    className="hover:bg-muted/50"
+                    onClick={() => !isFillingCustom && setLocation(`/case/${c.id}`)}
+                    style={{ cursor: isFillingCustom ? "default" : "pointer" }}
                   >
-                    <TableCell className="font-medium">
+                    <TableCell
+                      className="font-medium cursor-pointer"
+                      onClick={() => isFillingCustom && setLocation(`/case/${c.id}`)}
+                    >
                       <div className="flex items-center gap-2">
                         <User className="h-4 w-4 text-muted-foreground" />
                         {c.patientName}
                       </div>
                     </TableCell>
                     {activeFields.map(f => (
-                      <TableCell key={f.key} className={f.key === 'diagnosis' ? 'max-w-[180px] truncate' : ''}>
-                        {f.key === 'status' ? (
+                      <TableCell
+                        key={f.key}
+                        className={f.key === 'diagnosis' ? 'max-w-[180px] truncate' : ''}
+                        onClick={f.isCustom ? e => e.stopPropagation() : undefined}
+                      >
+                        {f.isCustom && isFillingCustom ? (
+                          <Input
+                            value={customValues[c.id]?.[f.key] ?? ""}
+                            onChange={e => setCustomVal(c.id, f.key, e.target.value)}
+                            className="h-7 text-xs min-w-[80px] bg-amber-50 border-amber-300 focus:border-amber-500"
+                            placeholder="اكتب..."
+                          />
+                        ) : f.key === 'status' ? (
                           <Badge variant={c.status === 'critical' ? 'destructive' : c.status === 'active' ? 'default' : 'secondary'}>
                             {translate(c.status, STATUS_MAP)}
                           </Badge>
@@ -335,7 +390,8 @@ export default function DepartmentDetail() {
                       </TableCell>
                     ))}
                     <TableCell className="no-print">
-                      <Button variant="ghost" size="icon" className="h-8 w-8 text-muted-foreground">
+                      <Button variant="ghost" size="icon" className="h-8 w-8 text-muted-foreground"
+                        onClick={e => { e.stopPropagation(); setLocation(`/case/${c.id}`); }}>
                         <ArrowLeft className="h-4 w-4" />
                       </Button>
                     </TableCell>
