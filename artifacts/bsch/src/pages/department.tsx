@@ -185,7 +185,11 @@ export default function DepartmentDetail() {
   const setCustomVal = (caseId: number, fieldKey: string, value: string) =>
     setCustomValues(prev => ({ ...prev, [caseId]: { ...prev[caseId], [fieldKey]: value } }));
 
-  const handlePrint = () => window.print();
+  const handlePrint = () => {
+    // Exit fill mode first so custom-field inputs render as plain text before print
+    setIsFillingCustom(false);
+    setTimeout(() => window.print(), 50);
+  };
   const handleExportWord = () => {
     const html = buildDeptHtml(dept.name, filteredCases, hospital_name, rfJson, customValues);
     const full = `<html xmlns:o="urn:schemas-microsoft-com:office:office" dir="rtl"><head><meta charset="utf-8">
