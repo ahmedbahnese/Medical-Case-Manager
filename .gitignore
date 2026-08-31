@@ -47,3 +47,10 @@ Thumbs.db
 # Replit
 .cache/
 .local/
+
+# Generated desktop build output
+electron/dist-electron/*.exe
+electron/dist-electron/*.blockmap
+electron/dist-electron/*.yml
+electron/dist-electron/win-*-unpacked/
+releases/BSCH-Update-1.0.1/
