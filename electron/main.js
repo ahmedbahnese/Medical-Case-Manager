@@ -70,13 +70,69 @@ function getResourcePath(...segments) {
   return path.join(process.resourcesPath, ...segments);
 }
 
-const SERVER_ENTRY   = isDev
+let SERVER_ENTRY   = isDev
   ? getResourcePath('artifacts', 'api-server', 'dist', 'index.mjs')
   : getResourcePath('api-server', 'dist', 'index.mjs');
 
-const FRONTEND_DIR   = isDev
+let FRONTEND_DIR   = isDev
   ? getResourcePath('artifacts', 'bsch', 'dist', 'public')
   : getResourcePath('public');
+
+const VERSION_FILE = isDev ? path.join(__dirname, '..', 'package.json') : path.join(process.resourcesPath, 'app-version.json');
+
+function readJson(file) {
+  try { return JSON.parse(fs.readFileSync(file, 'utf8')); } catch { return null; }
+}
+
+function copyDirectory(source, target) {
+  if (!fs.existsSync(source)) return;
+  fs.mkdirSync(target, { recursive: true });
+  for (const entry of fs.readdirSync(source, { withFileTypes: true })) {
+    const from = path.join(source, entry.name);
+    const to = path.join(target, entry.name);
+    if (entry.isDirectory()) copyDirectory(from, to);
+    else fs.copyFileSync(from, to);
+  }
+}
+
+function applyPendingUpdate() {
+  if (isDev) return;
+  const dataDir = app.getPath('userData');
+  const updatesDir = path.join(dataDir, 'updates');
+  const manifestPath = path.join(updatesDir, 'update-manifest.json');
+  const manifest = readJson(manifestPath);
+  if (!manifest || !manifest.version || !manifest.payloadDir) return;
+
+  const current = readJson(VERSION_FILE) || { version: app.getVersion() };
+  const appliedVersionPath = path.join(dataDir, 'applied-version.json');
+  const applied = readJson(appliedVersionPath) || current;
+  if (String(manifest.version) <= String(applied.version)) return;
+  const source = path.resolve(updatesDir, manifest.payloadDir);
+  const staged = path.join(updatesDir, '.staged-' + Date.now());
+  const runtime = path.join(dataDir, 'update-runtime');
+  if (!fs.existsSync(source)) return;
+
+  try {
+    copyDirectory(source, staged);
+    if (!fs.existsSync(path.join(staged, 'api-server', 'dist', 'index.mjs')) || !fs.existsSync(path.join(staged, 'public', 'index.html'))) {
+      throw new Error('حزمة التحديث لا تحتوي على api-server/dist/index.mjs و public/index.html');
+    }
+    const backup = path.join(dataDir, 'update-backup');
+    if (fs.existsSync(backup)) fs.rmSync(backup, { recursive: true, force: true });
+    if (fs.existsSync(runtime)) fs.renameSync(runtime, backup);
+    fs.renameSync(staged, runtime);
+    fs.writeFileSync(path.join(runtime, 'app-version.json'), JSON.stringify({ version: manifest.version, appliedAt: new Date().toISOString() }, null, 2));
+    fs.renameSync(manifestPath, manifestPath + '.applied');
+    fs.writeFileSync(appliedVersionPath, JSON.stringify({ version: manifest.version, appliedAt: new Date().toISOString() }, null, 2));
+    SERVER_ENTRY = path.join(runtime, 'api-server', 'dist', 'index.mjs');
+    FRONTEND_DIR = path.join(runtime, 'public');
+    if (fs.existsSync(backup)) fs.rmSync(backup, { recursive: true, force: true });
+    console.log('[UPDATE] Applied version ' + manifest.version);
+  } catch (error) {
+    console.error('[UPDATE] Failed:', error.message);
+    if (fs.existsSync(staged)) fs.rmSync(staged, { recursive: true, force: true });
+  }
+}
 
 // ─── Local SQLite database ─────────────────────────────────────────────────────
 function loadDbConfig() {
@@ -277,6 +333,7 @@ function createTray() {
 // ─── App Lifecycle ────────────────────────────────────────────────────────────
 
 app.whenReady().then(async () => {
+  applyPendingUpdate();
   createSplash();
   startApiServer();
   createTray();
