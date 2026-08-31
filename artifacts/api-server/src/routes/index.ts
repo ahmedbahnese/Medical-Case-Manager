@@ -10,6 +10,7 @@ import backupsRouter from "./backups";
 import settingsRouter from "./settings";
 import incidentReportsRouter from "./incident-reports";
 import auditLogsRouter from "./audit-logs";
+import qualityRouter from "./quality";
 
 const router: IRouter = Router();
 
@@ -27,5 +28,6 @@ router.use(backupsRouter);
 router.use(settingsRouter);
 router.use(incidentReportsRouter);
 router.use(auditLogsRouter);
+router.use(qualityRouter);
 
 export default router;
