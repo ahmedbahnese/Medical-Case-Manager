@@ -5,3 +5,4 @@ export * from "./backups";
 export * from "./settings";
 export * from "./incident-reports";
 export * from "./audit-logs";
+export * from "./quality";
