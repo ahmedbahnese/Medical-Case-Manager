@@ -54,3 +54,5 @@ electron/dist-electron/*.blockmap
 electron/dist-electron/*.yml
 electron/dist-electron/win-*-unpacked/
 releases/BSCH-Update-1.0.1/
+electron/dist-electron/builder-effective-config.yaml
+releases/*.zip
