@@ -17,7 +17,16 @@ BSCH-Update-1.1.0/
     └── index.html
 ```
 
-ضع بجانب المجلد ملفًا باسم `update-manifest.json` داخل مجلد `updates`:
+يمكنك وضع مجلد الحزمة أو ملف ZIP واحد. عند استخدام ZIP، يجب أن يحتوي الملف المضغوط على مجلدي `api-server/dist` و`public`. ضع ملفًا باسم `update-manifest.json` داخل مجلد `updates`:
+
+```json
+{
+  "version": "1.1.0",
+  "packageFile": "BSCH-Update-1.1.0.zip"
+}
+```
+
+ولخيار المجلد استخدم:
 
 ```json
 {
@@ -53,7 +62,7 @@ cp artifacts/api-server/dist/index.mjs BSCH-Update-1.1.0/api-server/dist/
 cp -R artifacts/bsch/dist/public/* BSCH-Update-1.1.0/public/
 ```
 
-أضف `update-manifest.json` كما في المثال، ثم انسخ المجلد والملف إلى إعدادات المؤسسة. سيبقى المثبت نفسه دون تغيير.
+أضف `update-manifest.json` كما في المثال، ثم انسخ ملف ZIP وملف manifest إلى إعدادات المؤسسة. سيبقى المثبت نفسه دون تغيير، وسيتم فك ZIP وتطبيقه تلقائيًا عند التشغيل التالي.
 
 ## ملاحظة توافق
 

@@ -11,6 +11,7 @@ const path = require('path');
 const { spawn } = require('child_process');
 const http = require('http');
 const fs = require('fs');
+const AdmZip = require('adm-zip');
 
 const API_PORT = 8080;
 const API_URL  = `http://localhost:${API_PORT}`;
@@ -107,13 +108,21 @@ function applyPendingUpdate() {
   const appliedVersionPath = path.join(dataDir, 'applied-version.json');
   const applied = readJson(appliedVersionPath) || current;
   if (String(manifest.version) <= String(applied.version)) return;
-  const source = path.resolve(updatesDir, manifest.payloadDir);
+  const source = manifest.payloadDir ? path.resolve(updatesDir, manifest.payloadDir) : null;
+  const packageFile = manifest.packageFile ? path.resolve(updatesDir, manifest.packageFile) : null;
   const staged = path.join(updatesDir, '.staged-' + Date.now());
+  const extracted = path.join(updatesDir, '.extracted-' + Date.now());
   const runtime = path.join(dataDir, 'update-runtime');
-  if (!fs.existsSync(source)) return;
+  if ((!source || !fs.existsSync(source)) && (!packageFile || !fs.existsSync(packageFile))) return;
 
   try {
-    copyDirectory(source, staged);
+    if (packageFile) {
+      fs.mkdirSync(extracted, { recursive: true });
+      new AdmZip(packageFile).extractAllTo(extracted, true);
+      copyDirectory(extracted, staged);
+    } else {
+      copyDirectory(source, staged);
+    }
     if (!fs.existsSync(path.join(staged, 'api-server', 'dist', 'index.mjs')) || !fs.existsSync(path.join(staged, 'public', 'index.html'))) {
       throw new Error('حزمة التحديث لا تحتوي على api-server/dist/index.mjs و public/index.html');
     }
@@ -131,6 +140,7 @@ function applyPendingUpdate() {
   } catch (error) {
     console.error('[UPDATE] Failed:', error.message);
     if (fs.existsSync(staged)) fs.rmSync(staged, { recursive: true, force: true });
+    if (fs.existsSync(extracted)) fs.rmSync(extracted, { recursive: true, force: true });
   }
 }
 
