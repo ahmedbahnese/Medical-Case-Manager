@@ -16,23 +16,23 @@ import { Slider } from "@/components/ui/slider";
 import { useAppSettings } from "@/contexts/settings-context";
 import { ReportWatermark } from "@/components/report-watermark";
 import { exportPDF } from "@/lib/pdf-export";
+import { exportArabicXlsx } from "@/lib/excel-export";
 
-function exportCSV(cases: any[], depts: any[]) {
+function exportCasesExcel(cases: any[], depts: any[], hospitalName: string, reportTitle: string) {
   const deptMap = new Map(depts.map(d => [d.id, d.departmentType as string]));
-  const getBed = (id: number) => ["incubator_a","incubator_b","incubator_c","picu"].includes(deptMap.get(id) ?? "") ? "محضن" : "سرير";
-  const headers = ["م", "الاسم", "السن", "التشخيص", "تاريخ الدخول", "مدة الإقامة", "سرير/محضن", "ت. التنفس", "ت. التوصيل", "مود"];
-  const rows = cases.map((c, i) => [
-    i + 1, c.patientName, c.age ?? "", c.diagnosis ?? "",
-    formatDateAr(c.admissionDate), calcStayLabel(c.admissionDate),
-    getBed(c.departmentId),
-    formatDateAr(c.ventilationStartDate),
-    translate(c.artificialRespiration, LABELS.ARTIFICIAL_RESPIRATION),
-    c.mobe ?? ""
-  ]);
-  const csv = [headers, ...rows].map(r => r.map(v => `"${String(v).replace(/"/g, '""')}"`).join(",")).join("\n");
-  const blob = new Blob(["\uFEFF" + csv], { type: "text/csv;charset=utf-8;" });
-  const a = document.createElement("a"); a.href = URL.createObjectURL(blob);
-  a.download = `bsch-cases-${new Date().toISOString().slice(0, 10)}.csv`; a.click();
+  const getBed = (id: number) => ["incubator_a", "incubator_b", "incubator_c", "picu"].includes(deptMap.get(id) ?? "") ? "محضن" : "سرير";
+  exportArabicXlsx({
+    filename: `bsch-cases-${new Date().toISOString().slice(0, 10)}.xlsx`,
+    hospitalName,
+    reportTitle,
+    columns: ["م", "الاسم", "السن", "التشخيص", "تاريخ الدخول", "مدة الإقامة", "سرير/محضن", "ت. التوصيل", "التنفس", "مود"],
+    rows: cases.map((c, i) => [
+      i + 1, c.patientName, c.age ?? "", c.diagnosis ?? "",
+      formatDateAr(c.admissionDate), calcStayLabel(c.admissionDate), getBed(c.departmentId),
+      formatDateAr(c.ventilationStartDate), translate(c.artificialRespiration, LABELS.ARTIFICIAL_RESPIRATION), c.mobe ?? "",
+    ]),
+    columnWidths: [7, 28, 14, 32, 18, 16, 14, 18, 18, 14],
+  });
 }
 
 function GroupCasesDialog({ deptIds, groupLabel, open, onClose }: {
@@ -106,7 +106,7 @@ function GroupCasesDialog({ deptIds, groupLabel, open, onClose }: {
               <Slider value={fontSize} onValueChange={setFontSize} min={9} max={16} step={1}
                 className="w-28" />
               <ZoomIn className="h-4 w-4 text-muted-foreground" />
-              <Button size="sm" variant="outline" className="gap-1" onClick={() => exportCSV(displayCases, depts ?? [])}>
+              <Button size="sm" variant="outline" className="gap-1" onClick={() => exportCasesExcel(displayCases, depts ?? [], hospital_name, `بيان حالات ${groupLabel}`)}>
                 <FileSpreadsheet className="h-4 w-4" /> Excel
               </Button>
               <Button size="sm" variant="outline" className="gap-1" onClick={handleExportWord}>

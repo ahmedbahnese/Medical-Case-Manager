@@ -40,12 +40,19 @@ autoInstallPeers: false
 
 onlyBuiltDependencies:
   - '@swc/core'
+  - better-sqlite3
   - esbuild
   - msw
   - unrs-resolver
+  - tesseract.js
 
 overrides:
   # Pin esbuild version for consistency
   esbuild: "0.27.3"
   # drizzle-kit uses an older esbuild loader internally; override with tsx
   "@esbuild-kit/esm-loader": "npm:tsx@^4.21.0"
+
+allowBuilds:
+  better-sqlite3: true
+  esbuild: true
+  tesseract.js: true

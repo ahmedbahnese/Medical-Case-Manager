@@ -6,7 +6,7 @@
  * Production  : built with electron-builder (nsis / portable)
  */
 
-const { app, BrowserWindow, shell, Menu, Tray, nativeImage, dialog } = require('electron');
+const { app, BrowserWindow, shell, Menu, Tray, nativeImage, dialog, ipcMain } = require('electron');
 const path = require('path');
 const { spawn } = require('child_process');
 const http = require('http');
@@ -18,6 +18,44 @@ const API_URL  = `http://localhost:${API_PORT}`;
 let mainWindow = null;
 let tray       = null;
 let apiProcess = null;
+
+ipcMain.handle('save-pdf', async (event, payload) => {
+  const sourceWindow = BrowserWindow.fromWebContents(event.sender);
+  if (!sourceWindow || !payload || typeof payload.html !== 'string') return { canceled: true };
+  const pdfWindow = new BrowserWindow({ show: false, webPreferences: { javascript: false, nodeIntegration: false, contextIsolation: true } });
+  try {
+    await pdfWindow.loadURL('data:text/html;charset=utf-8,' + encodeURIComponent(payload.html));
+    const pdf = await pdfWindow.webContents.printToPDF({
+      printBackground: true,
+      pageSize: 'A4',
+      margins: { marginType: 'custom', top: 10000, bottom: 10000, left: 9000, right: 9000 },
+    });
+    const result = await dialog.showSaveDialog(sourceWindow, {
+      title: 'حفظ ملف PDF',
+      defaultPath: payload.title || 'تقرير.pdf',
+      filters: [{ name: 'PDF', extensions: ['pdf'] }],
+    });
+    if (result.canceled || !result.filePath) return { canceled: true };
+    fs.writeFileSync(result.filePath, pdf);
+    return { canceled: false, filePath: result.filePath };
+  } finally {
+    if (!pdfWindow.isDestroyed()) pdfWindow.close();
+  }
+});
+
+// Prevent recursive launches and accidental multiple server instances.
+const hasSingleInstanceLock = app.requestSingleInstanceLock();
+if (!hasSingleInstanceLock) {
+  app.quit();
+} else {
+  app.on('second-instance', () => {
+    if (mainWindow) {
+      if (mainWindow.isMinimized()) mainWindow.restore();
+      mainWindow.show();
+      mainWindow.focus();
+    }
+  });
+}
 
 // ─── Resolve paths for packaged vs dev ────────────────────────────────────────
 
@@ -40,32 +78,22 @@ const FRONTEND_DIR   = isDev
   ? getResourcePath('artifacts', 'bsch', 'dist', 'public')
   : getResourcePath('public');
 
-// ─── MySQL config — read from a local bsch.config.json if present ─────────────
-// Default credentials work for a fresh local MySQL install with the BSCH setup script.
-// Users can override by creating  %APPDATA%\BSCH\bsch.config.json
-
+// ─── Local SQLite database ─────────────────────────────────────────────────────
 function loadDbConfig() {
-  const configDir  = app.getPath('userData');
-  const configFile = path.join(configDir, 'bsch.config.json');
-  const defaults = {
-    DB_HOST:     '127.0.0.1',
-    DB_PORT:     '3306',
-    DB_USER:     'bsch_user',
-    DB_PASSWORD: 'bsch_password',
-    DB_NAME:     'bsch_db',
+  const dataDir = app.getPath('userData');
+  fs.mkdirSync(dataDir, { recursive: true });
+  return {
+    BSCH_DATA_DIR: dataDir,
+    BSCH_DATABASE_PATH: path.join(dataDir, 'bsch.sqlite'),
+    HOST: '0.0.0.0',
   };
-  try {
-    if (fs.existsSync(configFile)) {
-      const cfg = JSON.parse(fs.readFileSync(configFile, 'utf8'));
-      return { ...defaults, ...cfg };
-    }
-  } catch (_) { /* use defaults */ }
-  return defaults;
 }
 
 // ─── Start API Server ─────────────────────────────────────────────────────────
 
 function startApiServer() {
+  if (!hasSingleInstanceLock) return;
+  if (apiProcess && !apiProcess.killed) return;
   if (!fs.existsSync(SERVER_ENTRY)) {
     dialog.showErrorBox(
       'ملف الخادم مفقود',
@@ -81,6 +109,8 @@ function startApiServer() {
       ...process.env,
       PORT:         String(API_PORT),
       NODE_ENV:     'production',
+      // Electron's executable must be switched to Node mode for the API child.
+      ELECTRON_RUN_AS_NODE: '1',
       FRONTEND_DIR: FRONTEND_DIR,
       ...dbConfig,
     },
@@ -102,7 +132,9 @@ function waitForApi(retries = 60, delayMs = 500) {
   return new Promise((resolve, reject) => {
     const check = (n) => {
       http.get(`${API_URL}/api/health`, (res) => {
-        if (res.statusCode === 200) resolve();
+        // Any HTTP response below 500 proves that the API is reachable.
+        // /api/health is protected and may correctly return 401 before login.
+        if (res.statusCode && res.statusCode < 500) resolve();
         else if (n > 0) setTimeout(() => check(n - 1), delayMs);
         else reject(new Error('API server did not start in time'));
       }).on('error', () => {
@@ -197,9 +229,22 @@ async function createWindow() {
     });
   } catch (err) {
     if (splashWindow) { splashWindow.close(); splashWindow = null; }
-    mainWindow.loadFile(path.join(__dirname, 'error.html'));
+    const details = encodeURIComponent(err && err.message ? err.message : 'سبب غير معروف');
+    mainWindow.loadURL('file://' + path.join(__dirname, 'error.html') + '?message=' + details);
     mainWindow.show();
   }
+
+  // Restore the standard copy/paste context menu inside the desktop shell.
+  mainWindow.webContents.on('context-menu', (_event, params) => {
+    const menu = Menu.buildFromTemplate([
+      { role: 'cut', enabled: params.isEditable },
+      { role: 'copy', enabled: Boolean(params.selectionText) },
+      { role: 'paste', enabled: params.isEditable },
+      { type: 'separator' },
+      { role: 'selectAll' },
+    ]);
+    menu.popup({ window: mainWindow });
+  });
 
   // Open external links in the system browser
   mainWindow.webContents.setWindowOpenHandler(({ url }) => {

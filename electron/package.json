@@ -5,13 +5,13 @@
   "main": "main.js",
   "scripts": {
     "start": "electron .",
-    "build-win": "electron-builder --win",
-    "build-installer": "electron-builder --win nsis",
-    "build-portable": "electron-builder --win portable"
+    "build-win": "electron-builder --win --publish never",
+    "build-installer": "electron-builder --win nsis --publish never",
+    "build-portable": "electron-builder --win portable --publish never"
   },
   "dependencies": {},
   "devDependencies": {
-    "electron": "^32.0.0",
+    "electron": "22.3.27",
     "electron-builder": "^25.0.0"
   },
   "build": {
@@ -32,16 +32,33 @@
         "to": "api-server/dist"
       },
       {
+        "from": "../lib/db/node_modules/better-sqlite3",
+        "to": "node_modules/better-sqlite3"
+      },
+      {
+        "from": "../node_modules/.pnpm/bindings@1.5.0/node_modules/bindings",
+        "to": "node_modules/bindings"
+      },
+      {
+        "from": "../node_modules/.pnpm/file-uri-to-path@1.0.0/node_modules/file-uri-to-path",
+        "to": "node_modules/file-uri-to-path"
+      },
+      {
+        "from": "../assets/tesseract-runtime/node_modules",
+        "to": "node_modules"
+      },
+      {
         "from": "../artifacts/bsch/dist/public",
         "to": "public"
       }
     ],
     "win": {
       "target": [
-        { "target": "nsis",     "arch": ["x64"] },
-        { "target": "portable", "arch": ["x64"] }
+        { "target": "nsis",     "arch": ["x64", "ia32"] },
+        { "target": "portable", "arch": ["x64", "ia32"] }
       ],
-      "requestedExecutionLevel": "asInvoker"
+      "requestedExecutionLevel": "asInvoker",
+      "signAndEditExecutable": false
     },
     "nsis": {
       "oneClick": false,
@@ -53,8 +70,9 @@
       "license": null
     },
     "portable": {
-      "artifactName": "BSCH-Portable-${version}.exe"
+      "artifactName": "BSCH-Portable-${arch}-${version}.exe"
     },
-    "artifactName": "BSCH-Setup-${version}.exe"
+    "artifactName": "BSCH-Setup-${arch}-${version}.exe",
+    "publish": []
   }
 }

@@ -1,4 +1,12 @@
 import { Router, type IRouter } from "express";
+import multer from "multer";
+import { execFile } from "node:child_process";
+import { promisify } from "node:util";
+import { promises as fs } from "node:fs";
+import os from "node:os";
+import path from "node:path";
+import { createRequire } from "node:module";
+import { createWorker } from "tesseract.js";
 import { eq, and, like, ne, SQL } from "drizzle-orm";
 import { db, medicalCasesTable, departmentsTable } from "@workspace/db";
 import {
@@ -14,6 +22,25 @@ import { logAction } from "./audit-logs";
 import { getCurrentUserName } from "../middleware/auth";
 
 const router: IRouter = Router();
+const upload = multer({ storage: multer.memoryStorage(), limits: { fileSize: 10 * 1024 * 1024 } });
+const execFileAsync = promisify(execFile);
+const localRequire = createRequire(import.meta.url);
+const arabicOcrData = localRequire("@tesseract.js-data/ara") as { langPath: string };
+let embeddedOcrWorker: Promise<any> | null = null;
+
+async function runEmbeddedArabicOcr(image: Buffer): Promise<string> {
+  if (!embeddedOcrWorker) {
+    embeddedOcrWorker = createWorker("ara", 1, {
+      langPath: arabicOcrData.langPath,
+      cachePath: path.join(process.env.BSCH_DATA_DIR ?? os.tmpdir(), "tesseract-cache"),
+      gzip: true,
+      logger: () => undefined,
+    });
+  }
+  const worker = await embeddedOcrWorker;
+  const result = await worker.recognize(image);
+  return result.data.text ?? "";
+}
 
 async function enrichCaseWithDepartment(c: typeof medicalCasesTable.$inferSelect) {
   const [dept] = await db
@@ -155,8 +182,10 @@ router.post("/cases/bulk-import", async (req, res): Promise<void> => {
         age: c.age,
         diagnosis: c.diagnosis,
         notes: c.notes,
+        parentName: c.parentName,
         parentPhone: c.parentPhone,
         nationalId: c.nationalId,
+        fileNumber: c.fileNumber,
         artificialRespiration: (c.artificialRespiration as any) ?? "no",
         caseType: "intensive_care_high",
         status: "active",
@@ -168,9 +197,58 @@ router.post("/cases/bulk-import", async (req, res): Promise<void> => {
   res.json({ parsed: parsedCases, imported: importedCount });
 });
 
-function parseArabicCasesText(text: string, defaultDeptId: number | null | undefined) {
+// Local extraction endpoint: never saves data; it only returns editable suggestions.
+router.post("/cases/extract", upload.single("file"), async (req, res): Promise<void> => {
+  let sourceText = typeof req.body?.text === "string" ? req.body.text : "";
+  const file = req.file;
+  if (file) {
+    if (file.mimetype.startsWith("text/")) {
+      sourceText = file.buffer.toString("utf8");
+    } else if (file.mimetype === "application/pdf") {
+      // Text PDFs can be extracted by pdftotext when installed locally.
+      const tempFile = path.join(os.tmpdir(), `bsch-${Date.now()}.pdf`);
+      try {
+        await fs.writeFile(tempFile, file.buffer);
+        const result = await execFileAsync(process.env.PDFTOTEXT_CMD ?? "pdftotext", [tempFile, "-"]);
+        sourceText = result.stdout;
+      } catch {
+        res.status(422).json({ error: "تعذر قراءة ملف PDF. ثبّت pdftotext محليًا أو أرسل صورة للصفحة." });
+        return;
+      } finally {
+        await fs.rm(tempFile, { force: true }).catch(() => undefined);
+      }
+    } else {
+      const tempFile = path.join(os.tmpdir(), `bsch-${Date.now()}`);
+      try {
+        await fs.writeFile(tempFile, file.buffer);
+        try {
+          const result = await execFileAsync(process.env.TESSERACT_CMD ?? "tesseract", [tempFile, "stdout", "-l", process.env.TESSERACT_LANG ?? "ara+eng", "--psm", "6"], { windowsHide: true, maxBuffer: 2 * 1024 * 1024 });
+          sourceText = result.stdout;
+        } catch {
+          // Portable fallback: bundled Tesseract.js runs fully offline.
+          sourceText = await runEmbeddedArabicOcr(file.buffer);
+        }
+      } catch {
+        res.status(422).json({ error: "تعذر تشغيل OCR المحلي المدمج. أعد تشغيل الخادم وحاول بصورة أوضح." });
+        return;
+      } finally {
+        await fs.rm(tempFile, { force: true }).catch(() => undefined);
+      }
+    }
+  }
+  if (!sourceText.trim()) {
+    res.status(400).json({ error: "أرسل نصًا أو صورة أو ملف PDF للتحليل." });
+    return;
+  }
+  const departmentId = req.body?.departmentId ? Number(req.body.departmentId) : null;
+  res.json({ source: file ? file.originalname : "text", text: sourceText, parsed: parseArabicCasesText(sourceText, departmentId) });
+});
+
+export function parseArabicCasesText(text: string, defaultDeptId: number | null | undefined) {
   type ParsedCase = {
     patientName: string;
+    parentName: string | null;
+    fileNumber: string | null;
     age: string | null;
     diagnosis: string | null;
     parentPhone: string | null;
@@ -179,82 +257,104 @@ function parseArabicCasesText(text: string, defaultDeptId: number | null | undef
     artificialRespiration: string | null;
     departmentId: number | null;
   };
+
   const results: ParsedCase[] = [];
-  const lines = text.split(/\n+/).map((l) => l.trim()).filter(Boolean);
+  const lines = text.split(/\r?\n/).map((line) => line.trim()).filter(Boolean);
   let currentCase: ParsedCase | null = null;
 
-  const stripPrefix = (l: string) => l.replace(/^[\u0660-\u0669\d]+[\.\-\)،\s]*/, "").trim();
+  const normalizeDigits = (value: string) => value.replace(/[٠-٩]/g, (d) => String("٠١٢٣٤٥٦٧٨٩".indexOf(d)));
+  const cleanValue = (value: string) => value.replace(/^\s*[*:：\-]+\s*/, "").trim();
+  const extractValue = (line: string, labels: string[]) => {
+    const pattern = new RegExp(`^\\s*(?:${labels.join("|")})\\s*[\\s*:_：\\-]*\\s*(.*?)\\s*$`, "i");
+    const match = line.match(pattern);
+    return match ? cleanValue(match[1]) : null;
+  };
+  const isFileNumber = (line: string) => /^\s*[0-9٠-٩]{5,10}\s*$/.test(line);
+  const nameValue = (line: string) => extractValue(line, ["الاسم", "الإسم", "اسم الحالة", "اسم المريض", "الحالة", "المريض"]);
+  const ageValue = (line: string) => extractValue(line, ["السن", "سن", "العمر", "عمره", "عمرها", "age"]);
+  const diagnosisValue = (line: string) => extractValue(line, ["التشخيص", "تشخيص", "مرض", "dx", "diagnosis"]);
+  const nationalIdValue = (line: string) => extractValue(line, ["الرقم القومي", "رقم قومي", "القومي", "قومي", "الهوية", "هوية"]);
+  const phoneValue = (line: string) => extractValue(line, ["رقم الأهل", "رقم الاهل", "هاتف", "تليفون", "موبايل", "تلفون", "phone"]);
+
+  const makeCase = (fileNumber: string | null = null): ParsedCase => ({
+    patientName: "",
+    parentName: null,
+    fileNumber: fileNumber ? normalizeDigits(fileNumber) : null,
+    age: null,
+    diagnosis: null,
+    parentPhone: null,
+    nationalId: null,
+    notes: null,
+    artificialRespiration: null,
+    departmentId: defaultDeptId ?? null,
+  });
+
+  const setPatientName = (target: ParsedCase, value: string) => {
+    const patientName = cleanValue(value).replace(/^[*-]+\s*/, "").trim();
+    if (!patientName) return;
+    target.patientName = patientName;
+    const guardian = patientName.match(/^(?:ابن|ابنة|بنت)\s+(.+)$/i);
+    if (guardian) target.parentName = guardian[1].trim();
+  };
+
+  const finishCurrent = () => {
+    if (currentCase && currentCase.patientName.trim()) results.push(currentCase);
+  };
 
   for (const line of lines) {
-    const stripped = stripPrefix(line);
-
-    const phoneMatch = line.match(/(?:هاتف|تليفون|رقم|موبايل|تلفون|phone)[:\s]*([0-9+\-\s]{8,15})/i)
-                    ?? line.match(/\b(01[0-9]{9})\b/);
-    const ageMatch = line.match(/(?:العمر|عمره|عمرها|عمر|سن|السن|age)[:\s]*([^\n,،]{1,25})/i);
-    const diagMatch = line.match(/(?:التشخيص|تشخيص|الحالة|مرض|dx|diagnosis)[:\s]*([^\n]{3,150})/i);
-    const natIdMatch = line.match(/(?:قومي|رقم قومي|هوية)[:\s]*(\d{10,14})/i);
-
-    const respHF     = /(?:تردد عالي|عالي التردد|HFO|HFOV)\b/i.test(line);
-    const respVent   = /(?:فنت|تهوية آلية|\bVent\b|\bMV\b|\bPCV\b)/i.test(line);
-    const respHFNC   = /\bHFNC\b/i.test(line);
-    const respCpap   = /(?:CPAP|سباب|سي باب)/i.test(line);
-    const respBox    = /(?:بوكس|نيزل كانيولا|nasal cannula|\bbox\b)/i.test(line);
-    const respStandby= /(?:استاندباي|استعداد|\bstandby\b)/i.test(line);
-    const hasResp = respHF || respVent || respHFNC || respCpap || respBox || respStandby;
-
-    const looksArabic = /[\u0600-\u06FF]/.test(stripped);
-    const isNameLine = looksArabic
-      && !phoneMatch && !ageMatch && !diagMatch && !natIdMatch && !hasResp
-      && stripped.length >= 3 && stripped.length < 70;
-
-    const inlinAgeMatch = isNameLine
-      ? stripped.match(/^(.{3,40})[،,]\s*(.{2,20})$/)
-      : null;
-
-    if (isNameLine) {
-      if (currentCase) results.push(currentCase);
-      const cleanName = inlinAgeMatch ? inlinAgeMatch[1].trim() : stripped;
-      const inlineAge = inlinAgeMatch ? inlinAgeMatch[2].trim() : null;
-      currentCase = {
-        patientName: cleanName,
-        age: inlineAge,
-        diagnosis: null,
-        parentPhone: null,
-        nationalId: null,
-        notes: null,
-        artificialRespiration: null,
-        departmentId: defaultDeptId ?? null,
-      };
+    if (isFileNumber(line)) {
+      finishCurrent();
+      currentCase = makeCase(line);
+      continue;
     }
 
-    if (currentCase) {
-      if (phoneMatch && !currentCase.parentPhone) currentCase.parentPhone = (phoneMatch[1] ?? phoneMatch[0]).trim();
-      if (ageMatch && !currentCase.age) currentCase.age = ageMatch[1].trim();
-      if (diagMatch && !currentCase.diagnosis) currentCase.diagnosis = diagMatch[1].trim();
-      if (natIdMatch && !currentCase.nationalId) currentCase.nationalId = natIdMatch[1].trim();
-      if (hasResp && !currentCase.artificialRespiration) {
-        if (respHF)           currentCase.artificialRespiration = "high_frequency";
-        else if (respVent)    currentCase.artificialRespiration = "vent";
-        else if (respHFNC)   currentCase.artificialRespiration = "hfnc";
-        else if (respCpap)   currentCase.artificialRespiration = "cpap";
-        else if (respBox)    currentCase.artificialRespiration = "box";
-        else if (respStandby) currentCase.artificialRespiration = "standby";
-      }
+    const parsedName = nameValue(line);
+    if (parsedName) {
+      if (!currentCase) currentCase = makeCase();
+      setPatientName(currentCase, parsedName);
+      continue;
+    }
+
+    if (!currentCase) continue;
+
+    const parsedAge = ageValue(line);
+    if (parsedAge && !currentCase.age) currentCase.age = parsedAge;
+
+    const parsedDiagnosis = diagnosisValue(line);
+    if (parsedDiagnosis && !currentCase.diagnosis) currentCase.diagnosis = parsedDiagnosis;
+
+    const parsedNationalId = nationalIdValue(line);
+    if (parsedNationalId && !currentCase.nationalId) {
+      const digits = normalizeDigits(parsedNationalId).replace(/\D/g, "");
+      if (digits.length >= 10) currentCase.nationalId = digits;
+    }
+
+    const parsedPhone = phoneValue(line);
+    if (parsedPhone && !currentCase.parentPhone) {
+      const digits = normalizeDigits(parsedPhone).replace(/[^0-9+]/g, "");
+      if (digits.length >= 8) currentCase.parentPhone = digits;
+    } else if (!currentCase.parentPhone) {
+      const phone = normalizeDigits(line).match(/\b01[0-9]{9}\b/);
+      if (phone) currentCase.parentPhone = phone[0];
+    }
+
+    const serviceText = line.toLowerCase();
+    if (/(?:تنفس صناعي|جهاز تنفس|فنت|تهوية آلية|\bvent\b|\bmv\b|\bpcv\b)/i.test(serviceText)) {
+      if (/(?:تردد عالي|عالي التردد|hfo|hfov)/i.test(serviceText)) currentCase.artificialRespiration = "high_frequency";
+      else if (/(?:hfnc)/i.test(serviceText)) currentCase.artificialRespiration = "hfnc";
+      else if (/(?:cpap|سباب|سي باب)/i.test(serviceText)) currentCase.artificialRespiration = "cpap";
+      else currentCase.artificialRespiration = "vent";
     }
   }
 
-  if (currentCase) results.push(currentCase);
+  finishCurrent();
 
-  if (results.length === 0 && text.trim().length > 0) {
-    const firstLine = lines[0];
-    if (firstLine) {
-      results.push({
-        patientName: stripPrefix(firstLine),
-        age: null, diagnosis: null, parentPhone: null,
-        nationalId: null, notes: text.trim(),
-        artificialRespiration: null, departmentId: defaultDeptId ?? null,
-      });
-    }
+  if (results.length === 0 && text.trim()) {
+    const firstLine = lines[0] ?? text.trim();
+    const fallback = makeCase();
+    setPatientName(fallback, firstLine);
+    fallback.notes = text.trim();
+    results.push(fallback);
   }
 
   return results;
@@ -308,35 +408,33 @@ router.patch("/cases/:id", async (req, res): Promise<void> => {
   }
 
   const extraData = req.body as any;
-  const updates: Record<string, unknown> = {
-    ...body.data,
-    updatedAt: new Date(),
-  };
+  const data = body.data as any;
+  const updates: Record<string, unknown> = { updatedAt: new Date() };
+  const textFields = ["patientName", "age", "diagnosis", "symptoms", "treatment", "notes", "parentName", "parentPhone", "nationalId", "fileNumber", "caseType", "mobe"];
+  for (const field of textFields) {
+    if (Object.prototype.hasOwnProperty.call(data, field)) {
+      updates[field] = data[field] === "" ? null : data[field];
+    }
+  }
+  for (const field of ["departmentId", "artificialRespiration", "status"]) {
+    if (Object.prototype.hasOwnProperty.call(data, field)) updates[field] = data[field];
+  }
+  for (const field of ["admissionDate", "ventilationStartDate", "ventilationEndDate", "dischargeDate"]) {
+    if (Object.prototype.hasOwnProperty.call(data, field)) {
+      const value = data[field];
+      updates[field] = value ? new Date(value) : null;
+    }
+  }
+  for (const field of ["dischargeReason", "transferDestination"]) {
+    if (Object.prototype.hasOwnProperty.call(data, field)) updates[field] = data[field] || null;
+  }
 
-  if (body.data.status === "discharged") {
+  if (data.status === "discharged") {
     const allowedReasons = ["improved", "request", "transferred", "death", "internal_transfer"];
-    if (!allowedReasons.includes(extraData.dischargeReason)) {
+    if (!allowedReasons.includes(data.dischargeReason ?? extraData.dischargeReason)) {
       res.status(400).json({ error: "سبب الخروج مطلوب ويجب أن يكون صحيحاً" });
       return;
     }
-  }
-
-  if (extraData.mobe !== undefined) updates.mobe = extraData.mobe;
-  if (extraData.ventilationStartDate !== undefined) {
-    updates.ventilationStartDate = extraData.ventilationStartDate ? new Date(extraData.ventilationStartDate) : null;
-  }
-  if (extraData.ventilationEndDate !== undefined) {
-    updates.ventilationEndDate = extraData.ventilationEndDate ? new Date(extraData.ventilationEndDate) : null;
-  }
-  if (extraData.dischargeReason !== undefined) updates.dischargeReason = extraData.dischargeReason;
-  if (extraData.admissionDate !== undefined) {
-    updates.admissionDate = extraData.admissionDate ? new Date(extraData.admissionDate) : undefined;
-  }
-  if (extraData.transferDestination !== undefined) {
-    updates.transferDestination = extraData.transferDestination || null;
-  }
-  if (extraData.departmentId !== undefined) {
-    updates.departmentId = parseInt(extraData.departmentId, 10);
   }
 
   if (body.data.status === "discharged" && !extraData.dischargeDate) {

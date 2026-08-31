@@ -28,6 +28,8 @@ type EditableCase = ParsedCase & { _editing?: boolean };
 
 export default function BulkImport() {
   const [text, setText] = useState("");
+  const [selectedFile, setSelectedFile] = useState<File | null>(null);
+  const [isAnalyzingLocal, setIsAnalyzingLocal] = useState(false);
   const [defaultDeptId, setDefaultDeptId] = useState<string>("");
   const [step, setStep] = useState<"input" | "review" | "done">("input");
   const [parsedCases, setParsedCases] = useState<EditableCase[]>([]);
@@ -37,36 +39,37 @@ export default function BulkImport() {
   const [isImporting, setIsImporting] = useState(false);
 
   const { data: departments } = useGetDepartments();
-  const bulkImport = useBulkImportCases();
   const createCase = useCreateCase();
 
-  const handleAnalyze = () => {
-    if (!text.trim()) {
-      toast.error("الرجاء إدخال النص للتحليل");
+  const handleAnalyze = async () => {
+    if (!text.trim() && !selectedFile) {
+      toast.error("أدخل النص أو اختر صورة/PDF للتحليل");
       return;
     }
-    bulkImport.mutate(
-      { data: { text, departmentId: defaultDeptId && defaultDeptId !== "none" ? parseInt(defaultDeptId) : undefined } },
-      {
-        onSuccess: (res) => {
-          const cases = (res.parsed as EditableCase[]).map(c => ({ ...c }));
-          setParsedCases(cases);
-          setSelected(new Set(cases.map((_, i) => i)));
-          const depts: Record<number, string> = {};
-          cases.forEach((c, i) => {
-            depts[i] = c.departmentId
-              ? c.departmentId.toString()
-              : defaultDeptId && defaultDeptId !== "none"
-              ? defaultDeptId
-              : "";
-          });
-          setCaseDepts(depts);
-          setStep("review");
-          toast.success(`تم استخراج ${cases.length} حالة — راجعها قبل الحفظ`);
-        },
-        onError: (e: any) => toast.error("فشل التحليل: " + e.message)
-      }
-    );
+    setIsAnalyzingLocal(true);
+    try {
+      const body = new FormData();
+      if (text.trim()) body.append("text", text);
+      if (selectedFile) body.append("file", selectedFile);
+      if (defaultDeptId && defaultDeptId !== "none") body.append("departmentId", defaultDeptId);
+      const response = await fetch("/api/cases/extract", { method: "POST", body, credentials: "include" });
+      const result = await response.json();
+      if (!response.ok) throw new Error(result.error || "تعذر التحليل المحلي");
+      const cases = (result.parsed as EditableCase[]).map(c => ({ ...c }));
+      setParsedCases(cases);
+      setSelected(new Set(cases.map((_, i) => i)));
+      const depts: Record<number, string> = {};
+      cases.forEach((c, i) => {
+        depts[i] = c.departmentId ? c.departmentId.toString() : (defaultDeptId && defaultDeptId !== "none" ? defaultDeptId : "");
+      });
+      setCaseDepts(depts);
+      setStep("review");
+      toast.success(`تم الاستخلاص محليًا: ${cases.length} حالة — راجعها قبل الحفظ`);
+    } catch (e: any) {
+      toast.error("فشل التحليل المحلي: " + e.message);
+    } finally {
+      setIsAnalyzingLocal(false);
+    }
   };
 
   const toggleAll = (checked: boolean) => {
@@ -132,7 +135,7 @@ export default function BulkImport() {
   };
 
   const reset = () => {
-    setText(""); setDefaultDeptId(""); setParsedCases([]);
+    setText(""); setSelectedFile(null); setDefaultDeptId(""); setParsedCases([]);
     setSelected(new Set()); setCaseDepts({});
     setImportedCount(0); setStep("input");
   };
@@ -194,8 +197,13 @@ export default function BulkImport() {
                 onChange={e => setText(e.target.value)}
                 dir="auto"
               />
-              <Button onClick={handleAnalyze} disabled={bulkImport.isPending || !text.trim()} className="w-full gap-2" size="lg">
-                {bulkImport.isPending ? "جاري التحليل..." : "تحليل النص بالذكاء الاصطناعي"}
+              <div className="rounded-lg border border-dashed p-3 space-y-2">
+                <label className="text-sm font-medium flex items-center gap-2"><Upload className="h-4 w-4" /> صورة أو ملف PDF</label>
+                <Input type="file" accept="image/*,.pdf,.txt" onChange={e => setSelectedFile(e.target.files?.[0] ?? null)} />
+                {selectedFile && <p className="text-xs text-muted-foreground">تم اختيار: {selectedFile.name}</p>}
+              </div>
+              <Button onClick={handleAnalyze} disabled={isAnalyzingLocal || (!text.trim() && !selectedFile)} className="w-full gap-2" size="lg">
+                {isAnalyzingLocal ? "جاري الاستخلاص المحلي..." : "استخلاص البيانات محليًا"}
                 <Bot className="h-5 w-5" />
               </Button>
             </CardContent>

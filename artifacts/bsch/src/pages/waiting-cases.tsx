@@ -25,6 +25,7 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@
 import { LABELS, translate, deptTypeToCaseType, formatDateAr } from "@/lib/constants";
 import { exportWordDoc } from "@/lib/word-export";
 import { exportPDF } from "@/lib/pdf-export";
+import { exportArabicXlsx } from "@/lib/excel-export";
 import { useAppSettings } from "@/contexts/settings-context";
 import { ReportWatermark } from "@/components/report-watermark";
 import { toast } from "sonner";
@@ -86,44 +87,20 @@ function buildWaitingHtml(cases: any[], title: string, hospitalName: string): st
 }
 
 function exportWaitingExcel(cases: any[], title: string, hospitalName: string): void {
-  const now = new Date();
-  const dateStr = now.toLocaleDateString("ar-EG", { weekday: "long", day: "2-digit", month: "2-digit", year: "numeric" });
-  const rows = cases.map((c, i) => `
-    <tr style="background:${i%2===0?"white":"#f5f5f5"}">
-      <td style="text-align:center">${i+1}</td>
-      <td><strong>${c.patientName}</strong></td>
-      <td>${c.age ?? ""}</td>
-      <td>${c.diagnosis ?? ""}</td>
-      <td>${translate(c.careType, LABELS.CARE_TYPES)}</td>
-      <td>${translate(c.artificialRespiration, LABELS.ARTIFICIAL_RESPIRATION)}</td>
-      <td>${c.centralRoomRequired ? (c.centralRoomCode ? `غرفة: ${c.centralRoomCode}` : "مطلوب") : ""}</td>
-      <td>${c.parentPhone ?? ""}</td>
-    </tr>`).join("");
-  const html = `<html xmlns:o="urn:schemas-microsoft-com:office:office" dir="rtl">
-<head><meta charset="utf-8">
-<style>
-  body { font-family: Arial; direction: rtl; font-size: 11pt; }
-  h2,h3,p { text-align: center; margin: 3px 0; }
-  table { border-collapse: collapse; width: 100%; margin-top: 10px; }
-  th, td { border: 1px solid #555; padding: 5px 8px; text-align: right; vertical-align: top; }
-  th { background: #2563eb; color: white; font-weight: bold; }
-</style></head>
-<body>
-<h2>${hospitalName}</h2>
-<h3>قائمة الانتظار — ${title}</h3>
-<p>${dateStr} — عدد الحالات: ${cases.length}</p>
-<table>
-  <tr><th>م</th><th>الاسم</th><th>السن</th><th>التشخيص</th>
-  <th>نوع الرعاية</th><th>التنفس</th><th>غرفة مركزية</th><th>الهاتف</th></tr>
-  ${rows}
-</table>
-</body></html>`;
-  const blob = new Blob([html], { type: "application/vnd.ms-excel;charset=utf-8" });
-  const a = document.createElement("a");
-  a.href = URL.createObjectURL(blob);
-  a.download = `قائمة-الانتظار-${title}-${now.toISOString().slice(0,10)}.xls`;
-  a.click();
-  URL.revokeObjectURL(a.href);
+  exportArabicXlsx({
+    filename: `قائمة-الانتظار-${title}-${new Date().toISOString().slice(0, 10)}.xlsx`,
+    hospitalName,
+    reportTitle: `قائمة الانتظار — ${title}`,
+    columns: ["م", "الاسم", "السن", "التشخيص", "نوع الرعاية", "التنفس", "غرفة مركزية", "الهاتف"],
+    rows: cases.map((c, i) => [
+      i + 1, c.patientName, c.age ?? "", c.diagnosis ?? "",
+      translate(c.careType, LABELS.CARE_TYPES),
+      translate(c.artificialRespiration, LABELS.ARTIFICIAL_RESPIRATION),
+      c.centralRoomRequired ? (c.centralRoomCode ? `غرفة: ${c.centralRoomCode}` : "مطلوب") : "",
+      c.parentPhone ?? "",
+    ]),
+    columnWidths: [7, 28, 14, 32, 22, 18, 20, 18],
+  });
 }
 
 /* ─────────────────────────── Add Form ─────────────────────────── */
@@ -207,8 +184,8 @@ function AddForm({ section, onSuccess }: { section: Section; onSuccess: () => vo
               <Textarea value={form.diagnosis} onChange={e => f("diagnosis", e.target.value)} rows={2} className="resize-none" />
             </div>
             <div className="col-span-2 md:col-span-3 space-y-1">
-              <Label className="text-xs">تقرير مرفوع للحالة (اختياري، حتى 2MB)</Label>
-              <Input type="file" accept=".pdf,.png,.jpg,.jpeg,.webp" onChange={async e => {
+              <Label className="text-xs">تصوير / إرفاق ورقة الطوارئ (اختياري، حتى 2MB)</Label>
+              <Input type="file" accept=".pdf,.png,.jpg,.jpeg,.webp" capture="environment" onChange={async e => {
                 const file = e.target.files?.[0];
                 if (!file) return;
                 if (file.size > 2 * 1024 * 1024) { toast.error("حجم التقرير أكبر من 2MB"); return; }
@@ -484,8 +461,8 @@ function WaitingCaseActionDialog({
               </div>
             )}
             <div className="space-y-1 pt-1">
-              <Label className="text-xs">إرفاق ملف التقرير (اختياري، حتى 2MB)</Label>
-              <Input type="file" accept=".pdf,.png,.jpg,.jpeg,.webp" onChange={async e => {
+              <Label className="text-xs">تصوير / إرفاق ورقة الطوارئ (اختياري، حتى 2MB)</Label>
+              <Input type="file" accept=".pdf,.png,.jpg,.jpeg,.webp" capture="environment" onChange={async e => {
                 const file = e.target.files?.[0];
                 if (!file) return;
                 if (file.size > 2 * 1024 * 1024) { toast.error("حجم التقرير أكبر من 2MB"); return; }

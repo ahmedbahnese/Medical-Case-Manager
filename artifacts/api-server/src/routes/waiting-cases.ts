@@ -84,7 +84,7 @@ router.patch("/waiting-cases/:id", async (req, res): Promise<void> => {
 
   // Verify existence before updating
   const [existing] = await db
-    .select({ id: waitingCasesTable.id })
+    .select({ id: waitingCasesTable.id, status: waitingCasesTable.status })
     .from(waitingCasesTable)
     .where(eq(waitingCasesTable.id, params.data.id));
 
@@ -111,7 +111,7 @@ router.patch("/waiting-cases/:id", async (req, res): Promise<void> => {
     .where(eq(waitingCasesTable.id, params.data.id));
 
   // If admitting with a specific department, create a medical case
-  if (body.data.status === "admitted" && extraData.admitToDepartmentId) {
+  if (body.data.status === "admitted" && extraData.admitToDepartmentId && existing.status !== "admitted") {
     try {
       await db.insert(medicalCasesTable).values({
         patientName: updated.patientName,
@@ -128,7 +128,7 @@ router.patch("/waiting-cases/:id", async (req, res): Promise<void> => {
     } catch { /* non-critical */ }
   }
 
-  if (body.data.status) {
+  if (body.data.status && body.data.status !== existing.status) {
     const statusLabel: Record<string, string> = { admitted: "تم الدخول", cancelled: "إلغاء/تحويل" };
     await logAction(
       statusLabel[body.data.status] ?? "تحديث قائمة انتظار",

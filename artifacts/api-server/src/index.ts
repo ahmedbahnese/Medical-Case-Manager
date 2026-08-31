@@ -3,6 +3,7 @@ import { logger } from "./lib/logger";
 import { initDatabase } from "./lib/db-init";
 
 const rawPort = process.env["PORT"];
+const host = process.env["HOST"] ?? "0.0.0.0";
 
 if (!rawPort) {
   throw new Error(
@@ -19,12 +20,12 @@ if (Number.isNaN(port) || port <= 0) {
 // Initialize DB (create tables + seed) before accepting requests
 initDatabase()
   .then(() => {
-    app.listen(port, (err) => {
+    app.listen(port, host, (err) => {
       if (err) {
         logger.error({ err }, "Error listening on port");
         process.exit(1);
       }
-      logger.info({ port }, "Server listening");
+      logger.info({ host, port }, "Server listening");
     });
   })
   .catch((err) => {

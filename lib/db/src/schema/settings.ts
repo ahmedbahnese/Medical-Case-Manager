@@ -1,10 +1,10 @@
-import { pgTable, serial, text, timestamp } from "drizzle-orm/pg-core";
+import { sqliteTable, integer, text } from "drizzle-orm/sqlite-core";
 
-export const settingsTable = pgTable("settings", {
-  id: serial("id").primaryKey(),
+export const settingsTable = sqliteTable("settings", {
+  id: integer("id").primaryKey({ autoIncrement: true }),
   key: text("key").notNull().unique(),
   value: text("value"),
-  updatedAt: timestamp("updated_at").defaultNow().notNull(),
+  updatedAt: integer("updated_at", { mode: "timestamp_ms" }).$defaultFn(() => new Date()).notNull(),
 });
 
 export type Setting = typeof settingsTable.$inferSelect;

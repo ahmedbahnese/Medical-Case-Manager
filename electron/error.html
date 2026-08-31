@@ -36,13 +36,18 @@
     <h1>⚠️ تعذر الاتصال بالخادم</h1>
     <p>فشل تشغيل خادم BSCH. تحقق مما يلي:</p>
     <div class="steps">
-      ✔️ تأكد من تثبيت <strong>MySQL 8</strong> وتشغيله<br>
-      ✔️ تأكد من إنشاء قاعدة البيانات <strong>bsch_db</strong><br>
-      ✔️ تأكد من صحة بيانات الاتصال في ملف<br>
-      &nbsp;&nbsp;&nbsp;<code>%APPDATA%\BSCH\bsch.config.json</code>
+      ✔️ لا تحتاج هذه النسخة إلى MySQL أو PostgreSQL<br>
+      ✔️ قاعدة البيانات المحلية تُنشأ تلقائيًا في مجلد بيانات BSCH<br>
+      ✔️ أغلق أي نسخة قديمة من BSCH ثم أعد المحاولة<br>
+      ✔️ إذا استمر الخطأ، انسخ تفاصيل التشخيص أدناه إلى الدعم<br>
+      <code id="details" style="display:block;margin-top:.6rem;direction:ltr;text-align:left;white-space:pre-wrap;color:#991b1b"></code>
     </div>
     <p>بعد التأكد من كل ما سبق، اضغط "إعادة المحاولة".</p>
     <button onclick="location.reload()">إعادة المحاولة</button>
+    <script>
+      const message = new URLSearchParams(location.search).get('message');
+      if (message) document.getElementById('details').textContent = decodeURIComponent(message);
+    </script>
   </div>
 </body>
 </html>

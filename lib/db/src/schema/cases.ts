@@ -1,4 +1,4 @@
-import { pgTable, serial, text, integer, timestamp } from "drizzle-orm/pg-core";
+import { sqliteTable, integer, text } from "drizzle-orm/sqlite-core";
 import { createInsertSchema } from "drizzle-zod";
 import { z } from "zod/v4";
 
@@ -36,8 +36,8 @@ export const dischargeReasonValues = [
   "internal_transfer",
 ] as const;
 
-export const medicalCasesTable = pgTable("medical_cases", {
-  id: serial("id").primaryKey(),
+export const medicalCasesTable = sqliteTable("medical_cases", {
+  id: integer("id").primaryKey({ autoIncrement: true }),
   patientName: text("patient_name").notNull(),
   departmentId: integer("department_id").notNull(),
   age: text("age"),
@@ -53,14 +53,14 @@ export const medicalCasesTable = pgTable("medical_cases", {
   artificialRespiration: text("artificial_respiration").notNull().default("no"),
   status: text("status").notNull().default("active"),
   mobe: text("mobe"),
-  ventilationStartDate: timestamp("ventilation_start_date"),
-  ventilationEndDate: timestamp("ventilation_end_date"),
+  ventilationStartDate: integer("ventilation_start_date", { mode: "timestamp_ms" }),
+  ventilationEndDate: integer("ventilation_end_date", { mode: "timestamp_ms" }),
   dischargeReason: text("discharge_reason"),
   transferDestination: text("transfer_destination"),
-  admissionDate: timestamp("admission_date").defaultNow().notNull(),
-  dischargeDate: timestamp("discharge_date"),
-  createdAt: timestamp("created_at").defaultNow().notNull(),
-  updatedAt: timestamp("updated_at").defaultNow().notNull(),
+  admissionDate: integer("admission_date", { mode: "timestamp_ms" }).$defaultFn(() => new Date()).notNull(),
+  dischargeDate: integer("discharge_date", { mode: "timestamp_ms" }),
+  createdAt: integer("created_at", { mode: "timestamp_ms" }).$defaultFn(() => new Date()).notNull(),
+  updatedAt: integer("updated_at", { mode: "timestamp_ms" }).$defaultFn(() => new Date()).notNull(),
 });
 
 export const insertMedicalCaseSchema = createInsertSchema(medicalCasesTable).omit({ id: true, createdAt: true, updatedAt: true });

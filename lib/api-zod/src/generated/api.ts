@@ -296,6 +296,12 @@ export const UpdateCaseBody = zod.object({
   "medicalReportData": zod.string().optional(),
   "fileNumber": zod.string().optional(),
   "caseType": zod.string().optional(),
+  "mobe": zod.string().nullish(),
+  "admissionDate": zod.coerce.date().optional(),
+  "ventilationStartDate": zod.coerce.date().nullish(),
+  "ventilationEndDate": zod.coerce.date().nullish(),
+  "dischargeReason": zod.string().nullish(),
+  "transferDestination": zod.string().nullish(),
   "artificialRespiration": zod.enum(['high_frequency', 'vent', 'cpap', 'hfnc', 'standby', 'box', 'no']).optional(),
   "status": zod.enum(['active', 'recovering', 'discharged', 'critical']).optional(),
   "dischargeDate": zod.coerce.date().nullish()

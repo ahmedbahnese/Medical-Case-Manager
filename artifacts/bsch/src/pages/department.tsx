@@ -2,6 +2,7 @@ import { useLocation, useParams } from "wouter";
 import { useGetDepartment, useUpdateCase } from "@workspace/api-client-react";
 import { useAppSettings } from "@/contexts/settings-context";
 import { exportPDF } from "@/lib/pdf-export";
+import { exportArabicXlsx } from "@/lib/excel-export";
 import { ReportWatermark } from "@/components/report-watermark";
 
 function formatDateAr(val: string | null | undefined): string {
@@ -107,39 +108,15 @@ function buildDeptHtml(deptName: string, cases: any[], hospitalName: string, rep
 }
 
 function exportToExcelFormatted(deptName: string, cases: any[], hospitalName: string, reportFieldsJson?: string, customValues?: Record<number, Record<string, string>>): void {
-  const now = new Date();
-  const dateStr = now.toLocaleDateString("ar-EG", { weekday: "long", day: "2-digit", month: "2-digit", year: "numeric" });
   const activeFields = getActiveFields(reportFieldsJson, customValues);
-  const headers = activeFields.map(f => `<th>${f.label}</th>`).join("");
-  const rows = cases.map((c, i) => {
-    const cells = activeFields.map(f => `<td>${f.getText(c)}</td>`).join("");
-    return `<tr style="background:${i%2===0?"white":"#f5f5f5"}"><td style="text-align:center">${i+1}</td><td><strong>${c.patientName}</strong></td>${cells}</tr>`;
-  }).join("");
-  const html = `<html xmlns:o="urn:schemas-microsoft-com:office:office" dir="rtl">
-<head><meta charset="utf-8">
-<style>
-  body { font-family: Arial; direction: rtl; font-size: 11pt; }
-  h2,h3 { text-align: center; margin: 4px 0; }
-  p { text-align: center; margin: 2px 0; }
-  table { border-collapse: collapse; width: 100%; margin-top: 10px; }
-  th, td { border: 1px solid #555; padding: 5px 8px; text-align: right; vertical-align: top; }
-  th { background: #2563eb; color: white; font-weight: bold; }
-</style></head>
-<body>
-<h2>${hospitalName}</h2>
-<h3>بيان حالات — ${deptName}</h3>
-<p>${dateStr} — إجمالي الحالات: ${cases.length}</p>
-<table>
-  <tr><th>م</th><th>الاسم</th>${headers}</tr>
-  ${rows}
-</table>
-</body></html>`;
-  const blob = new Blob([html], { type: "application/vnd.ms-excel;charset=utf-8" });
-  const a = document.createElement("a");
-  a.href = URL.createObjectURL(blob);
-  a.download = `بيان-${deptName}-${now.toISOString().slice(0,10)}.xls`;
-  a.click();
-  URL.revokeObjectURL(a.href);
+  exportArabicXlsx({
+    filename: `بيان-${deptName}-${new Date().toISOString().slice(0, 10)}.xlsx`,
+    hospitalName,
+    reportTitle: `بيان حالات — ${deptName}`,
+    columns: ["م", "الاسم", ...activeFields.map(f => f.label)],
+    rows: cases.map((c, i) => [i + 1, c.patientName, ...activeFields.map(f => f.getText(c))]),
+    columnWidths: [7, 28, ...activeFields.map(() => 20)],
+  });
 }
 
 import { Activity, ArrowLeft, Bed, Calendar, FileText, Plus, User, AlertTriangle, Search, Printer, FileSpreadsheet, Download, FileDown, PenLine, CheckCheck } from "lucide-react";

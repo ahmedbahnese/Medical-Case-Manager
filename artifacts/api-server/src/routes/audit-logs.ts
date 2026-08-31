@@ -7,7 +7,7 @@ const router: IRouter = Router();
 
 router.get("/audit-logs", async (req, res): Promise<void> => {
   await db.delete(auditLogsTable).where(
-    lt(auditLogsTable.createdAt, sql`NOW() - INTERVAL '1 month'`),
+    lt(auditLogsTable.createdAt, sql`(strftime('%s', 'now') * 1000) - (30 * 24 * 60 * 60 * 1000)`),
   );
   const limit = parseInt((req.query.limit as string) ?? "100", 10);
   const logs = await db
