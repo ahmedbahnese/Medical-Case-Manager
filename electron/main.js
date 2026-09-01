@@ -8,7 +8,7 @@
 
 const { app, BrowserWindow, shell, Menu, Tray, nativeImage, dialog, ipcMain } = require('electron');
 const path = require('path');
-const { spawn } = require('child_process');
+const { spawn, execFileSync } = require('child_process');
 const http = require('http');
 const fs = require('fs');
 
@@ -18,6 +18,7 @@ const API_URL  = `http://localhost:${API_PORT}`;
 let mainWindow = null;
 let tray       = null;
 let apiProcess = null;
+let isQuitting = false;
 
 ipcMain.handle('save-pdf', async (event, payload) => {
   const sourceWindow = BrowserWindow.fromWebContents(event.sender);
@@ -287,14 +288,37 @@ app.whenReady().then(async () => {
   });
 });
 
-// Keep running in the tray when the last window is closed (Windows/Linux)
+// Closing the main window must fully terminate BSCH. The tray is only a
+// convenience while the app is running; it must not leave a hidden server.
 app.on('window-all-closed', () => {
-  if (process.platform === 'darwin') app.quit();
+  if (!isQuitting) app.quit();
 });
 
-app.on('before-quit', () => {
-  if (apiProcess) {
-    apiProcess.kill();
-    apiProcess = null;
+function stopApiServer() {
+  const child = apiProcess;
+  apiProcess = null;
+  if (!child || child.killed) return;
+
+  // On Windows, kill the whole process tree. Electron may otherwise leave
+  // the Node API child alive after the window has closed.
+  if (process.platform === 'win32' && child.pid) {
+    try {
+      execFileSync('taskkill', ['/pid', String(child.pid), '/t', '/f'], { windowsHide: true });
+    } catch (_) {
+      try { child.kill(); } catch (_) {}
+    }
+  } else {
+    try { child.kill('SIGTERM'); } catch (_) {}
   }
+}
+
+app.on('before-quit', (event) => {
+  if (isQuitting) return;
+  isQuitting = true;
+  event.preventDefault();
+  if (tray && !tray.isDestroyed()) tray.destroy();
+  if (splashWindow && !splashWindow.isDestroyed()) splashWindow.close();
+  stopApiServer();
+  // Give the child process a moment to release SQLite and its port.
+  setTimeout(() => app.exit(0), 250);
 });
