@@ -191,6 +191,12 @@ export default function IncidentReportPage() {
 
   useEffect(() => {
     loadReports();
+    if (new URLSearchParams(window.location.search).get("mode") === "new") {
+      setCurrentReport(emptyForm());
+      setIsEditing(true);
+      setShowPrint(false);
+      setMode("new");
+    }
   }, []);
 
   const loadReports = async () => {

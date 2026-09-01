@@ -239,6 +239,16 @@ export function Layout({ children }: { children: ReactNode }) {
 
       {/* Main Content */}
       <main className="flex-1 overflow-x-hidden p-4 md:p-8 bg-background relative w-full">
+        <div className="mb-4 flex justify-end no-print">
+          <Link
+            href="/incident-report?mode=new"
+            className="inline-flex items-center gap-2 rounded-md bg-destructive px-4 py-2 text-sm font-semibold text-destructive-foreground shadow-sm transition-colors hover:bg-destructive/90"
+            title="إرسال بلاغ OVR"
+          >
+            <AlertTriangle className="h-4 w-4" />
+            إرسال OVR
+          </Link>
+        </div>
         {children}
       </main>
 
