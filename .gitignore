@@ -47,3 +47,9 @@ Thumbs.db
 # Replit
 .cache/
 .local/
+
+# Deployment secrets and local tunnel configuration
+deploy/windows7/tunnel-config.bat
+deploy/windows7/*.ppk
+deploy/windows7/*.pem
+deploy/windows7/*.key

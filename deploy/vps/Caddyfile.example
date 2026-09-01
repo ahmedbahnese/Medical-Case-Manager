@@ -1,0 +1,16 @@
+# انسخ هذا الملف إلى /etc/caddy/Caddyfile
+# استبدل app.example.com باسم النطاق أو النطاق الفرعي الذي تملكه.
+# Caddy سيصدر شهادة HTTPS تلقائيًا بعد توجيه DNS إلى عنوان الـVPS.
+
+app.example.com {
+    encode gzip
+
+    # هذا المنفذ لا يستمع للعامة؛ يستقبله SSH reverse tunnel فقط.
+    reverse_proxy 127.0.0.1:18080
+
+    # لا نسمح بتخزين صفحات تحتوي بيانات طبية في الوسطاء.
+    header Cache-Control "no-store"
+}
+
+# لا تضف health endpoint عامًّا منفصلًا؛ التطبيق نفسه يوفّر /api/healthz.
+# استبدل app.example.com قبل التشغيل.
