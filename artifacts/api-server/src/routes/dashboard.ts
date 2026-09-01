@@ -1,8 +1,22 @@
 import { Router, type IRouter } from "express";
-import { count, eq, ne } from "drizzle-orm";
-import { db, departmentsTable, medicalCasesTable, waitingCasesTable } from "@workspace/db";
+import { count, eq, ne, sql } from "drizzle-orm";
+import { db, departmentsTable, medicalCasesTable, waitingCasesTable, incidentReportsTable } from "@workspace/db";
+import { getCurrentUserAccess } from "../middleware/auth";
 
 const router: IRouter = Router();
+
+router.get("/quality/dashboard", async (req, res): Promise<void> => {
+  const access = await getCurrentUserAccess(req.headers.cookie);
+  if (!access.canReviewOvr) { res.status(403).json({ error: "لوحة الجودة تتطلب صلاحية المؤسس أو مسؤول الجودة" }); return; }
+  const [total] = await db.select({ count: count() }).from(incidentReportsTable);
+  const [open] = await db.select({ count: count() }).from(incidentReportsTable).where(ne(incidentReportsTable.status, "closed"));
+  const byStatus = await db.select({ status: incidentReportsTable.status, count: count() }).from(incidentReportsTable).groupBy(incidentReportsTable.status);
+  const bySeverity = await db.select({ severity: incidentReportsTable.severity, count: count() }).from(incidentReportsTable).groupBy(incidentReportsTable.severity);
+  const byType = await db.select({ type: incidentReportsTable.incidentType, count: count() }).from(incidentReportsTable).groupBy(incidentReportsTable.incidentType);
+  const monthlyVisits = await db.select({ month: sql<string>`strftime('%Y-%m', ${medicalCasesTable.admissionDate} / 1000, 'unixepoch')`, count: count() }).from(medicalCasesTable).groupBy(sql`strftime('%Y-%m', ${medicalCasesTable.admissionDate} / 1000, 'unixepoch')`).orderBy(sql`strftime('%Y-%m', ${medicalCasesTable.admissionDate} / 1000, 'unixepoch')`);
+  const [overdue] = await db.select({ count: count() }).from(incidentReportsTable).where(sql`${incidentReportsTable.dueDate} IS NOT NULL AND ${incidentReportsTable.dueDate} < ${Date.now()} AND ${incidentReportsTable.status} <> 'closed'`);
+  res.json({ totalOvr: Number(total?.count ?? 0), openOvr: Number(open?.count ?? 0), overdueCapa: Number(overdue?.count ?? 0), byStatus: byStatus.map(r => ({ status: r.status, count: Number(r.count) })), bySeverity: bySeverity.map(r => ({ severity: r.severity, count: Number(r.count) })), byType: byType.map(r => ({ type: r.type, count: Number(r.count) })), monthlyVisits: monthlyVisits.map(r => ({ month: r.month, count: Number(r.count) })) });
+});
 
 router.get("/dashboard/stats", async (req, res): Promise<void> => {
   const [totalResult] = await db.select({ count: count() }).from(medicalCasesTable);

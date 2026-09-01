@@ -20,6 +20,7 @@ import IncidentReport from '@/pages/incident-report';
 import Settings from '@/pages/settings';
 import DischargeHistory from '@/pages/discharge-history';
 import AuditLog from '@/pages/audit-log';
+import QualityDashboard from '@/pages/quality-dashboard';
 
 const queryClient = new QueryClient();
 
@@ -75,6 +76,7 @@ function Router() {
       <Route path="/occupancy-report"><ProtectedRoute component={OccupancyReport} /></Route>
       <Route path="/print-reports"><ProtectedRoute component={PrintReports} /></Route>
       <Route path="/incident-report"><ProtectedRoute component={IncidentReport} /></Route>
+      <Route path="/quality-dashboard"><ProtectedRoute component={QualityDashboard} /></Route>
 
       {/* Search & History */}
       <Route path="/advanced-search"><ProtectedRoute component={Search} /></Route>

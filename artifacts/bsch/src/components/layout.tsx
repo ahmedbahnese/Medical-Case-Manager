@@ -18,6 +18,7 @@ import {
   Settings,
   FileOutput,
   History,
+  ShieldCheck,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Toaster } from "sonner";
@@ -42,6 +43,7 @@ const NAV_GROUPS = [
       { name: "بيان الإشغال", href: "/occupancy-report", icon: ClipboardList },
       { name: "التقرير اليومي", href: "/print-reports", icon: Printer },
       { name: "بيانات الحوادث", href: "/incident-report", icon: AlertTriangle },
+      { name: "لوحة مسؤول الجودة", href: "/quality-dashboard", icon: ShieldCheck },
     ],
   },
   {

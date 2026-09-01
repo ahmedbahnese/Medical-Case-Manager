@@ -1,4 +1,6 @@
 import { Request, Response, NextFunction } from "express";
+import { db, settingsTable } from "@workspace/db";
+import { eq } from "drizzle-orm";
 
 const SESSION_COOKIE = "bsch_session";
 
@@ -16,6 +18,24 @@ export function getCurrentUserName(cookieHeader: string | undefined): string {
   if (session === "founder") return "المؤسس";
   if (session?.startsWith("user:")) return session.slice(5) || "مستخدم النظام";
   return "مستخدم النظام";
+}
+
+export type UserRole = "founder" | "quality" | "infection_control" | "insurance" | "statistics" | "user";
+export interface CurrentUserAccess { name: string; role: UserRole; isFounder: boolean; canSubmitOvr: boolean; canReviewOvr: boolean; }
+
+export async function getCurrentUserAccess(cookieHeader: string | undefined): Promise<CurrentUserAccess> {
+  const session = getSession(cookieHeader);
+  if (session === "founder") return { name: "المؤسس", role: "founder", isFounder: true, canSubmitOvr: true, canReviewOvr: true };
+  if (!session?.startsWith("user:")) return { name: "مستخدم النظام", role: "user", isFounder: false, canSubmitOvr: false, canReviewOvr: false };
+  const name = session.slice(5) || "مستخدم النظام";
+  let role: UserRole = "user";
+  try {
+    const [row] = await db.select().from(settingsTable).where(eq(settingsTable.key, "named_passwords"));
+    const users = row?.value ? JSON.parse(row.value) as Array<{name?: string; role?: UserRole; pagePermissions?: Array<{href: string; access: string}>}> : [];
+    const account = users.find(u => u.name === name);
+    role = account?.role ?? (account?.pagePermissions?.some(p => p.href === "/incident-report" && p.access === "edit") ? "quality" : "user");
+  } catch { role = "user"; }
+  return { name, role, isFounder: false, canSubmitOvr: true, canReviewOvr: role === "quality" };
 }
 
 /** Require any valid session (founder or named user) */

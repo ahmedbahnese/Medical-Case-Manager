@@ -34,6 +34,18 @@ interface IncidentReport {
   totalDeaths: number;
   hospitalsTransferredTo: string;
   cases: IncidentCase[];
+  status?: string;
+  severity?: string;
+  reporterName?: string;
+  eventDescription?: string;
+  immediateAction?: string;
+  investigationSummary?: string;
+  rootCause?: string;
+  correctiveAction?: string;
+  preventiveAction?: string;
+  actionOwner?: string;
+  dueDate?: string;
+  verificationNotes?: string;
   createdAt: string;
 }
 
@@ -52,6 +64,17 @@ interface ReportForm {
   totalDeaths: number;
   hospitalsTransferredTo: string;
   cases: IncidentCase[];
+  status: string;
+  severity: string;
+  eventDescription: string;
+  immediateAction: string;
+  investigationSummary: string;
+  rootCause: string;
+  correctiveAction: string;
+  preventiveAction: string;
+  actionOwner: string;
+  dueDate: string;
+  verificationNotes: string;
 }
 
 function emptyForm(): ReportForm {
@@ -65,6 +88,17 @@ function emptyForm(): ReportForm {
     totalInjured: 0,
     totalDeaths: 0,
     hospitalsTransferredTo: "",
+    status: "new",
+    severity: "no_harm",
+    eventDescription: "",
+    immediateAction: "",
+    investigationSummary: "",
+    rootCause: "",
+    correctiveAction: "",
+    preventiveAction: "",
+    actionOwner: "",
+    dueDate: "",
+    verificationNotes: "",
     cases: [emptyCase(1), emptyCase(2), emptyCase(3)],
   };
 }
@@ -233,6 +267,17 @@ export default function IncidentReportPage() {
       totalInjured: r.totalInjured,
       totalDeaths: r.totalDeaths,
       hospitalsTransferredTo: r.hospitalsTransferredTo ?? "",
+      status: r.status ?? "new",
+      severity: r.severity ?? "no_harm",
+      eventDescription: r.eventDescription ?? "",
+      immediateAction: r.immediateAction ?? "",
+      investigationSummary: r.investigationSummary ?? "",
+      rootCause: r.rootCause ?? "",
+      correctiveAction: r.correctiveAction ?? "",
+      preventiveAction: r.preventiveAction ?? "",
+      actionOwner: r.actionOwner ?? "",
+      dueDate: r.dueDate ? r.dueDate.slice(0, 10) : "",
+      verificationNotes: r.verificationNotes ?? "",
       cases: r.cases.length > 0 ? r.cases : [emptyCase(1), emptyCase(2), emptyCase(3)],
     });
     setIsEditing(false);
@@ -383,6 +428,14 @@ export default function IncidentReportPage() {
                 <Label>المستشفيات التي تم التحويل إليها</Label>
                 <Input value={currentReport.hospitalsTransferredTo} onChange={e => f("hospitalsTransferredTo", e.target.value)} placeholder="أسماء المستشفيات مفصولة بفاصلة" />
               </div>
+            </div>
+
+            <div className="grid md:grid-cols-2 gap-4 border rounded-lg p-4 bg-muted/20">
+              <div className="space-y-1.5"><Label>درجة الخطورة</Label><select className="h-9 rounded-md border bg-background px-3 text-sm" value={currentReport.severity} onChange={e => f("severity", e.target.value)}><option value="near_miss">كاد أن يحدث</option><option value="no_harm">بدون ضرر</option><option value="low">ضرر بسيط</option><option value="moderate">ضرر متوسط</option><option value="severe">ضرر شديد</option><option value="sentinel">حدث جسيم</option></select></div>
+              <div className="space-y-1.5"><Label>حالة البلاغ</Label><select className="h-9 rounded-md border bg-background px-3 text-sm" value={currentReport.status} onChange={e => f("status", e.target.value)}><option value="new">جديد</option><option value="under_review">تحت المراجعة</option><option value="investigating">تحت التحقيق</option><option value="corrective_action">إجراء تصحيحي</option><option value="verification">بانتظار التحقق</option><option value="closed">مغلق</option></select></div>
+              {(["eventDescription", "immediateAction", "investigationSummary", "rootCause", "correctiveAction", "preventiveAction", "verificationNotes"] as const).map(key => <div key={key} className="space-y-1.5 md:col-span-2"><Label>{{eventDescription:"وصف الواقعة", immediateAction:"الإجراء الفوري", investigationSummary:"ملخص التحقيق", rootCause:"السبب الجذري", correctiveAction:"الإجراء التصحيحي CAPA", preventiveAction:"الإجراء الوقائي CAPA", verificationNotes:"ملاحظات التحقق"}[key]}</Label><Textarea value={currentReport[key]} onChange={e => f(key, e.target.value)} rows={2} /></div>)}
+              <div className="space-y-1.5"><Label>مسؤول الإجراء</Label><Input value={currentReport.actionOwner} onChange={e => f("actionOwner", e.target.value)} /></div>
+              <div className="space-y-1.5"><Label>تاريخ الاستحقاق</Label><Input type="date" value={currentReport.dueDate} onChange={e => f("dueDate", e.target.value)} /></div>
             </div>
 
             <div>

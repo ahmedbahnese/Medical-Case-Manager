@@ -2,16 +2,20 @@ import { Router, type IRouter } from "express";
 import { eq, desc } from "drizzle-orm";
 import { db, incidentReportsTable, waitingCasesTable } from "@workspace/db";
 import { logAction } from "./audit-logs";
-import { getCurrentUserName } from "../middleware/auth";
+import { getCurrentUserName, getCurrentUserAccess } from "../middleware/auth";
 
 const router: IRouter = Router();
 
-router.get("/incident-reports", async (_req, res): Promise<void> => {
+router.get("/incident-reports", async (req, res): Promise<void> => {
+  const access = await getCurrentUserAccess(req.headers.cookie);
+  if (!access.canReviewOvr) { res.status(403).json({ error: "عرض بلاغات OVR يتطلب صلاحية المؤسس أو مسؤول الجودة" }); return; }
   const reports = await db.select().from(incidentReportsTable).orderBy(desc(incidentReportsTable.createdAt));
   res.json(reports.map(r => ({ ...r, cases: JSON.parse(r.casesJson ?? "[]") })));
 });
 
 router.get("/incident-reports/:id", async (req, res): Promise<void> => {
+  const access = await getCurrentUserAccess(req.headers.cookie);
+  if (!access.canReviewOvr) { res.status(403).json({ error: "عرض بلاغات OVR يتطلب صلاحية المؤسس أو مسؤول الجودة" }); return; }
   const id = parseInt(req.params.id as string, 10);
   const [report] = await db.select().from(incidentReportsTable).where(eq(incidentReportsTable.id, id));
   if (!report) {
@@ -22,7 +26,8 @@ router.get("/incident-reports/:id", async (req, res): Promise<void> => {
 });
 
 router.post("/incident-reports", async (req, res): Promise<void> => {
-  const { incidentType, incidentLocation, reportDate, reportDay, reportTime, totalInjured, totalDeaths, hospitalsTransferredTo, cases } = req.body as any;
+  const access = await getCurrentUserAccess(req.headers.cookie);
+  const { incidentType, incidentLocation, reportDate, reportDay, reportTime, totalInjured, totalDeaths, hospitalsTransferredTo, cases, severity, eventDescription, immediateAction, reporterName, reporterRole } = req.body as any;
 
   if (!incidentType || !incidentLocation || !reportDate) {
     res.status(400).json({ error: "نوع الحادث والمكان والتاريخ مطلوبة" });
@@ -39,6 +44,12 @@ router.post("/incident-reports", async (req, res): Promise<void> => {
     totalDeaths: totalDeaths ?? 0,
     hospitalsTransferredTo: hospitalsTransferredTo ?? null,
     casesJson: JSON.stringify(cases ?? []),
+    reporterName: reporterName ?? access.name,
+    reporterRole: reporterRole ?? access.role,
+    status: "new",
+    severity: severity ?? "no_harm",
+    eventDescription: eventDescription ?? null,
+    immediateAction: immediateAction ?? null,
   }).returning({ id: incidentReportsTable.id });
 
   const [report] = await db.select().from(incidentReportsTable).where(eq(incidentReportsTable.id, newReportId));
@@ -67,6 +78,8 @@ router.post("/incident-reports", async (req, res): Promise<void> => {
 });
 
 router.patch("/incident-reports/:id", async (req, res): Promise<void> => {
+  const access = await getCurrentUserAccess(req.headers.cookie);
+  if (!access.canReviewOvr) { res.status(403).json({ error: "تعديل والتحقيق في OVR يتطلب صلاحية المؤسس أو مسؤول الجودة" }); return; }
   const id = parseInt(req.params.id as string, 10);
 
   // Verify existence
@@ -76,7 +89,7 @@ router.patch("/incident-reports/:id", async (req, res): Promise<void> => {
     return;
   }
 
-  const { incidentType, incidentLocation, reportDate, reportDay, reportTime, totalInjured, totalDeaths, hospitalsTransferredTo, cases } = req.body as any;
+  const { incidentType, incidentLocation, reportDate, reportDay, reportTime, totalInjured, totalDeaths, hospitalsTransferredTo, cases, status, severity, eventDescription, immediateAction, investigationSummary, rootCause, correctiveAction, preventiveAction, actionOwner, dueDate, verificationNotes } = req.body as any;
 
   const updates: Record<string, unknown> = { updatedAt: new Date() };
   if (incidentType !== undefined) updates.incidentType = incidentType;
@@ -88,6 +101,12 @@ router.patch("/incident-reports/:id", async (req, res): Promise<void> => {
   if (totalDeaths !== undefined) updates.totalDeaths = totalDeaths;
   if (hospitalsTransferredTo !== undefined) updates.hospitalsTransferredTo = hospitalsTransferredTo;
   if (cases !== undefined) updates.casesJson = JSON.stringify(cases);
+  for (const [key, value] of Object.entries({ status, severity, eventDescription, immediateAction, investigationSummary, rootCause, correctiveAction, preventiveAction, actionOwner, verificationNotes })) {
+    if (value !== undefined) updates[key] = value;
+  }
+  if (dueDate !== undefined) updates.dueDate = dueDate ? new Date(dueDate) : null;
+  updates.reviewedBy = access.name;
+  updates.reviewedAt = new Date();
 
   // MySQL does not support .returning() — update then re-select
   await db.update(incidentReportsTable).set(updates).where(eq(incidentReportsTable.id, id));
@@ -98,6 +117,8 @@ router.patch("/incident-reports/:id", async (req, res): Promise<void> => {
 });
 
 router.delete("/incident-reports/:id", async (req, res): Promise<void> => {
+  const access = await getCurrentUserAccess(req.headers.cookie);
+  if (!access.isFounder) { res.status(403).json({ error: "حذف بلاغ OVR متاح للمؤسس فقط" }); return; }
   const id = parseInt(req.params.id as string, 10);
 
   // MySQL does not support .returning() — select first, then delete

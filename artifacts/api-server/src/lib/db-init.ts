@@ -10,10 +10,22 @@ export async function initDatabase(): Promise<void> {
       `CREATE TABLE IF NOT EXISTS waiting_cases (id INTEGER PRIMARY KEY AUTOINCREMENT, patient_name TEXT NOT NULL, age TEXT, diagnosis TEXT, parent_phone TEXT, national_id TEXT, medical_report TEXT, medical_report_name TEXT, medical_report_data TEXT, care_type TEXT NOT NULL, central_room_required INTEGER NOT NULL DEFAULT 0, central_room_code TEXT, artificial_respiration TEXT NOT NULL DEFAULT 'no', section TEXT NOT NULL DEFAULT 'reception', status TEXT NOT NULL DEFAULT 'waiting', created_at INTEGER NOT NULL DEFAULT (strftime('%s','now')*1000), updated_at INTEGER NOT NULL DEFAULT (strftime('%s','now')*1000))`,
       `CREATE TABLE IF NOT EXISTS settings (id INTEGER PRIMARY KEY AUTOINCREMENT, key TEXT NOT NULL UNIQUE, value TEXT, updated_at INTEGER NOT NULL DEFAULT (strftime('%s','now')*1000))`,
       `CREATE TABLE IF NOT EXISTS audit_logs (id INTEGER PRIMARY KEY AUTOINCREMENT, action TEXT NOT NULL, entity_type TEXT NOT NULL, entity_id INTEGER, entity_name TEXT, details TEXT, performed_by TEXT DEFAULT 'المستخدم', created_at INTEGER NOT NULL DEFAULT (strftime('%s','now')*1000))`,
-      `CREATE TABLE IF NOT EXISTS incident_reports (id INTEGER PRIMARY KEY AUTOINCREMENT, incident_type TEXT NOT NULL, incident_location TEXT NOT NULL, report_date INTEGER NOT NULL, report_day TEXT, report_time TEXT, total_injured INTEGER NOT NULL DEFAULT 0, total_deaths INTEGER NOT NULL DEFAULT 0, hospitals_transferred_to TEXT, cases_json TEXT NOT NULL DEFAULT '[]', created_at INTEGER NOT NULL DEFAULT (strftime('%s','now')*1000), updated_at INTEGER NOT NULL DEFAULT (strftime('%s','now')*1000))`,
+      `CREATE TABLE IF NOT EXISTS incident_reports (id INTEGER PRIMARY KEY AUTOINCREMENT, incident_type TEXT NOT NULL, incident_location TEXT NOT NULL, report_date INTEGER NOT NULL, report_day TEXT, report_time TEXT, total_injured INTEGER NOT NULL DEFAULT 0, total_deaths INTEGER NOT NULL DEFAULT 0, hospitals_transferred_to TEXT, cases_json TEXT NOT NULL DEFAULT '[]', reporter_name TEXT, reporter_role TEXT, status TEXT NOT NULL DEFAULT 'new', severity TEXT NOT NULL DEFAULT 'no_harm', event_description TEXT, immediate_action TEXT, investigation_summary TEXT, root_cause TEXT, corrective_action TEXT, preventive_action TEXT, action_owner TEXT, due_date INTEGER, verification_notes TEXT, reviewed_by TEXT, reviewed_at INTEGER, created_at INTEGER NOT NULL DEFAULT (strftime('%s','now')*1000), updated_at INTEGER NOT NULL DEFAULT (strftime('%s','now')*1000))`,
       `CREATE TABLE IF NOT EXISTS backups (id INTEGER PRIMARY KEY AUTOINCREMENT, backup_name TEXT NOT NULL, backup_data TEXT NOT NULL, record_count INTEGER NOT NULL DEFAULT 0, created_at INTEGER NOT NULL DEFAULT (strftime('%s','now')*1000))`,
     ];
     for (const statement of ddl) await db.run(sql.raw(statement));
+
+    // Backward-compatible migrations for databases created before OVR fields existed.
+    const ovrColumns = [
+      ["reporter_name", "TEXT"], ["reporter_role", "TEXT"], ["status", "TEXT NOT NULL DEFAULT 'new'"],
+      ["severity", "TEXT NOT NULL DEFAULT 'no_harm'"], ["event_description", "TEXT"], ["immediate_action", "TEXT"],
+      ["investigation_summary", "TEXT"], ["root_cause", "TEXT"], ["corrective_action", "TEXT"],
+      ["preventive_action", "TEXT"], ["action_owner", "TEXT"], ["due_date", "INTEGER"],
+      ["verification_notes", "TEXT"], ["reviewed_by", "TEXT"], ["reviewed_at", "INTEGER"],
+    ] as const;
+    for (const [column, definition] of ovrColumns) {
+      try { await db.run(sql.raw(`ALTER TABLE incident_reports ADD COLUMN ${column} ${definition}`)); } catch { /* already exists */ }
+    }
 
     const [{ value: deptCount }] = await db.select({ value: count() }).from(departmentsTable);
     if (Number(deptCount) === 0) {

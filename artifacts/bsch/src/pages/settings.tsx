@@ -97,6 +97,7 @@ interface NamedPassword {
   canEdit?: boolean;
   allowedPages?: string[];
   pagePermissions?: PagePermission[];
+  role?: "user" | "quality" | "infection_control" | "insurance" | "statistics";
 }
 
 const ACCESS_LABELS: Record<string, string> = { none: "لا وصول", view: "عرض", edit: "تعديل" };
@@ -114,6 +115,7 @@ const ALL_USER_PAGES = [
   { href: "/occupancy-report",      label: "بيان الإشغال" },
   { href: "/print-reports",         label: "التقرير اليومي" },
   { href: "/incident-report",       label: "بيانات الحوادث" },
+  { href: "/quality-dashboard",      label: "لوحة مسؤول الجودة" },
   { href: "/advanced-search",       label: "بحث متقدم" },
   { href: "/discharge-history",     label: "سجل الخروج" },
   { href: "/bulk-import",           label: "الاستيراد الذكي" },
@@ -158,12 +160,14 @@ export default function SettingsPage() {
   const [namedPasswords, setNamedPasswords] = useState<NamedPassword[]>([]);
   const [newNpName, setNewNpName] = useState("");
   const [newNpPassword, setNewNpPassword] = useState("");
+  const [newNpRole, setNewNpRole] = useState<NamedPassword["role"]>("user");
   const [showNewNpPw, setShowNewNpPw] = useState(false);
   const [newNpPagePerms, setNewNpPagePerms] = useState<PagePermission[]>([...DEFAULT_PAGE_PERMS]);
   // Edit existing user
   const [editingUserIdx, setEditingUserIdx] = useState<number | null>(null);
   const [editUserName, setEditUserName] = useState("");
   const [editUserPw, setEditUserPw] = useState("");
+  const [editUserRole, setEditUserRole] = useState<NamedPassword["role"]>("user");
   const [editUserPerms, setEditUserPerms] = useState<PagePermission[]>([]);
   const [showEditUserPw, setShowEditUserPw] = useState(false);
 
@@ -262,11 +266,12 @@ export default function SettingsPage() {
     const newUser: NamedPassword = {
       name: newNpName.trim(),
       password: newNpPassword.trim(),
+      role: newNpRole,
       pagePermissions: newNpPagePerms,
     };
     const updated = [...namedPasswords, newUser];
     setNamedPasswords(updated);
-    setNewNpName(""); setNewNpPassword(""); setNewNpPagePerms([...DEFAULT_PAGE_PERMS]);
+    setNewNpName(""); setNewNpPassword(""); setNewNpRole("user"); setNewNpPagePerms([...DEFAULT_PAGE_PERMS]);
     saveNamedPasswords(updated);
   };
   const removeNamedPassword = (i: number) => {
@@ -278,16 +283,18 @@ export default function SettingsPage() {
     setEditingUserIdx(i);
     setEditUserName(np.name);
     setEditUserPw("");
+    setEditUserRole(np.role ?? "user");
     setEditUserPerms(migrateUserToPagePerms(np));
     setShowEditUserPw(false);
   };
-  const cancelEditUser = () => { setEditingUserIdx(null); setEditUserName(""); setEditUserPw(""); setEditUserPerms([]); };
+  const cancelEditUser = () => { setEditingUserIdx(null); setEditUserName(""); setEditUserPw(""); setEditUserRole("user"); setEditUserPerms([]); };
   const saveEditUser = (i: number) => {
     if (!editUserName.trim()) { toast.error("اسم المستخدم مطلوب"); return; }
     const list = [...namedPasswords];
     list[i] = {
       name: editUserName.trim(),
       password: editUserPw.trim() || list[i].password,
+      role: editUserRole,
       pagePermissions: editUserPerms,
     };
     setNamedPasswords(list);
@@ -923,6 +930,13 @@ export default function SettingsPage() {
                           </div>
                         </div>
                       </div>
+                      <div className="space-y-1">
+                        <Label className="text-xs">الدور الوظيفي</Label>
+                        <Select value={editUserRole ?? "user"} onValueChange={v => setEditUserRole(v as NamedPassword["role"])}>
+                          <SelectTrigger className="h-9"><SelectValue /></SelectTrigger>
+                          <SelectContent><SelectItem value="user">مستخدم عادي</SelectItem><SelectItem value="quality">مسؤول الجودة</SelectItem><SelectItem value="infection_control">مسؤول مكافحة العدوى</SelectItem><SelectItem value="insurance">مسؤول التأمين</SelectItem><SelectItem value="statistics">مسؤول الإحصاء</SelectItem></SelectContent>
+                        </Select>
+                      </div>
                       <div className="space-y-1.5">
                         <div className="flex items-center justify-between">
                           <Label className="text-xs font-medium">صلاحيات كل صفحة</Label>
@@ -1018,6 +1032,13 @@ export default function SettingsPage() {
                   </button>
                 </div>
               </div>
+            </div>
+            <div className="space-y-1">
+              <Label className="text-xs">الدور الوظيفي</Label>
+              <Select value={newNpRole ?? "user"} onValueChange={v => setNewNpRole(v as NamedPassword["role"])}>
+                <SelectTrigger className="h-9"><SelectValue /></SelectTrigger>
+                <SelectContent><SelectItem value="user">مستخدم عادي</SelectItem><SelectItem value="quality">مسؤول الجودة</SelectItem><SelectItem value="infection_control">مسؤول مكافحة العدوى</SelectItem><SelectItem value="insurance">مسؤول التأمين</SelectItem><SelectItem value="statistics">مسؤول الإحصاء</SelectItem></SelectContent>
+              </Select>
             </div>
             <div className="space-y-1.5">
               <div className="flex items-center justify-between">
