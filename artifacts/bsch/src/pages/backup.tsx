@@ -42,13 +42,23 @@ export default function Backup() {
     }
   };
 
-  const handleDownload = (id: number, backupName: string) => {
-    const url = getDownloadUrl(`/api/backups/${id}/download`);
-    const a = document.createElement("a");
-    a.href = url;
-    a.download = `bsch-backup-${backupName}.json`;
-    a.click();
-    toast.success("جاري تحميل النسخة...");
+  const handleDownload = async (id: number, backupName: string) => {
+    try {
+      const response = await fetch(getDownloadUrl(`/api/backups/${id}/download`), { credentials: "include" });
+      if (!response.ok) throw new Error(`HTTP ${response.status}`);
+      const blob = await response.blob();
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement("a");
+      a.href = url;
+      a.download = `bsch-backup-${backupName}.json`;
+      document.body.appendChild(a);
+      a.click();
+      a.remove();
+      setTimeout(() => URL.revokeObjectURL(url), 1000);
+      toast.success("تم تحميل النسخة الاحتياطية");
+    } catch (e: any) {
+      toast.error("تعذر تحميل النسخة: " + (e?.message ?? "خطأ غير معروف"));
+    }
   };
 
   const handleImport = async (event: React.ChangeEvent<HTMLInputElement>) => {

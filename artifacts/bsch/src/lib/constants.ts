@@ -13,6 +13,7 @@ export const LABELS = {
     vent: "فنت (VENT)",
     cpap: "سباب (CPAP)",
     hfnc: "HFNC",
+    oxygen_mask: "ماسك أكسجين",
     standby: "استاندباي",
     box: "بوكس / نيزل كانيولا",
     no: "هواء الغرفة",

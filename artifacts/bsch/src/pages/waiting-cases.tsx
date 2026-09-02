@@ -184,11 +184,11 @@ function AddForm({ section, onSuccess }: { section: Section; onSuccess: () => vo
               <Textarea value={form.diagnosis} onChange={e => f("diagnosis", e.target.value)} rows={2} className="resize-none" />
             </div>
             <div className="col-span-2 md:col-span-3 space-y-1">
-              <Label className="text-xs">تصوير / إرفاق ورقة الطوارئ (اختياري، حتى 2MB)</Label>
+              <Label className="text-xs">تصوير / اختيار ورقة الطوارئ (اختياري، حتى 10MB)</Label>
               <Input type="file" accept=".pdf,.png,.jpg,.jpeg,.webp" capture="environment" onChange={async e => {
                 const file = e.target.files?.[0];
                 if (!file) return;
-                if (file.size > 2 * 1024 * 1024) { toast.error("حجم التقرير أكبر من 2MB"); return; }
+                if (file.size > 10 * 1024 * 1024) { toast.error("حجم ورقة الطوارئ أكبر من 10MB"); return; }
                 const data = await new Promise<string>((resolve, reject) => {
                   const reader = new FileReader();
                   reader.onload = () => resolve(String(reader.result));
@@ -461,11 +461,11 @@ function WaitingCaseActionDialog({
               </div>
             )}
             <div className="space-y-1 pt-1">
-              <Label className="text-xs">تصوير / إرفاق ورقة الطوارئ (اختياري، حتى 2MB)</Label>
+              <Label className="text-xs">تصوير / اختيار ورقة الطوارئ (اختياري، حتى 10MB)</Label>
               <Input type="file" accept=".pdf,.png,.jpg,.jpeg,.webp" capture="environment" onChange={async e => {
                 const file = e.target.files?.[0];
                 if (!file) return;
-                if (file.size > 2 * 1024 * 1024) { toast.error("حجم التقرير أكبر من 2MB"); return; }
+                if (file.size > 10 * 1024 * 1024) { toast.error("حجم ورقة الطوارئ أكبر من 10MB"); return; }
                 const data = await new Promise<string>((resolve, reject) => {
                   const reader = new FileReader();
                   reader.onload = () => resolve(String(reader.result));
@@ -526,6 +526,7 @@ function CasesTable({ cases, printCases, onAction, onDelete, isLoading, selected
             <TableHead className="w-10 text-center">م</TableHead>
             <TableHead>اسم المريض</TableHead>
             <TableHead>السن</TableHead>
+            <TableHead className="hidden lg:table-cell">الرقم القومي</TableHead>
             <TableHead className="hidden md:table-cell">التشخيص</TableHead>
             <TableHead className="hidden sm:table-cell">نوع الرعاية</TableHead>
             <TableHead className="hidden lg:table-cell">التنفس</TableHead>
@@ -560,6 +561,7 @@ function CasesTable({ cases, printCases, onAction, onDelete, isLoading, selected
                   {c.parentPhone && <div className="text-xs text-muted-foreground">{c.parentPhone}</div>}
                 </TableCell>
                 <TableCell className="text-sm">{c.age ?? "—"}</TableCell>
+                <TableCell className="hidden lg:table-cell text-xs font-mono" dir="ltr">{c.nationalId ?? "—"}</TableCell>
                 <TableCell className="hidden md:table-cell text-sm max-w-[150px] truncate">{c.diagnosis ?? "—"}</TableCell>
                 <TableCell className="hidden sm:table-cell">
                   <Badge variant="outline" className="text-xs">{translate(c.careType, LABELS.CARE_TYPES)}</Badge>

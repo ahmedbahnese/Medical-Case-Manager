@@ -11,7 +11,7 @@ import { apiPost } from "@/lib/api";
 
 export default function OvrIncidentReportPage() {
   const [saving, setSaving] = useState(false);
-  const [form, setForm] = useState({ eventDate: new Date().toISOString().slice(0,10), eventTime: new Date().toTimeString().slice(0,5), department: "", location: "", eventType: "", severity: "no_harm", description: "", immediateAction: "" });
+  const [form, setForm] = useState({ eventDate: new Date().toISOString().slice(0,10), eventTime: new Date().toTimeString().slice(0,5), department: "", location: "", eventType: "", patientName: "", fileNumber: "", hospitalSupervision: "إشراف المستشفى", administrativeManager: "المدير الإداري", severity: "no_harm", description: "", immediateAction: "" });
   const set = (key: string, value: string) => setForm(f => ({ ...f, [key]: value }));
   const save = async () => {
     if (!form.department || !form.location || !form.eventType || !form.description) { toast.error("يرجى استكمال القسم والمكان ونوع الواقعة والوصف"); return; }
@@ -26,6 +26,10 @@ export default function OvrIncidentReportPage() {
       <div><Label>تاريخ الواقعة</Label><Input type="date" value={form.eventDate} onChange={e=>set("eventDate",e.target.value)} /></div><div><Label>وقت الواقعة</Label><Input type="time" value={form.eventTime} onChange={e=>set("eventTime",e.target.value)} /></div>
       <div><Label>القسم *</Label><Input value={form.department} onChange={e=>set("department",e.target.value)} placeholder="مثال: العناية المركزة" /></div><div><Label>مكان الواقعة *</Label><Input value={form.location} onChange={e=>set("location",e.target.value)} /></div>
       <div><Label>نوع الواقعة *</Label><Select value={form.eventType} onValueChange={v=>set("eventType",v)}><SelectTrigger><SelectValue placeholder="اختر النوع" /></SelectTrigger><SelectContent>{["سقوط","دواء","عدوى","تعريف مريض","نقل دم","جهاز أو معدات","شكوى","Near Miss","أخرى"].map(x=><SelectItem key={x} value={x}>{x}</SelectItem>)}</SelectContent></Select></div>
+      <div><Label>اسم المريض (اختياري)</Label><Input value={form.patientName} onChange={e=>set("patientName",e.target.value)} /></div>
+      <div><Label>رقم الملف (اختياري)</Label><Input dir="ltr" value={form.fileNumber} onChange={e=>set("fileNumber",e.target.value)} /></div>
+      <div><Label>الإشراف</Label><Input value={form.hospitalSupervision} readOnly /></div>
+      <div><Label>المدير الإداري</Label><Input value={form.administrativeManager} readOnly /></div>
       <div><Label>درجة الخطورة</Label><Select value={form.severity} onValueChange={v=>set("severity",v)}><SelectTrigger><SelectValue /></SelectTrigger><SelectContent>{[["no_harm","دون ضرر"],["low","ضرر بسيط"],["moderate","ضرر متوسط"],["severe","ضرر شديد"],["critical","حدث جسيم"]].map(([v,l])=><SelectItem key={v} value={v}>{l}</SelectItem>)}</SelectContent></Select></div>
       <div className="md:col-span-2"><Label>وصف الواقعة *</Label><Textarea rows={5} value={form.description} onChange={e=>set("description",e.target.value)} placeholder="اكتب وصفًا محايدًا لما حدث دون اتهامات" /></div><div className="md:col-span-2"><Label>الإجراء الفوري</Label><Textarea rows={3} value={form.immediateAction} onChange={e=>set("immediateAction",e.target.value)} /></div>
       <div className="md:col-span-2"><Button onClick={save} disabled={saving} className="w-full"><Save className="ml-2 h-4 w-4" />{saving ? "جارٍ الإرسال..." : "إرسال OVR Incident Report"}</Button></div>

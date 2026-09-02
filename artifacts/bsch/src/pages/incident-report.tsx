@@ -21,6 +21,8 @@ interface IncidentCase {
   diagnosis: string;
   hospital: string;
   followup: string;
+  phone: string;
+  nationalId: string;
 }
 
 interface IncidentReport {
@@ -50,7 +52,7 @@ interface IncidentReport {
 }
 
 function emptyCase(id: number): IncidentCase {
-  return { id, name: "", age: "", address: "", diagnosis: "", hospital: "", followup: "" };
+  return { id, name: "", age: "", address: "", diagnosis: "", hospital: "", followup: "", phone: "", nationalId: "" };
 }
 
 interface ReportForm {
@@ -103,10 +105,12 @@ function emptyForm(): ReportForm {
   };
 }
 
-function ReportPrintView({ report }: { report: ReportForm }) {
+function ReportPrintView({ report, logo }: { report: ReportForm; logo?: string | null }) {
   const dateStr = report.reportDate;
   return (
-    <div className="bg-white text-black p-8 print:p-4 text-sm" dir="rtl" style={{ fontFamily: "Arial, sans-serif" }}>
+    <div className="relative bg-white text-black p-8 print:p-4 text-sm overflow-hidden" dir="rtl" style={{ fontFamily: "Arial, sans-serif" }}>
+      {logo && <div aria-hidden="true" style={{ position: "absolute", inset: 0, backgroundImage: `url(${logo})`, backgroundRepeat: "no-repeat", backgroundPosition: "center", backgroundSize: "58%", opacity: 0.075, pointerEvents: "none" }} />}
+      <div className="relative z-10">
       {/* Header */}
       <div className="text-center mb-6 border-b-2 border-black pb-4">
         <h2 className="text-xl font-bold">تقرير الحادث</h2>
@@ -175,6 +179,7 @@ function ReportPrintView({ report }: { report: ReportForm }) {
           <p className="font-bold">وكيل الوزارة</p>
           <p>أ.د / إسلام عساف</p>
         </div>
+      </div>
       </div>
     </div>
   );
@@ -284,7 +289,7 @@ export default function IncidentReportPage() {
       actionOwner: r.actionOwner ?? "",
       dueDate: r.dueDate ? r.dueDate.slice(0, 10) : "",
       verificationNotes: r.verificationNotes ?? "",
-      cases: r.cases.length > 0 ? r.cases : [emptyCase(1), emptyCase(2), emptyCase(3)],
+      cases: r.cases.length > 0 ? r.cases.map((c: any) => ({ ...emptyCase(c.id), ...c, phone: c.phone ?? "", nationalId: c.nationalId ?? "" })) : [emptyCase(1), emptyCase(2), emptyCase(3)],
     });
     setIsEditing(false);
     setShowPrint(true);
@@ -436,12 +441,8 @@ export default function IncidentReportPage() {
               </div>
             </div>
 
-            <div className="grid md:grid-cols-2 gap-4 border rounded-lg p-4 bg-muted/20">
-              <div className="space-y-1.5"><Label>درجة الخطورة</Label><select className="h-9 rounded-md border bg-background px-3 text-sm" value={currentReport.severity} onChange={e => f("severity", e.target.value)}><option value="near_miss">كاد أن يحدث</option><option value="no_harm">بدون ضرر</option><option value="low">ضرر بسيط</option><option value="moderate">ضرر متوسط</option><option value="severe">ضرر شديد</option><option value="sentinel">حدث جسيم</option></select></div>
-              <div className="space-y-1.5"><Label>حالة البلاغ</Label><select className="h-9 rounded-md border bg-background px-3 text-sm" value={currentReport.status} onChange={e => f("status", e.target.value)}><option value="new">جديد</option><option value="under_review">تحت المراجعة</option><option value="investigating">تحت التحقيق</option><option value="corrective_action">إجراء تصحيحي</option><option value="verification">بانتظار التحقق</option><option value="closed">مغلق</option></select></div>
-              {(["eventDescription", "immediateAction", "investigationSummary", "rootCause", "correctiveAction", "preventiveAction", "verificationNotes"] as const).map(key => <div key={key} className="space-y-1.5 md:col-span-2"><Label>{{eventDescription:"وصف الواقعة", immediateAction:"الإجراء الفوري", investigationSummary:"ملخص التحقيق", rootCause:"السبب الجذري", correctiveAction:"الإجراء التصحيحي CAPA", preventiveAction:"الإجراء الوقائي CAPA", verificationNotes:"ملاحظات التحقق"}[key]}</Label><Textarea value={currentReport[key]} onChange={e => f(key, e.target.value)} rows={2} /></div>)}
-              <div className="space-y-1.5"><Label>مسؤول الإجراء</Label><Input value={currentReport.actionOwner} onChange={e => f("actionOwner", e.target.value)} /></div>
-              <div className="space-y-1.5"><Label>تاريخ الاستحقاق</Label><Input type="date" value={currentReport.dueDate} onChange={e => f("dueDate", e.target.value)} /></div>
+            <div className="border rounded-lg p-4 bg-muted/20">
+              <div className="space-y-1.5"><Label>وصف الواقعة</Label><Textarea value={currentReport.eventDescription} onChange={e => f("eventDescription", e.target.value)} rows={3} /></div>
             </div>
 
             <div>
@@ -455,7 +456,7 @@ export default function IncidentReportPage() {
                 <table className="w-full border-collapse text-sm">
                   <thead>
                     <tr className="bg-muted/40">
-                      {["م", "الاسم", "السن", "العنوان", "التشخيص", "مستشفى الإخلاء", "المتابعة", ""].map(h => (
+                      {["م", "الاسم", "السن", "العنوان", "التشخيص", "مستشفى الإخلاء", "المتابعة", "الهاتف", "الرقم القومي", ""].map(h => (
                         <th key={h} className="border p-2 text-right font-medium">{h}</th>
                       ))}
                     </tr>
@@ -464,7 +465,7 @@ export default function IncidentReportPage() {
                     {currentReport.cases.map((c, i) => (
                       <tr key={c.id}>
                         <td className="border p-1.5 text-center text-muted-foreground">{i + 1}</td>
-                        {(["name", "age", "address", "diagnosis", "hospital", "followup"] as const).map(field => (
+                        {(["name", "age", "address", "diagnosis", "hospital", "followup", "phone", "nationalId"] as const).map(field => (
                           <td key={field} className="border p-1">
                             <Input value={c[field]} onChange={e => updateCase(c.id, field, e.target.value)}
                               className="h-7 text-xs border-0 focus-visible:ring-0 bg-transparent" />
@@ -485,7 +486,7 @@ export default function IncidentReportPage() {
         </Card>
       ) : (
         <div className="print:shadow-none shadow-md rounded-lg overflow-hidden">
-          <ReportPrintView report={currentReport} />
+          <ReportPrintView report={currentReport} logo={logo_base64} />
         </div>
       )}
     </ReportWatermark>

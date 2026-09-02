@@ -34,6 +34,7 @@ const RESP_OPTIONS = [
   { value: "cpap",           label: "سباب (CPAP)" },
   { value: "standby",        label: "استاندباي" },
   { value: "hfnc",           label: "HFNC" },
+  { value: "oxygen_mask",    label: "ماسك أكسجين" },
   { value: "box",            label: "بوكس / نيزل كانيولا" },
   { value: "no",             label: "هواء الغرفة" },
 ];
@@ -209,7 +210,8 @@ export default function RespirationList() {
     setLoading(true);
     try {
       const data = await apiGet<Case[]>("/api/cases/respiration");
-      setAllCases(data);
+      const trueVentilationModes = new Set(["high_frequency", "vent", "cpap", "standby"]);
+      setAllCases(data.filter(c => trueVentilationModes.has(c.artificialRespiration ?? "")));
     } catch { toast.error("فشل تحميل البيانات"); }
     finally { setLoading(false); }
   }, []);
