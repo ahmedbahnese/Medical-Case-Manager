@@ -326,16 +326,41 @@ function stopApiServer() {
 
 ipcMain.handle('select-update-package', async () => {
   const result = await dialog.showOpenDialog({
-    title: 'اختيار حزمة تحديث BSCH',
-    filters: [{ name: 'BSCH Setup', extensions: ['exe'] }],
+    title: 'اختيار ملف تحديث BSCH',
+    filters: [{ name: 'BSCH Update Patch', extensions: ['bat', 'cmd', 'exe'] }],
     properties: ['openFile'],
   });
   if (result.canceled || !result.filePaths[0]) return { canceled: true };
   const selected = result.filePaths[0];
-  if (!/^BSCH[-_].*\\.exe$/i.test(path.basename(selected))) {
-    return { canceled: true, error: 'اختر ملف تثبيت BSCH فقط' };
+  const base = path.basename(selected);
+  if (!/^BSCH[-_].*\\.(bat|cmd|exe)$/i.test(base)) {
+    return { canceled: true, error: 'اختر ملف تحديث BSCH بصيغة BAT أو Setup فقط' };
   }
-  return { canceled: false, path: selected, name: path.basename(selected) };
+  return { canceled: false, path: selected, name: base };
+});
+
+ipcMain.handle('run-update-package', async (_event, selected) => {
+  if (process.platform !== 'win32') return { ok: false, error: 'ملف التحديث يعمل على Windows فقط' };
+  if (typeof selected !== 'string' || !path.isAbsolute(selected) || !fs.existsSync(selected)) {
+    return { ok: false, error: 'ملف التحديث غير موجود' };
+  }
+  const base = path.basename(selected);
+  if (!/^BSCH[-_].*\\.(bat|cmd|exe)$/i.test(base)) {
+    return { ok: false, error: 'ملف تحديث BSCH غير صالح' };
+  }
+  try {
+    if (/\\.(bat|cmd)$/i.test(base)) {
+      spawn('cmd.exe', ['/c', 'start', 'BSCH Update', 'cmd.exe', '/c', selected], {
+        detached: true, windowsHide: false, stdio: 'ignore',
+      }).unref();
+    } else {
+      spawn(selected, [], { detached: true, windowsHide: false, stdio: 'ignore' }).unref();
+    }
+    setTimeout(() => app.quit(), 500);
+    return { ok: true };
+  } catch (error) {
+    return { ok: false, error: error?.message || 'تعذر تشغيل ملف التحديث' };
+  }
 });
 
 app.on('before-quit', (event) => {

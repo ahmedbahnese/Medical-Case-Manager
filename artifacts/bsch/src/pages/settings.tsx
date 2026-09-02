@@ -214,11 +214,20 @@ export default function SettingsPage() {
   }, [unlocked]);
 
   const handleSelectUpdatePackage = async () => {
-    const picker = (window as any).electronAPI?.selectUpdatePackage;
+    const api = (window as any).electronAPI;
+    const picker = api?.selectUpdatePackage;
     if (!picker) { toast.error("هذه الخاصية متاحة داخل نسخة سطح المكتب فقط"); return; }
     const result = await picker();
     if (result?.error) { toast.error(result.error); return; }
-    if (result?.path) toast.success(`تم اختيار حزمة التحديث: ${result.name}. أغلق البرنامج ثم شغّل ملف Setup يدويًا للحفاظ على أمان SQLite.`);
+    if (!result?.path) return;
+    const runner = api?.runUpdatePackage;
+    if (!runner) {
+      toast.error("نسخة البرنامج الحالية لا تدعم التحديث الجزئي؛ ثبّت آخر نسخة BSCH أولًا");
+      return;
+    }
+    toast.info("سيتم إغلاق البرنامج وتشغيل ملف تحديث Windows الآن...");
+    const runResult = await runner(result.path);
+    if (runResult?.error) toast.error(runResult.error);
   };
   const handleUnlock = () => {
     if (pwInput === SETTINGS_PASSWORD) {
@@ -431,7 +440,7 @@ export default function SettingsPage() {
       <Card className="border-primary/20">
         <CardHeader className="pb-3">
           <CardTitle className="text-base">تحديث النظام</CardTitle>
-          <CardDescription className="text-xs">للمؤسس فقط: اختر ملف Setup رسميًا من BSCH. لا يتم حذف قاعدة SQLite أثناء التحديث.</CardDescription>
+          <CardDescription className="text-xs">للمؤسس فقط: اختر ملف تحديث BSCH بصيغة BAT. يحدّث الملفات الجديدة فقط ويحافظ على قاعدة SQLite.</CardDescription>
         </CardHeader>
         <CardContent>
           <Button variant="outline" onClick={handleSelectUpdatePackage} className="gap-2">
