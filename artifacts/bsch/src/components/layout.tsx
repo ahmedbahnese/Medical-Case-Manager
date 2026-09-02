@@ -42,6 +42,8 @@ const NAV_GROUPS = [
     items: [
       { name: "بيان الإشغال", href: "/occupancy-report", icon: ClipboardList },
       { name: "التقرير اليومي", href: "/print-reports", icon: Printer },
+      { name: "إرسال بلاغ OVR", href: "/ovr-incident-report", icon: ShieldCheck },
+      { name: "إدارة بلاغات OVR", href: "/ovr-management", icon: ClipboardList },
       { name: "بيانات الحوادث", href: "/incident-report", icon: AlertTriangle },
       { name: "لوحة مسؤول الجودة", href: "/quality-dashboard", icon: ShieldCheck },
     ],

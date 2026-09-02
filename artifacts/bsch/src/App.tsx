@@ -18,6 +18,7 @@ import Backup from '@/pages/backup';
 import OccupancyReport from '@/pages/occupancy-report';
 import IncidentReport from '@/pages/incident-report';
 import OvrIncidentReport from '@/pages/ovr-incident-report';
+import OvrManagement from '@/pages/ovr-management';
 import Settings from '@/pages/settings';
 import DischargeHistory from '@/pages/discharge-history';
 import AuditLog from '@/pages/audit-log';
@@ -78,6 +79,7 @@ function Router() {
       <Route path="/print-reports"><ProtectedRoute component={PrintReports} /></Route>
       <Route path="/incident-report"><ProtectedRoute component={IncidentReport} /></Route>
       <Route path="/ovr-incident-report"><ProtectedRoute component={OvrIncidentReport} /></Route>
+      <Route path="/ovr-management"><ProtectedRoute component={OvrManagement} /></Route>
       <Route path="/quality-dashboard"><ProtectedRoute component={QualityDashboard} /></Route>
 
       {/* Search & History */}

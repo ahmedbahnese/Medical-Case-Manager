@@ -15,6 +15,7 @@ export const waitingRespirationValues = [
   "vent",
   "cpap",
   "hfnc",
+  "oxygen_mask",
   "standby",
   "box",
   "no",

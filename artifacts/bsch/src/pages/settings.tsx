@@ -115,6 +115,8 @@ const ALL_USER_PAGES = [
   { href: "/occupancy-report",      label: "بيان الإشغال" },
   { href: "/print-reports",         label: "التقرير اليومي" },
   { href: "/incident-report",       label: "بيانات الحوادث" },
+  { href: "/ovr-incident-report",    label: "إرسال بلاغ OVR" },
+  { href: "/ovr-management",         label: "إدارة بلاغات OVR" },
   { href: "/quality-dashboard",      label: "لوحة مسؤول الجودة" },
   { href: "/advanced-search",       label: "بحث متقدم" },
   { href: "/discharge-history",     label: "سجل الخروج" },
