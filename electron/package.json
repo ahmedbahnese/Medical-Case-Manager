@@ -84,6 +84,14 @@
         "to": "node_modules/whatwg-url"
       },
       {
+        "from": "../node_modules/.pnpm/webidl-conversions@3.0.1/node_modules/webidl-conversions",
+        "to": "node_modules/webidl-conversions"
+      },
+      {
+        "from": "../node_modules/.pnpm/tr46@0.0.3/node_modules/tr46",
+        "to": "node_modules/tr46"
+      },
+      {
         "from": "../node_modules/.pnpm/opencollective-postinstall@2.0.3/node_modules/opencollective-postinstall",
         "to": "node_modules/opencollective-postinstall"
       },
