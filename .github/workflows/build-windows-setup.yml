@@ -1,0 +1,60 @@
+name: Build Windows Setup
+
+on:
+  workflow_dispatch:
+    inputs:
+      upload_release:
+        description: Upload the installer to release v1.2.0
+        required: false
+        default: true
+        type: boolean
+
+jobs:
+  build-setup:
+    runs-on: windows-latest
+    permissions:
+      contents: write
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: electron/package-lock.json
+
+      - name: Setup pnpm
+        uses: pnpm/action-setup@v4
+        with:
+          version: 9
+
+      - name: Install workspace dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Build production API and frontend
+        run: pnpm run build:prod
+
+      - name: Install Electron dependencies
+        working-directory: electron
+        run: npm ci --ignore-scripts --no-audit --no-fund
+
+      - name: Build Windows installers
+        working-directory: electron
+        run: npm run build-installer
+
+      - name: Upload installer artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: BSCH-Setup-v1.2.0
+          path: electron/dist-electron/BSCH-Setup-*.exe
+          if-no-files-found: error
+
+      - name: Upload installer to GitHub release
+        if: ${{ inputs.upload_release == true }}
+        env:
+          GH_TOKEN: ${{ github.token }}
+        shell: bash
+        run: |
+          gh release upload v1.2.0 electron/dist-electron/BSCH-Setup-*.exe --clobber
