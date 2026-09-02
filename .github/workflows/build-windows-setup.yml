@@ -47,7 +47,9 @@ jobs:
 
       - name: Build Windows installers
         working-directory: electron
-        run: npm run build-installer
+        run: |
+          npx electron-builder --win nsis --x64 --publish never
+          npx electron-builder --win nsis --ia32 --publish never
 
       - name: Upload installer artifact
         uses: actions/upload-artifact@v4
