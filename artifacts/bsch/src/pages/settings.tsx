@@ -211,6 +211,13 @@ export default function SettingsPage() {
     loadDepartments();
   }, [unlocked]);
 
+  const handleSelectUpdatePackage = async () => {
+    const picker = (window as any).electronAPI?.selectUpdatePackage;
+    if (!picker) { toast.error("هذه الخاصية متاحة داخل نسخة سطح المكتب فقط"); return; }
+    const result = await picker();
+    if (result?.error) { toast.error(result.error); return; }
+    if (result?.path) toast.success(`تم اختيار حزمة التحديث: ${result.name}. أغلق البرنامج ثم شغّل ملف Setup يدويًا للحفاظ على أمان SQLite.`);
+  };
   const handleUnlock = () => {
     if (pwInput === SETTINGS_PASSWORD) {
       setUnlocked(true);
@@ -418,6 +425,18 @@ export default function SettingsPage() {
         </div>
       </div>
 
+      {/* Founder update package */}
+      <Card className="border-primary/20">
+        <CardHeader className="pb-3">
+          <CardTitle className="text-base">تحديث النظام</CardTitle>
+          <CardDescription className="text-xs">للمؤسس فقط: اختر ملف Setup رسميًا من BSCH. لا يتم حذف قاعدة SQLite أثناء التحديث.</CardDescription>
+        </CardHeader>
+        <CardContent>
+          <Button variant="outline" onClick={handleSelectUpdatePackage} className="gap-2">
+            <Upload className="h-4 w-4" /> رفع ملف تحديث BSCH
+          </Button>
+        </CardContent>
+      </Card>
       {/* Hospital Name */}
       <Card>
         <CardHeader className="pb-3">

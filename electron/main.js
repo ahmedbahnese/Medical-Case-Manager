@@ -312,6 +312,20 @@ function stopApiServer() {
   }
 }
 
+ipcMain.handle('select-update-package', async () => {
+  const result = await dialog.showOpenDialog({
+    title: 'اختيار حزمة تحديث BSCH',
+    filters: [{ name: 'BSCH Setup', extensions: ['exe'] }],
+    properties: ['openFile'],
+  });
+  if (result.canceled || !result.filePaths[0]) return { canceled: true };
+  const selected = result.filePaths[0];
+  if (!/^BSCH[-_].*\\.exe$/i.test(path.basename(selected))) {
+    return { canceled: true, error: 'اختر ملف تثبيت BSCH فقط' };
+  }
+  return { canceled: false, path: selected, name: path.basename(selected) };
+});
+
 app.on('before-quit', (event) => {
   if (isQuitting) return;
   isQuitting = true;

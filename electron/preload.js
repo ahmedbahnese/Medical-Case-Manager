@@ -6,4 +6,5 @@ contextBridge.exposeInMainWorld('electronAPI', {
   platform: process.platform,
   version: process.versions.electron,
   savePDF: (html, title) => ipcRenderer.invoke('save-pdf', { html, title }),
+  selectUpdatePackage: () => ipcRenderer.invoke('select-update-package'),
 });
