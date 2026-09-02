@@ -43,20 +43,16 @@ if exist ".env" (
 REM ── Defaults ─────────────────────────────────────────────────
 if "%PORT%"==""      set PORT=8080
 if "%NODE_ENV%"==""  set NODE_ENV=production
-if "%LOG_LEVEL%"=""  set LOG_LEVEL=info
+if "%LOG_LEVEL%"==""  set LOG_LEVEL=info
+if "%HOST%"==""       set HOST=0.0.0.0
 
 REM ── Tell the API server where the built frontend lives ───────
 set FRONTEND_DIR=artifacts\bsch\dist\public
 
-REM ── Check PostgreSQL ─────────────────────────────────────────
-pg_isready -h localhost -p 5432 >nul 2>&1
-if errorlevel 1 (
-    echo [WARNING] PostgreSQL does not appear to be running on port 5432.
-    echo           Make sure PostgreSQL is started before using the application.
-    echo.
-)
+REM ── BSCH uses a local SQLite database; no PostgreSQL service is required.
 
 REM ── Show local IP addresses ───────────────────────────────────
+echo  Server host: %HOST%
 echo  Server port: %PORT%
 echo.
 echo  Local IP addresses (share one of these with hospital staff):
