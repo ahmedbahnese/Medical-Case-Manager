@@ -258,6 +258,7 @@ export default function RespirationList() {
             <p className="text-muted-foreground text-sm">{cases.length} حالة — {dateStr}</p>
           </div>
         </div>
+        {logo_base64 && <img src={logo_base64} alt="شعار المستشفى" className="h-10 w-28 object-contain shrink-0 mr-auto" />}
         <div className="flex gap-2 flex-wrap no-print">
           <Button variant="outline" size="sm" className="gap-1" onClick={() => exportExcel(cases, depts)}>
             <FileSpreadsheet className="h-4 w-4" /> Excel
