@@ -18,6 +18,7 @@ const API_URL  = `http://localhost:${API_PORT}`;
 let mainWindow = null;
 let tray       = null;
 let apiProcess = null;
+let apiStartError = null;
 let isQuitting = false;
 
 ipcMain.handle('save-pdf', async (event, payload) => {
@@ -120,10 +121,21 @@ function startApiServer() {
   });
 
   apiProcess.stdout.on('data', (d) => console.log('[API]', d.toString().trim()));
-  apiProcess.stderr.on('data', (d) => console.error('[API ERR]', d.toString().trim()));
-
+  apiProcess.stderr.on('data', (d) => {
+    const text = d.toString().trim();
+    if (text) apiStartError = text.slice(-4000);
+    console.error('[API ERR]', text);
+  });
+  apiProcess.on('error', (err) => {
+    apiStartError = err && err.message ? err.message : String(err);
+    console.error('[API SPAWN ERR]', apiStartError);
+  });
   apiProcess.on('exit', (code, signal) => {
-    console.log(`API server exited — code=${code} signal=${signal}`);
+    const detail = apiStartError ? ` — ${apiStartError}` : '';
+    console.log(`API server exited — code=${code} signal=${signal}${detail}`);
+    if (!isQuitting && code !== 0 && !apiStartError) {
+      apiStartError = `API process exited with code ${code || 'unknown'}${signal ? ` (${signal})` : ''}`;
+    }
   });
 }
 
@@ -137,10 +149,10 @@ function waitForApi(retries = 60, delayMs = 500) {
         // /api/health is protected and may correctly return 401 before login.
         if (res.statusCode && res.statusCode < 500) resolve();
         else if (n > 0) setTimeout(() => check(n - 1), delayMs);
-        else reject(new Error('API server did not start in time'));
+        else reject(new Error(apiStartError || 'API server did not start in time'));
       }).on('error', () => {
         if (n > 0) setTimeout(() => check(n - 1), delayMs);
-        else reject(new Error('API server did not start in time'));
+        else reject(new Error(apiStartError || 'API server did not start in time'));
       });
     };
     check(retries);
