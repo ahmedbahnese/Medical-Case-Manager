@@ -48,6 +48,58 @@
         "to": "node_modules"
       },
       {
+        "from": "../node_modules/.pnpm/tesseract.js@5.1.1/node_modules/tesseract.js",
+        "to": "node_modules/tesseract.js"
+      },
+      {
+        "from": "../node_modules/.pnpm/tesseract.js-core@5.1.1/node_modules/tesseract.js-core",
+        "to": "node_modules/tesseract.js-core"
+      },
+      {
+        "from": "../node_modules/.pnpm/@tesseract.js-data+ara@1.0.0/node_modules/@tesseract.js-data/ara",
+        "to": "node_modules/@tesseract.js-data/ara"
+      },
+      {
+        "from": "../node_modules/.pnpm/bmp-js@0.1.0/node_modules/bmp-js",
+        "to": "node_modules/bmp-js"
+      },
+      {
+        "from": "../node_modules/.pnpm/idb-keyval@6.3.0/node_modules/idb-keyval",
+        "to": "node_modules/idb-keyval"
+      },
+      {
+        "from": "../node_modules/.pnpm/is-electron@2.2.2/node_modules/is-electron",
+        "to": "node_modules/is-electron"
+      },
+      {
+        "from": "../node_modules/.pnpm/is-url@1.2.4/node_modules/is-url",
+        "to": "node_modules/is-url"
+      },
+      {
+        "from": "../node_modules/.pnpm/node-fetch@2.7.0/node_modules/node-fetch",
+        "to": "node_modules/node-fetch"
+      },
+      {
+        "from": "../node_modules/.pnpm/whatwg-url@5.0.0/node_modules/whatwg-url",
+        "to": "node_modules/whatwg-url"
+      },
+      {
+        "from": "../node_modules/.pnpm/opencollective-postinstall@2.0.3/node_modules/opencollective-postinstall",
+        "to": "node_modules/opencollective-postinstall"
+      },
+      {
+        "from": "../node_modules/.pnpm/regenerator-runtime@0.13.11/node_modules/regenerator-runtime",
+        "to": "node_modules/regenerator-runtime"
+      },
+      {
+        "from": "../node_modules/.pnpm/wasm-feature-detect@1.9.0/node_modules/wasm-feature-detect",
+        "to": "node_modules/wasm-feature-detect"
+      },
+      {
+        "from": "../node_modules/.pnpm/zlibjs@0.3.1/node_modules/zlibjs",
+        "to": "node_modules/zlibjs"
+      },
+      {
         "from": "../artifacts/bsch/dist/public",
         "to": "public"
       }
