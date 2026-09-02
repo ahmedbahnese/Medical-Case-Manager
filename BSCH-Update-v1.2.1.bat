@@ -1,5 +1,5 @@
 @echo off
-setlocal EnableExtensions
+setlocal EnableExtensions EnableDelayedExpansion
  title BSCH Partial Update v1.2.1
 
 if /I not "%OS%"=="Windows_NT" (
@@ -17,9 +17,9 @@ if errorlevel 1 (
 )
 
 set "APP_ROOT=%ProgramFiles(x86)%\BSCH"
-if not exist "%APP_ROOT%\resources" set "APP_ROOT=%ProgramFiles%\BSCH"
-if not exist "%APP_ROOT%\resources" set "APP_ROOT=C:\Program Files (x86)\BSCH"
-if not exist "%APP_ROOT%\resources" (
+if not exist "!APP_ROOT!\resources" set "APP_ROOT=%ProgramFiles%\BSCH"
+if not exist "!APP_ROOT!\resources" set "APP_ROOT=C:\Program Files (x86)\BSCH"
+if not exist "!APP_ROOT!\resources" (
   echo [ERROR] BSCH installation was not found.
   echo Expected: C:\Program Files (x86)\BSCH
   pause
@@ -49,7 +49,7 @@ set /a WAIT_COUNT=0
 :wait_extract
 if exist "%WORK%\files\app.asar" goto extracted
 set /a WAIT_COUNT+=1
-if %WAIT_COUNT% GEQ 30 (
+if !WAIT_COUNT! GEQ 30 (
   echo [ERROR] Could not extract the update package.
   pause
   exit /b 1
@@ -81,18 +81,18 @@ echo Stopping BSCH before replacing application files...
 taskkill /IM BSCH.exe /T /F >nul 2>&1
 timeout /t 2 /nobreak >nul
 
-if not exist "%APP_ROOT%\resources\api-server\dist" mkdir "%APP_ROOT%\resources\api-server\dist"
-if not exist "%APP_ROOT%\resources\public" mkdir "%APP_ROOT%\resources\public"
+if not exist "!APP_ROOT!\resources\api-server\dist" mkdir "!APP_ROOT!\resources\api-server\dist"
+if not exist "!APP_ROOT!\resources\public" mkdir "!APP_ROOT!\resources\public"
 
-copy /Y "%APP_ASAR%" "%APP_ROOT%\resources\app.asar" >nul
+copy /Y "%APP_ASAR%" "!APP_ROOT!\resources\app.asar" >nul
 if errorlevel 1 goto failed
-xcopy "%API_SRC%\*" "%APP_ROOT%\resources\api-server\dist\" /E /I /Y >nul
+xcopy "%API_SRC%\*" "!APP_ROOT!\resources\api-server\dist\" /E /I /Y >nul
 if errorlevel 1 goto failed
-xcopy "%WEB_SRC%\*" "%APP_ROOT%\resources\public\" /E /I /Y >nul
+xcopy "%WEB_SRC%\*" "!APP_ROOT!\resources\public\" /E /I /Y >nul
 if errorlevel 1 goto failed
 
->"%APP_ROOT%\resources\BSCH-update-version.txt" echo v1.2.1
->"%APP_ROOT%\resources\BSCH-update-date.txt" echo %DATE% %TIME%
+>"!APP_ROOT!\resources\BSCH-update-version.txt" echo v1.2.1
+>"!APP_ROOT!\resources\BSCH-update-date.txt" echo %DATE% %TIME%
 
 echo.
 echo [OK] BSCH partial update v1.2.1 completed.
