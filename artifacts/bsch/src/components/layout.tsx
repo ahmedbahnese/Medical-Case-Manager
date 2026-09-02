@@ -241,7 +241,7 @@ export function Layout({ children }: { children: ReactNode }) {
       <main className="flex-1 overflow-x-hidden p-4 md:p-8 bg-background relative w-full">
         <div className="mb-4 flex justify-end no-print">
           <Link
-            href="/incident-report?mode=new"
+            href="/ovr-incident-report"
             className="inline-flex items-center gap-2 rounded-md bg-destructive px-4 py-2 text-sm font-semibold text-destructive-foreground shadow-sm transition-colors hover:bg-destructive/90"
             title="إرسال بلاغ OVR"
           >
