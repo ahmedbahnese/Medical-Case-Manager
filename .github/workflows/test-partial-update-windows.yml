@@ -1,0 +1,41 @@
+name: Test Windows Partial Update
+
+on:
+  workflow_dispatch:
+
+jobs:
+  test-patch:
+    runs-on: windows-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Prepare simulated installed BSCH
+        shell: pwsh
+        run: |
+          $root = 'C:\Program Files (x86)\BSCH\resources'
+          New-Item -ItemType Directory -Force -Path "$root\api-server\dist", "$root\public" | Out-Null
+          Set-Content -Path "$root\app.asar" -Value 'old-app-marker' -Encoding ascii
+          Set-Content -Path "$root\api-server\dist\index.mjs" -Value 'old-api-marker' -Encoding ascii
+          Set-Content -Path "$root\public\index.html" -Value 'old-web-marker' -Encoding ascii
+          Set-Content -Path "$env:TEMP\bsch.sqlite" -Value 'sqlite-marker' -Encoding ascii
+          Copy-Item BSCH-Update-v1.2.1.bat "$env:TEMP\BSCH-Update-v1.2.1.bat"
+
+      - name: Run Windows patch
+        shell: cmd
+        run: call "%TEMP%\BSCH-Update-v1.2.1.bat"
+
+      - name: Verify patch and SQLite preservation
+        shell: pwsh
+        run: |
+          $root = 'C:\Program Files (x86)\BSCH\resources'
+          if (-not (Test-Path "$root\app.asar")) { throw 'app.asar was not copied' }
+          if (-not (Test-Path "$root\api-server\dist\index.mjs")) { throw 'API was not copied' }
+          if (-not (Test-Path "$root\public\index.html")) { throw 'frontend was not copied' }
+          $version = Get-Content "$root\BSCH-update-version.txt"
+          if ($version.Trim() -ne 'v1.2.1') { throw "Unexpected version: $version" }
+          if ((Get-Content "$root\app.asar") -contains 'old-app-marker') { throw 'old app.asar remained' }
+          if ((Get-Content "$root\api-server\dist\index.mjs") -contains 'old-api-marker') { throw 'old API remained' }
+          if ((Get-Content "$root\public\index.html") -contains 'old-web-marker') { throw 'old frontend remained' }
+          if ((Get-Content "$env:TEMP\bsch.sqlite") -ne 'sqlite-marker') { throw 'SQLite marker changed' }
+          Write-Host 'Windows partial update test passed; SQLite was preserved.'
