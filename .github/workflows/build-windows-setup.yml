@@ -34,7 +34,12 @@ jobs:
         run: pnpm install --no-frozen-lockfile --ignore-scripts
 
       - name: Build production API and frontend
-        run: pnpm run build:prod
+        env:
+          BASE_PATH: /
+          NODE_ENV: production
+        run: |
+          pnpm run build:api
+          pnpm run build:frontend
 
       - name: Install Electron dependencies
         working-directory: electron
