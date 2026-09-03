@@ -115,8 +115,6 @@ const ALL_USER_PAGES = [
   { href: "/occupancy-report",      label: "بيان الإشغال" },
   { href: "/print-reports",         label: "التقرير اليومي" },
   { href: "/incident-report",       label: "بيانات الحوادث" },
-  { href: "/ovr-incident-report",    label: "إرسال بلاغ OVR" },
-  { href: "/ovr-management",         label: "إدارة بلاغات OVR" },
   { href: "/quality-dashboard",      label: "لوحة مسؤول الجودة" },
   { href: "/advanced-search",       label: "بحث متقدم" },
   { href: "/discharge-history",     label: "سجل الخروج" },
@@ -215,19 +213,14 @@ export default function SettingsPage() {
 
   const handleSelectUpdatePackage = async () => {
     const api = (window as any).electronAPI;
-    const picker = api?.selectUpdatePackage;
-    if (!picker) { toast.error("هذه الخاصية متاحة داخل نسخة سطح المكتب فقط"); return; }
-    const result = await picker();
-    if (result?.error) { toast.error(result.error); return; }
+    if (!api?.selectUpdatePackage) { toast.error("هذه الخاصية متاحة داخل نسخة سطح المكتب فقط"); return; }
+    const result = await api.selectUpdatePackage();
+    if (result?.error || result?.canceled) { if (result?.error) toast.error(result.error); return; }
     if (!result?.path) return;
-    const runner = api?.runUpdatePackage;
-    if (!runner) {
-      toast.error("نسخة البرنامج الحالية لا تدعم التحديث الجزئي؛ ثبّت آخر نسخة BSCH أولًا");
-      return;
-    }
-    toast.info("سيتم إغلاق البرنامج وتشغيل ملف تحديث Windows الآن...");
-    const runResult = await runner(result.path);
-    if (runResult?.error) toast.error(runResult.error);
+    if (!window.confirm(`تم اختيار ${result.name}. سيتم تشغيل المثبت وإغلاق البرنامج. هل تريد المتابعة؟`)) return;
+    const launched = await api.launchUpdatePackage(result.path);
+    if (launched?.error) toast.error(launched.error);
+    else toast.success("تم قبول ملف التحديث وتشغيل المثبت؛ سيتم إغلاق BSCH الآن");
   };
   const handleUnlock = () => {
     if (pwInput === SETTINGS_PASSWORD) {
@@ -440,11 +433,11 @@ export default function SettingsPage() {
       <Card className="border-primary/20">
         <CardHeader className="pb-3">
           <CardTitle className="text-base">تحديث النظام</CardTitle>
-          <CardDescription className="text-xs">للمؤسس فقط: اختر ملف تحديث BSCH بصيغة BAT. يحدّث الملفات الجديدة فقط ويحافظ على قاعدة SQLite.</CardDescription>
+          <CardDescription className="text-xs">للمؤسس فقط: اختر ملف Setup رسميًا من BSCH ثم وافق على تشغيله. لا يتم حذف قاعدة SQLite أثناء التحديث.</CardDescription>
         </CardHeader>
         <CardContent>
           <Button variant="outline" onClick={handleSelectUpdatePackage} className="gap-2">
-            <Upload className="h-4 w-4" /> رفع ملف تحديث BSCH
+            <Upload className="h-4 w-4" /> اختيار وقبول ملف تحديث BSCH
           </Button>
         </CardContent>
       </Card>

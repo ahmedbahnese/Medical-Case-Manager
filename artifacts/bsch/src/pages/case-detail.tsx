@@ -29,6 +29,7 @@ const RESP_OPTIONS = [
   { value: "high_frequency", label: "تردد عالي (HFO)" },
   { value: "vent",           label: "فنت (VENT)" },
   { value: "cpap",           label: "سباب (CPAP)" },
+  { value: "oxygen_mask",    label: "ماسك أكسجين" },
   { value: "standby",        label: "استاندباي" },
   { value: "hfnc",           label: "HFNC" },
   { value: "box",            label: "بوكس / نيزل كانيولا" },
@@ -41,6 +42,7 @@ const DISCHARGE_OPTIONS = [
   { value: "transferred",        label: "تحويل لمستشفى أخرى" },
   { value: "internal_transfer",  label: "تحويل داخلي" },
   { value: "death",              label: "وفاة" },
+  { value: "unauthorized",       label: "خروج بدون إذن" },
 ];
 
 /* ─── CaseField: MUST be defined OUTSIDE the parent component ────────

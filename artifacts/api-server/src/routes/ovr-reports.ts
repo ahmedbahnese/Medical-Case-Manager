@@ -29,10 +29,10 @@ router.patch("/ovr-reports/:id", async (req, res) => {
   if (!canReview(access)) { res.status(403).json({ error: "التحقيق في OVR متاح للمؤسس ومسؤول الجودة فقط" }); return; }
   const id = Number(req.params.id);
   const b = req.body as any;
-  if (b.status === "closed" && !String(b.closedBy ?? "").trim()) { res.status(400).json({ error: "اسم مسؤول الإغلاق مطلوب عند غلق البلاغ" }); return; }
-  const updates: any = { updatedAt: new Date(), reviewedBy: access.name, reviewedAt: new Date() };
-  for (const k of ["status","severity","investigationSummary","rootCause","correctiveAction","preventiveAction","actionOwner","verificationNotes","dueDate","investigatorName","investigationDate","closedBy","closedAt"]) if (b[k] !== undefined) updates[k] = ["dueDate","investigationDate","closedAt"].includes(k) && b[k] ? new Date(b[k]) : (b[k] || null);
-  if (b.status !== "closed") { updates.closedBy = null; updates.closedAt = null; }
+  const now = new Date();
+  const updates: any = { updatedAt: now, reviewedBy: access.name, reviewedAt: now };
+  if (b.status === "closed") { updates.closedBy = access.name; updates.closedAt = now; }
+  for (const k of ["status","severity","investigationSummary","rootCause","correctiveAction","preventiveAction","actionOwner","verificationNotes","dueDate"]) if (b[k] !== undefined) updates[k] = k === "dueDate" && b[k] ? new Date(b[k]) : b[k];
   await db.update(ovrReportsTable).set(updates).where(eq(ovrReportsTable.id, id));
   const [updated] = await db.select().from(ovrReportsTable).where(eq(ovrReportsTable.id, id));
   if (!updated) { res.status(404).json({ error: "البلاغ غير موجود" }); return; }

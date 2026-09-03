@@ -39,6 +39,7 @@ export const LABELS = {
     transferred: "تحويل لمستشفى أخرى",
     death: "وفاة",
     internal_transfer: "تحويل داخلي",
+    unauthorized: "خروج بدون إذن",
   },
   CARE_TYPES: {
     intensive_care_high: "العناية المركزة الكبرى",

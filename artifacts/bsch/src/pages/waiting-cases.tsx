@@ -38,6 +38,7 @@ const EXIT_REASONS = [
   { value: "request", label: "خروج حسب الطلب" },
   { value: "transferred", label: "تحويل لمستشفى أخرى" },
   { value: "death", label: "وفاة" },
+  { value: "unauthorized", label: "خروج بدون إذن" },
 ];
 
 // Reception care type filter options

@@ -35,6 +35,7 @@ export const dischargeReasonValues = [
   "transferred",
   "death",
   "internal_transfer",
+  "unauthorized",
 ] as const;
 
 export const medicalCasesTable = sqliteTable("medical_cases", {

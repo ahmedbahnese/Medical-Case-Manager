@@ -326,41 +326,26 @@ function stopApiServer() {
 
 ipcMain.handle('select-update-package', async () => {
   const result = await dialog.showOpenDialog({
-    title: 'اختيار ملف تحديث BSCH',
-    filters: [{ name: 'BSCH Update Patch', extensions: ['bat', 'cmd', 'exe'] }],
+    title: 'اختيار حزمة تحديث BSCH',
+    filters: [{ name: 'BSCH Setup', extensions: ['exe'] }],
     properties: ['openFile'],
   });
   if (result.canceled || !result.filePaths[0]) return { canceled: true };
   const selected = result.filePaths[0];
-  const base = path.basename(selected);
-  if (!/^BSCH[-_].*\\.(bat|cmd|exe)$/i.test(base)) {
-    return { canceled: true, error: 'اختر ملف تحديث BSCH بصيغة BAT أو Setup فقط' };
+  if (!/^BSCH[-_].*\.exe$/i.test(path.basename(selected))) {
+    return { canceled: true, error: 'اختر ملف تثبيت BSCH فقط' };
   }
-  return { canceled: false, path: selected, name: base };
+  return { canceled: false, path: selected, name: path.basename(selected) };
 });
 
-ipcMain.handle('run-update-package', async (_event, selected) => {
-  if (process.platform !== 'win32') return { ok: false, error: 'ملف التحديث يعمل على Windows فقط' };
-  if (typeof selected !== 'string' || !path.isAbsolute(selected) || !fs.existsSync(selected)) {
-    return { ok: false, error: 'ملف التحديث غير موجود' };
+ipcMain.handle('launch-update-package', async (_event, selectedPath) => {
+  if (typeof selectedPath !== 'string' || !/^BSCH[-_].*\.exe$/i.test(path.basename(selectedPath))) {
+    return { ok: false, error: 'ملف التحديث غير صالح' };
   }
-  const base = path.basename(selected);
-  if (!/^BSCH[-_].*\\.(bat|cmd|exe)$/i.test(base)) {
-    return { ok: false, error: 'ملف تحديث BSCH غير صالح' };
-  }
-  try {
-    if (/\\.(bat|cmd)$/i.test(base)) {
-      spawn('cmd.exe', ['/c', 'start', 'BSCH Update', 'cmd.exe', '/c', selected], {
-        detached: true, windowsHide: false, stdio: 'ignore',
-      }).unref();
-    } else {
-      spawn(selected, [], { detached: true, windowsHide: false, stdio: 'ignore' }).unref();
-    }
-    setTimeout(() => app.quit(), 500);
-    return { ok: true };
-  } catch (error) {
-    return { ok: false, error: error?.message || 'تعذر تشغيل ملف التحديث' };
-  }
+  const error = await shell.openPath(selectedPath);
+  if (error) return { ok: false, error };
+  setTimeout(() => app.quit(), 500);
+  return { ok: true };
 });
 
 app.on('before-quit', (event) => {

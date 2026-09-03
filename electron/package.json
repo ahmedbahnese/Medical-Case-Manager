@@ -1,6 +1,6 @@
 {
   "name": "bsch-desktop",
-  "version": "1.2.1",
+  "version": "1.2.0",
   "description": "BSCH Hospital Case Management System - Desktop App",
   "main": "main.js",
   "scripts": {
@@ -9,9 +9,7 @@
     "build-installer": "electron-builder --win nsis --publish never",
     "build-portable": "electron-builder --win portable --publish never"
   },
-  "dependencies": {
-    "better-sqlite3": "9.6.0"
-  },
+  "dependencies": {},
   "devDependencies": {
     "electron": "22.3.27",
     "electron-builder": "^25.0.0"
@@ -34,7 +32,7 @@
         "to": "api-server/dist"
       },
       {
-        "from": "node_modules/better-sqlite3",
+        "from": "../lib/db/node_modules/better-sqlite3",
         "to": "node_modules/better-sqlite3"
       },
       {
