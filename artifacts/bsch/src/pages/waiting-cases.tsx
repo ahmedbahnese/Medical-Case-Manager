@@ -2,6 +2,7 @@ import { useState } from "react";
 import {
   useGetWaitingCases, useUpdateWaitingCase, useDeleteWaitingCase,
   useCreateWaitingCase, useGetDepartments, useCreateCase,
+  useGetMe,
   WaitingCaseUpdateStatus
 } from "@workspace/api-client-react";
 import { useQueryClient } from "@tanstack/react-query";
@@ -198,7 +199,10 @@ function AddForm({ section, onSuccess }: { section: Section; onSuccess: () => vo
                 });
                 setReportFile({ name: file.name, data });
               }} />
-              {reportFile && <p className="text-xs text-muted-foreground">{reportFile.name}</p>}
+              {reportFile && <div className="space-y-2 rounded-md border bg-muted/20 p-2">
+                <div className="flex items-center justify-between gap-2"><p className="text-xs text-muted-foreground truncate">{reportFile.name}</p><Button type="button" size="sm" variant="ghost" className="text-destructive" onClick={() => setReportFile(null)}>حذف المرفق</Button></div>
+                {reportFile.data.startsWith("data:image/") ? <img src={reportFile.data} alt="ورقة الطوارئ" className="max-h-56 w-full object-contain rounded border bg-white" /> : <iframe title="معاينة ورقة الطوارئ" src={reportFile.data} className="h-56 w-full rounded border bg-white" />}
+              </div>}
             </div>
             <div className="col-span-2 md:col-span-3 flex items-center gap-3 flex-wrap">
               <div className="flex items-center gap-2">
@@ -250,6 +254,7 @@ function WaitingCaseActionDialog({
   const [action, setAction] = useState<"none" | "admit" | "exit">("none");
   const [deptId, setDeptId] = useState("");
   const [exitReason, setExitReason] = useState("improved");
+  const [transferHospital, setTransferHospital] = useState("");
   const [medicalReport, setMedicalReport] = useState("");
   const [reportFile, setReportFile] = useState<{ name: string; data: string } | null>(
     waitingCase.medicalReportData ? { name: waitingCase.medicalReportName ?? "تقرير محفوظ", data: waitingCase.medicalReportData } : null
@@ -288,9 +293,10 @@ function WaitingCaseActionDialog({
         onError: (e: any) => toast.error("خطأ في الإضافة: " + (e?.response?.data?.error ?? e.message))
       });
     } else if (action === "exit") {
+      if (exitReason === "transferred" && !transferHospital.trim()) { toast.error("اكتب اسم المستشفى المحول إليها"); return; }
       update.mutate({
         id: waitingCase.id,
-        data: { status: "cancelled" as WaitingCaseUpdateStatus, exitReason, ...form, medicalReport, medicalReportName: reportFile?.name, medicalReportData: reportFile?.data } as any
+        data: { status: "cancelled" as WaitingCaseUpdateStatus, exitReason, transferDestination: transferHospital, ...form, medicalReport, medicalReportName: reportFile?.name, medicalReportData: reportFile?.data } as any
       }, {
         onSuccess: () => { toast.success(`تم تسجيل الخروج — ${EXIT_REASONS.find(r => r.value === exitReason)?.label}`); onSuccess(); onClose(); },
         onError: (e: any) => toast.error("خطأ: " + e.message)
@@ -449,6 +455,7 @@ function WaitingCaseActionDialog({
                     </SelectContent>
                   </Select>
                 </div>
+                {exitReason === "transferred" && <div className="space-y-1"><Label>المستشفى المحول إليها *</Label><Input value={transferHospital} onChange={e => setTransferHospital(e.target.value)} placeholder="اكتب اسم المستشفى" /></div>}
                 <div className="space-y-1">
                   <Label className="flex items-center gap-1 text-xs"><BookOpen className="h-3 w-3" /> تقرير طبي (اختياري)</Label>
                   <Textarea
@@ -475,7 +482,10 @@ function WaitingCaseActionDialog({
                 });
                 setReportFile({ name: file.name, data });
               }} />
-              {reportFile && <p className="text-xs text-muted-foreground">{reportFile.name}</p>}
+              {reportFile && <div className="space-y-2 rounded-md border bg-muted/20 p-2">
+                <div className="flex items-center justify-between gap-2"><p className="text-xs text-muted-foreground truncate">{reportFile.name}</p><Button type="button" size="sm" variant="ghost" className="text-destructive" onClick={() => setReportFile(null)}>حذف المرفق</Button></div>
+                {reportFile.data.startsWith("data:image/") ? <img src={reportFile.data} alt="ورقة الطوارئ" className="max-h-56 w-full object-contain rounded border bg-white" /> : <iframe title="معاينة ورقة الطوارئ" src={reportFile.data} className="h-56 w-full rounded border bg-white" />}
+              </div>}
             </div>
           </div>
         </div>
@@ -497,10 +507,10 @@ function WaitingCaseActionDialog({
 }
 
 /* ─────────────────────────── Cases Table ─────────────────────────── */
-function CasesTable({ cases, printCases, onAction, onDelete, isLoading, selectedIds, onToggle, onToggleAll }: {
+function CasesTable({ cases, printCases, onAction, onDelete, isLoading, selectedIds, onToggle, onToggleAll, isFounder }: {
   cases: any[]; printCases: any[];
   onAction: (c: any) => void; onDelete: (c: any) => void;
-  isLoading: boolean; selectedIds: Set<number>; onToggle: (id: number) => void; onToggleAll: (all: boolean) => void;
+  isLoading: boolean; selectedIds: Set<number>; onToggle: (id: number) => void; onToggleAll: (all: boolean) => void; isFounder: boolean;
 }) {
   if (isLoading) return (
     <div className="space-y-2">{[1,2,3].map(i => <Skeleton key={i} className="h-14 w-full rounded-lg" />)}</div>
@@ -600,7 +610,7 @@ function CasesTable({ cases, printCases, onAction, onDelete, isLoading, selected
                       onClick={() => onAction(c)}>
                       <Edit2 className="h-3 w-3" /> تعديل / إجراء
                     </Button>
-                    <ConfirmDialog
+                    {isFounder && <ConfirmDialog
                       trigger={
                         <Button size="sm" variant="ghost" className="h-7 w-7 p-0 text-destructive hover:bg-destructive/10">
                           <Trash2 className="h-3.5 w-3.5" />
@@ -610,7 +620,7 @@ function CasesTable({ cases, printCases, onAction, onDelete, isLoading, selected
                       description={`هل أنت متأكد من حذف "${c.patientName}"؟`}
                       confirmLabel="حذف"
                       onConfirm={() => onDelete(c)}
-                    />
+                    />}
                   </div>
                 </TableCell>
               </TableRow>
@@ -630,6 +640,8 @@ export default function WaitingCases() {
   const [receptionFilter, setReceptionFilter] = useState("all");
   const queryClient = useQueryClient();
   const { hospital_name, logo_base64, watermark_enabled } = useAppSettings();
+  const { data: currentUser } = useGetMe();
+  const isFounder = Boolean((currentUser as any)?.isFounder);
 
   const { data: casesRaw, isLoading, refetch } = useGetWaitingCases({ section, status: "waiting" } as any);
   const { data: servoAll } = useGetWaitingCases({ section: "servo", status: "waiting" } as any);
@@ -789,6 +801,7 @@ export default function WaitingCases() {
               selectedIds={selectedIds}
               onToggle={toggleId}
               onToggleAll={toggleAll}
+              isFounder={isFounder}
             />
 
             {filteredCases.length > 0 && (

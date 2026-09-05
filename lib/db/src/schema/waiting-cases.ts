@@ -40,6 +40,7 @@ export const waitingCasesTable = sqliteTable("waiting_cases", {
   artificialRespiration: text("artificial_respiration").notNull().default("no"),
   section: text("section").notNull().default("reception"),
   status: text("status").notNull().default("waiting"),
+  transferDestination: text("transfer_destination"),
   createdAt: integer("created_at", { mode: "timestamp_ms" }).$defaultFn(() => new Date()).notNull(),
   updatedAt: integer("updated_at", { mode: "timestamp_ms" }).$defaultFn(() => new Date()).notNull(),
 });

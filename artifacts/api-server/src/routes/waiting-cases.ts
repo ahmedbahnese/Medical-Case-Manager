@@ -1,5 +1,5 @@
 import { Router, type IRouter } from "express";
-import { eq, and, SQL } from "drizzle-orm";
+import { eq, and, ne, SQL } from "drizzle-orm";
 import { db, waitingCasesTable, medicalCasesTable } from "@workspace/db";
 import {
   GetWaitingCasesQueryParams,
@@ -9,7 +9,7 @@ import {
   DeleteWaitingCaseParams,
 } from "@workspace/api-zod";
 import { logAction } from "./audit-logs";
-import { getCurrentUserName } from "../middleware/auth";
+import { getCurrentUserName, requireFounder } from "../middleware/auth";
 
 const router: IRouter = Router();
 
@@ -41,6 +41,13 @@ router.post("/waiting-cases", async (req, res): Promise<void> => {
   const parsed = CreateWaitingCaseBody.safeParse(req.body);
   if (!parsed.success) {
     res.status(400).json({ error: parsed.error.message });
+    return;
+  }
+  const normalizedName = parsed.data.patientName.trim().replace(/\s+/g, " ").toLocaleLowerCase();
+  const existingWaiting = await db.select({ patientName: waitingCasesTable.patientName }).from(waitingCasesTable).where(eq(waitingCasesTable.status, "waiting"));
+  const existingCases = await db.select({ patientName: medicalCasesTable.patientName }).from(medicalCasesTable).where(ne(medicalCasesTable.status, "discharged"));
+  if ([...existingWaiting, ...existingCases].some(c => c.patientName.trim().replace(/\s+/g, " ").toLocaleLowerCase() === normalizedName)) {
+    res.status(409).json({ error: "يوجد حالة بنفس الاسم" });
     return;
   }
 
@@ -84,7 +91,7 @@ router.patch("/waiting-cases/:id", async (req, res): Promise<void> => {
 
   // Verify existence before updating
   const [existing] = await db
-    .select({ id: waitingCasesTable.id, status: waitingCasesTable.status })
+    .select({ id: waitingCasesTable.id, status: waitingCasesTable.status, patientName: waitingCasesTable.patientName })
     .from(waitingCasesTable)
     .where(eq(waitingCasesTable.id, params.data.id));
 
@@ -94,7 +101,16 @@ router.patch("/waiting-cases/:id", async (req, res): Promise<void> => {
   }
 
   const extraData = req.body as any;
+  if (body.data.patientName !== undefined) {
+    const normalizedName = body.data.patientName.trim().replace(/\s+/g, " ").toLocaleLowerCase();
+    const names = await db.select({ id: waitingCasesTable.id, patientName: waitingCasesTable.patientName }).from(waitingCasesTable);
+    if (names.some(c => c.id !== params.data.id && c.patientName.trim().replace(/\s+/g, " ").toLocaleLowerCase() === normalizedName)) {
+      res.status(409).json({ error: "يوجد حالة بنفس الاسم" });
+      return;
+    }
+  }
   const updates: Record<string, unknown> = { ...body.data, updatedAt: new Date() };
+  if (extraData.transferDestination !== undefined) updates.transferDestination = extraData.transferDestination?.trim() || null;
   for (const key of ["medicalReport", "medicalReportName", "medicalReportData"]) {
     if (extraData[key] !== undefined) updates[key] = extraData[key] || null;
   }
@@ -143,7 +159,7 @@ router.patch("/waiting-cases/:id", async (req, res): Promise<void> => {
   res.json(updated);
 });
 
-router.delete("/waiting-cases/:id", async (req, res): Promise<void> => {
+router.delete("/waiting-cases/:id", requireFounder, async (req, res): Promise<void> => {
   const raw = Array.isArray(req.params.id) ? req.params.id[0] : req.params.id;
   const params = DeleteWaitingCaseParams.safeParse({ id: parseInt(raw, 10) });
   if (!params.success) {

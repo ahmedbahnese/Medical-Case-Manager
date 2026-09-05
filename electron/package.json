@@ -5,6 +5,7 @@
   "main": "main.js",
   "scripts": {
     "start": "electron .",
+    "verify-sqlite": "node verify-native-sqlite.js",
     "build-win": "electron-builder --win --publish never",
     "build-installer": "electron-builder --win nsis --publish never",
     "build-portable": "electron-builder --win portable --publish never"

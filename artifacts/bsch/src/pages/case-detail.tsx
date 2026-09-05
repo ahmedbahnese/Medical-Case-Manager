@@ -1,6 +1,6 @@
 import { useState, useEffect, memo, type ReactNode } from "react";
 import { useLocation, useParams } from "wouter";
-import { useGetCase, useUpdateCase, useDeleteCase, useCreateCase, useGetDepartments } from "@workspace/api-client-react";
+import { useGetCase, useUpdateCase, useDeleteCase, useCreateCase, useGetDepartments, useGetMe } from "@workspace/api-client-react";
 import {
   ArrowLeft, User, Calendar, Wind, Trash2, Edit, Save, X, Stethoscope,
   ArrowRightLeft, CheckCircle, XCircle, HeartPulse, Building2, Hospital
@@ -106,6 +106,7 @@ export default function CaseDetail() {
 
   const [isEditing, setIsEditing] = useState(false);
   const { data: patient, isLoading, refetch } = useGetCase(caseId);
+  const { data: currentUser } = useGetMe();
   const updateCase  = useUpdateCase();
   const deleteCase  = useDeleteCase();
   const createCase  = useCreateCase();
@@ -296,13 +297,13 @@ export default function CaseDetail() {
                   </Button>
                 </>
               )}
-              <ConfirmDialog
+              {(currentUser as any)?.isFounder && <ConfirmDialog
                 trigger={<Button variant="ghost" size="sm" className="gap-1 text-destructive hover:bg-destructive/10"><Trash2 className="h-4 w-4" /> حذف</Button>}
                 title="حذف ملف المريض"
                 description={`هل أنت متأكد من حذف ملف "${patient.patientName}"؟ لا يمكن التراجع.`}
                 confirmLabel="نعم، احذف"
                 onConfirm={handleDelete}
-              />
+              />}
             </>
           ) : (
             <>

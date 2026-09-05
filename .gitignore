@@ -53,3 +53,7 @@ deploy/windows7/tunnel-config.bat
 deploy/windows7/*.ppk
 deploy/windows7/*.pem
 deploy/windows7/*.key
+
+# Local Electron build output
+electron/dist-electron/
+releases/BSCH-*.exe

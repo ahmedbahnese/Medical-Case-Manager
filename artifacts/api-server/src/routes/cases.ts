@@ -19,7 +19,7 @@ import {
   BulkImportCasesBody,
 } from "@workspace/api-zod";
 import { logAction } from "./audit-logs";
-import { getCurrentUserName } from "../middleware/auth";
+import { getCurrentUserName, requireFounder } from "../middleware/auth";
 
 const router: IRouter = Router();
 const upload = multer({ storage: multer.memoryStorage(), limits: { fileSize: 10 * 1024 * 1024 } });
@@ -122,6 +122,12 @@ router.post("/cases", async (req, res): Promise<void> => {
   const parsed = CreateCaseBody.safeParse(req.body);
   if (!parsed.success) {
     res.status(400).json({ error: parsed.error.message });
+    return;
+  }
+  const normalizedName = parsed.data.patientName.trim().replace(/\s+/g, " ").toLocaleLowerCase();
+  const existingNames = await db.select({ patientName: medicalCasesTable.patientName }).from(medicalCasesTable);
+  if (existingNames.some(c => c.patientName.trim().replace(/\s+/g, " ").toLocaleLowerCase() === normalizedName)) {
+    res.status(409).json({ error: "يوجد حالة بنفس الاسم" });
     return;
   }
 
@@ -398,7 +404,7 @@ router.patch("/cases/:id", async (req, res): Promise<void> => {
 
   // Verify the case exists before updating
   const [existing] = await db
-    .select({ id: medicalCasesTable.id })
+    .select({ id: medicalCasesTable.id, patientName: medicalCasesTable.patientName })
     .from(medicalCasesTable)
     .where(eq(medicalCasesTable.id, params.data.id));
 
@@ -409,6 +415,14 @@ router.patch("/cases/:id", async (req, res): Promise<void> => {
 
   const extraData = req.body as any;
   const data = body.data as any;
+  if (data.patientName !== undefined) {
+    const normalizedName = data.patientName.trim().replace(/\s+/g, " ").toLocaleLowerCase();
+    const names = await db.select({ id: medicalCasesTable.id, patientName: medicalCasesTable.patientName }).from(medicalCasesTable);
+    if (names.some(c => c.id !== params.data.id && c.patientName.trim().replace(/\s+/g, " ").toLocaleLowerCase() === normalizedName)) {
+      res.status(409).json({ error: "يوجد حالة بنفس الاسم" });
+      return;
+    }
+  }
   const updates: Record<string, unknown> = { updatedAt: new Date() };
   const textFields = ["patientName", "age", "diagnosis", "symptoms", "treatment", "notes", "parentName", "parentPhone", "nationalId", "fileNumber", "caseType", "mobe"];
   for (const field of textFields) {
@@ -461,7 +475,7 @@ router.patch("/cases/:id", async (req, res): Promise<void> => {
   res.json(enriched);
 });
 
-router.delete("/cases/:id", async (req, res): Promise<void> => {
+router.delete("/cases/:id", requireFounder, async (req, res): Promise<void> => {
   const raw = Array.isArray(req.params.id) ? req.params.id[0] : req.params.id;
   const params = DeleteCaseParams.safeParse({ id: parseInt(raw, 10) });
   if (!params.success) {

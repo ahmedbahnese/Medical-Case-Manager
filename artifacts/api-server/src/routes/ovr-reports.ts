@@ -10,7 +10,13 @@ const canReview = (a: Awaited<ReturnType<typeof getCurrentUserAccess>>) => a.isF
 router.get("/ovr-reports", async (req, res) => {
   const access = await getCurrentUserAccess(req.headers.cookie);
   if (!canReview(access)) { res.status(403).json({ error: "عرض OVR يتطلب صلاحية المؤسس أو مسؤول الجودة" }); return; }
-  res.json(await db.select().from(ovrReportsTable).orderBy(desc(ovrReportsTable.createdAt)));
+  try {
+    const reports = await db.select().from(ovrReportsTable).orderBy(desc(ovrReportsTable.createdAt));
+    res.json(reports);
+  } catch (error) {
+    console.error("OVR list failed", error);
+    res.status(500).json({ error: "تعذر تحميل بلاغات OVR. تحقق من تحديث قاعدة البيانات." });
+  }
 });
 
 router.post("/ovr-reports", async (req, res) => {
@@ -19,7 +25,7 @@ router.post("/ovr-reports", async (req, res) => {
   const b = req.body as any;
   if (!b.eventDate || !b.department || !b.location || !b.eventType || !b.description) { res.status(400).json({ error: "التاريخ والقسم والمكان والنوع والوصف مطلوبة" }); return; }
   const reportNumber = `OVR-${new Date().getFullYear()}-${Date.now().toString().slice(-6)}`;
-  const [created] = await db.insert(ovrReportsTable).values({ reportNumber, eventDate: new Date(b.eventDate), eventTime: b.eventTime ?? null, department: b.department, location: b.location, eventType: b.eventType, patientName: b.patientName ?? null, fileNumber: b.fileNumber ?? null, hospitalSupervision: b.hospitalSupervision ?? "إشراف المستشفى", administrativeManager: b.administrativeManager ?? "المدير الإداري", severity: b.severity ?? "no_harm", description: b.description, immediateAction: b.immediateAction ?? null, reporterName: access.name, reporterRole: access.role }).returning();
+  const [created] = await db.insert(ovrReportsTable).values({ reportNumber, eventDate: new Date(b.eventDate), eventTime: b.eventTime ?? null, department: b.department, location: b.location, eventType: b.eventType, patientName: b.patientName ?? null, fileNumber: b.fileNumber ?? null, hospitalSupervision: b.hospitalSupervision?.trim() || undefined, administrativeManager: b.administrativeManager?.trim() || undefined, severity: b.severity ?? "no_harm", description: b.description, immediateAction: b.immediateAction ?? null, reporterName: access.name, reporterRole: access.role }).returning();
   await logAction("إرسال OVR Incident Report", "ovr_report", created.id, reportNumber, null, access.name);
   res.status(201).json(created);
 });

@@ -50,6 +50,10 @@ function buildDischargeHtml(cases: any[], hospitalName: string): string {
 
 export default function DischargeHistory() {
   const [search, setSearch] = useState("");
+  const [reasonFilter, setReasonFilter] = useState("all");
+  const [departmentFilter, setDepartmentFilter] = useState("all");
+  const [dateFrom, setDateFrom] = useState("");
+  const [dateTo, setDateTo] = useState("");
   const [submitted, setSubmitted] = useState(true);
   const { hospital_name, logo_base64, watermark_enabled } = useAppSettings();
 
@@ -58,7 +62,7 @@ export default function DischargeHistory() {
 
   const now = new Date();
   const oneDayAgo = new Date(now.getTime() - 24 * 60 * 60 * 1000);
-  const oneMonthAgo = new Date(now.getTime() - 30 * 24 * 60 * 60 * 1000);
+  const threeMonthsAgo = new Date(now.getTime() - 90 * 24 * 60 * 60 * 1000);
 
   const filtered = allCases?.filter(c => {
     if (!search) return true;
@@ -70,8 +74,14 @@ export default function DischargeHistory() {
   // Filter out cases older than 1 month
   const visible = filtered.filter(c => {
     const dis = c.dischargeDate ? new Date(c.dischargeDate) : new Date(c.updatedAt);
-    return dis >= oneMonthAgo;
+    const day = dis.toISOString().slice(0, 10);
+    return dis >= threeMonthsAgo && (reasonFilter === "all" || (c.dischargeReason ?? "") === reasonFilter)
+      && (departmentFilter === "all" || c.departmentName === departmentFilter)
+      && (!dateFrom || day >= dateFrom) && (!dateTo || day <= dateTo);
   });
+  const departments = Array.from(new Set((allCases ?? []).map(c => c.departmentName).filter((d): d is string => Boolean(d))));
+  const reasonStats = [["improved", "تحسن"], ["request", "خروج حسب الطلب"], ["death", "وفاة"], ["transferred", "تحويل خارجي"], ["internal_transfer", "تحويل داخلي"]]
+    .map(([key, label]) => ({ key, label, count: visible.filter(c => c.dischargeReason === key).length }));
 
   const canReadmit = (c: any) => {
     const dis = c.dischargeDate ? new Date(c.dischargeDate) : new Date(c.updatedAt);
@@ -107,7 +117,7 @@ export default function DischargeHistory() {
             سجل الخروج
           </h1>
           <p className="text-muted-foreground mt-1">
-            الحالات التي تم تسجيل خروجها — يُمسح التاريخ القديم (أكثر من شهر) تلقائياً
+            الحالات التي تم تسجيل خروجها — يُمسح التاريخ القديم (أكثر من 3 أشهر) تلقائياً
           </p>
         </div>
         <div className="flex gap-2 flex-wrap no-print">
@@ -138,11 +148,22 @@ export default function DischargeHistory() {
                 />
               </div>
             </div>
-            <Button variant="outline" onClick={() => setSearch("")} className="gap-2">
+            <Button variant="outline" onClick={() => { setSearch(""); setReasonFilter("all"); setDepartmentFilter("all"); setDateFrom(""); setDateTo(""); }} className="gap-2">
               <RotateCcw className="h-4 w-4" /> مسح
             </Button>
           </div>
+          <div className="grid grid-cols-2 md:grid-cols-4 gap-3 mt-4">
+            <div><Label>القسم / مكان الخروج</Label><Select value={departmentFilter} onValueChange={setDepartmentFilter}><SelectTrigger><SelectValue /></SelectTrigger><SelectContent><SelectItem value="all">كل الأقسام</SelectItem>{departments.map(d => <SelectItem key={d} value={d}>{d}</SelectItem>)}</SelectContent></Select></div>
+            <div><Label>تصنيف الخروج</Label><Select value={reasonFilter} onValueChange={setReasonFilter}><SelectTrigger><SelectValue /></SelectTrigger><SelectContent><SelectItem value="all">كل التصنيفات</SelectItem>{reasonStats.map(r => <SelectItem key={r.key} value={r.key}>{r.label}</SelectItem>)}</SelectContent></Select></div>
+            <div><Label>من تاريخ</Label><Input type="date" value={dateFrom} onChange={e => setDateFrom(e.target.value)} /></div>
+            <div><Label>إلى تاريخ</Label><Input type="date" value={dateTo} onChange={e => setDateTo(e.target.value)} /></div>
+          </div>
         </CardContent>
+      </Card>
+
+      <Card className="border-primary/20">
+        <CardHeader><CardTitle className="text-base">إحصائية تصنيفات الخروج المحددة</CardTitle></CardHeader>
+        <CardContent className="grid grid-cols-2 md:grid-cols-5 gap-3">{reasonStats.map(r => <div key={r.key} className="rounded-lg bg-muted/40 p-3 text-center"><div className="text-2xl font-bold text-primary">{r.count}</div><div className="text-xs text-muted-foreground">{r.label}</div></div>)}</CardContent>
       </Card>
 
       <Card>
@@ -177,7 +198,7 @@ export default function DischargeHistory() {
                 ) : visible.length === 0 ? (
                   <TableRow>
                     <TableCell colSpan={8} className="text-center h-24 text-muted-foreground">
-                      لا توجد حالات خروج مسجلة في آخر شهر
+                      لا توجد حالات خروج مسجلة في آخر 3 أشهر
                     </TableCell>
                   </TableRow>
                 ) : visible.map(c => (
