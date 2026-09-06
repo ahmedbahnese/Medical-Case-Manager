@@ -46,7 +46,7 @@ export async function exportArabicXlsx(options: {
   sheet.columns.forEach((column, index) => { column.width = options.columnWidths?.[index] ?? 18; });
   sheet.autoFilter = { from: { row: 5, column: 1 }, to: { row: Math.max(sheet.rowCount, 5), column: last } };
   const safeName = options.filename.toLowerCase().endsWith(".xlsx") ? options.filename : `${options.filename}.xlsx`;
-  const preview = window.open("", "bsch-xlsx-preview", "noopener,noreferrer,width=1400,height=900");
+  const preview = window.open("", "bsch-xlsx-preview", "width=1400,height=900,resizable=yes,scrollbars=yes");
   if (!preview) { window.alert("يرجى السماح بالنوافذ المنبثقة لعرض معاينة التقرير"); return; }
   const esc = (value: ExcelCell) => String(value ?? "").replace(/[&<>\"]/g, ch => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", "\"": "&quot;" }[ch]!));
   const previewRows = options.rows.map(row => `<tr>${row.map(cell => `<td>${esc(cell)}</td>`).join("")}</tr>`).join("");
