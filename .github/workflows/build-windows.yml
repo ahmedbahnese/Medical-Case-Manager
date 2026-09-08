@@ -22,7 +22,6 @@ jobs:
         uses: actions/setup-node@v4
         with:
           node-version: 22.13.0
-          architecture: x86
           cache: npm
           cache-dependency-path: electron/package-lock.json
 
@@ -37,6 +36,12 @@ jobs:
           BASE_PATH: /
           NODE_ENV: production
         run: pnpm run build:api && pnpm run build:frontend
+
+      - name: Switch to x86 Node.js for Electron ia32 build
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22.13.0
+          architecture: x86
 
       - name: Install Electron build dependencies
         working-directory: electron
