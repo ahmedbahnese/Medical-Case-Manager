@@ -12,6 +12,11 @@ const { spawn, execFileSync } = require('child_process');
 const http = require('http');
 const fs = require('fs');
 
+// Windows 7 Chromium GPU drivers can render a completely white window.
+app.disableHardwareAcceleration();
+app.commandLine.appendSwitch('disable-gpu');
+app.commandLine.appendSwitch('disable-gpu-compositing');
+
 const API_PORT = 8080;
 // Use the IPv4 loopback explicitly. On Windows 7, `localhost` may resolve to
 // IPv6 first while the bundled server listens on IPv4, producing a blank page.
@@ -25,6 +30,17 @@ let apiStartError = null;
 let isQuitting = false;
 let isHidingWindow = false;
 const startHidden = process.argv.includes('--hidden') || app.getLoginItemSettings().wasOpenedAtLogin;
+
+function writeDiagnostic(message) {
+  try {
+    const dir = app.getPath('userData');
+    fs.mkdirSync(dir, { recursive: true });
+    fs.appendFileSync(path.join(dir, 'electron.log'), `[${new Date().toISOString()}] ${message}\n`);
+  } catch (_) {}
+}
+
+process.on('uncaughtException', (err) => writeDiagnostic(`uncaughtException: ${err?.stack || err}`));
+process.on('unhandledRejection', (err) => writeDiagnostic(`unhandledRejection: ${err?.stack || err}`));
 
 ipcMain.handle('save-pdf', async (event, payload) => {
   const sourceWindow = BrowserWindow.fromWebContents(event.sender);
@@ -129,6 +145,7 @@ function startApiServer() {
   apiProcess.stderr.on('data', (d) => {
     const text = d.toString().trim();
     if (text) apiStartError = text.slice(-4000);
+    if (text) writeDiagnostic(`API ERR: ${text}`);
     console.error('[API ERR]', text);
   });
   apiProcess.on('error', (err) => {
@@ -138,6 +155,7 @@ function startApiServer() {
   apiProcess.on('exit', (code, signal) => {
     const detail = apiStartError ? ` — ${apiStartError}` : '';
     console.log(`API server exited — code=${code} signal=${signal}${detail}`);
+    writeDiagnostic(`API exited — code=${code} signal=${signal}${detail}`);
     if (!isQuitting && code !== 0 && !apiStartError) {
       apiStartError = `API process exited with code ${code || 'unknown'}${signal ? ` (${signal})` : ''}`;
     }
@@ -237,9 +255,17 @@ async function createWindow() {
     autoHideMenuBar: true,
   });
 
+  mainWindow.webContents.on('console-message', (_event, level, message, line, sourceId) => {
+    writeDiagnostic(`renderer console level=${level}: ${message} (${sourceId}:${line})`);
+  });
+  mainWindow.webContents.on('render-process-gone', (_event, details) => {
+    writeDiagnostic(`renderer gone: ${JSON.stringify(details)}`);
+  });
+
   try {
     await waitForApi();
     mainWindow.webContents.on('did-fail-load', (_event, errorCode, errorDescription, validatedURL) => {
+      writeDiagnostic(`did-fail-load: ${errorCode} ${errorDescription} ${validatedURL}`);
       if (isQuitting) return;
       const details = encodeURIComponent(`${errorDescription} (${errorCode})\n${validatedURL}`);
       mainWindow.loadURL('file://' + path.join(__dirname, 'error.html') + '?message=' + details);
