@@ -7,7 +7,7 @@
     "start": "electron .",
     "verify-sqlite": "node verify-native-sqlite.js",
     "prepare-native": "node prepare-native-sqlite.js",
-    "rebuild-native": "electron-rebuild -f -w better-sqlite3 --version 22.3.27 --platform win32 --arch ia32",
+    "rebuild-native": "node rebuild-native-sqlite.js",
     "prebuild-win": "npm run prepare-native && npm run rebuild-native && npm run verify-sqlite",
     "prebuild-installer": "npm run prepare-native && npm run rebuild-native && npm run verify-sqlite",
     "prebuild-portable": "npm run prepare-native && npm run rebuild-native && npm run verify-sqlite",
@@ -19,7 +19,8 @@
   "devDependencies": {
     "electron": "22.3.27",
     "electron-builder": "^25.0.0",
-    "electron-rebuild": "^3.2.9"
+    "electron-rebuild": "^3.2.9",
+    "prebuild-install": "^7.1.2"
   },
   "build": {
     "appId": "com.bsch.hospital",
