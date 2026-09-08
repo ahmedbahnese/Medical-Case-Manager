@@ -6,14 +6,20 @@
   "scripts": {
     "start": "electron .",
     "verify-sqlite": "node verify-native-sqlite.js",
-    "build-win": "electron-builder --win --publish never",
-    "build-installer": "electron-builder --win nsis --publish never",
-    "build-portable": "electron-builder --win portable --publish never"
+    "prepare-native": "node prepare-native-sqlite.js",
+    "rebuild-native": "electron-rebuild -f -w better-sqlite3 --version 22.3.27 --platform win32 --arch ia32",
+    "prebuild-win": "npm run prepare-native && npm run rebuild-native && npm run verify-sqlite",
+    "prebuild-installer": "npm run prepare-native && npm run rebuild-native && npm run verify-sqlite",
+    "prebuild-portable": "npm run prepare-native && npm run rebuild-native && npm run verify-sqlite",
+    "build-win": "electron-builder --win --ia32 --publish never",
+    "build-installer": "electron-builder --win nsis --ia32 --publish never",
+    "build-portable": "electron-builder --win portable --ia32 --publish never"
   },
   "dependencies": {},
   "devDependencies": {
     "electron": "22.3.27",
-    "electron-builder": "^25.0.0"
+    "electron-builder": "^25.0.0",
+    "electron-rebuild": "^3.2.9"
   },
   "build": {
     "appId": "com.bsch.hospital",
@@ -27,13 +33,16 @@
       "preload.js",
       "error.html"
     ],
+    "asarUnpack": [
+      "**/node_modules/better-sqlite3/**/*.node"
+    ],
     "extraResources": [
       {
         "from": "../artifacts/api-server/dist",
         "to": "api-server/dist"
       },
       {
-        "from": "../lib/db/node_modules/better-sqlite3",
+        "from": "native/better-sqlite3",
         "to": "node_modules/better-sqlite3"
       },
       {
@@ -113,17 +122,11 @@
       "target": [
         {
           "target": "nsis",
-          "arch": [
-            "x64",
-            "ia32"
-          ]
+          "arch": ["ia32"]
         },
         {
           "target": "portable",
-          "arch": [
-            "x64",
-            "ia32"
-          ]
+          "arch": ["ia32"]
         }
       ],
       "requestedExecutionLevel": "asInvoker",

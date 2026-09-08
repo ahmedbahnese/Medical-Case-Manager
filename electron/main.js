@@ -20,6 +20,8 @@ let tray       = null;
 let apiProcess = null;
 let apiStartError = null;
 let isQuitting = false;
+let isHidingWindow = false;
+const startHidden = process.argv.includes('--hidden') || app.getLoginItemSettings().wasOpenedAtLogin;
 
 ipcMain.handle('save-pdf', async (event, payload) => {
   const sourceWindow = BrowserWindow.fromWebContents(event.sender);
@@ -237,14 +239,16 @@ async function createWindow() {
     mainWindow.loadURL(API_URL);
     mainWindow.once('ready-to-show', () => {
       if (splashWindow) { splashWindow.close(); splashWindow = null; }
-      mainWindow.show();
-      mainWindow.focus();
+      if (!startHidden) {
+        mainWindow.show();
+        mainWindow.focus();
+      }
     });
   } catch (err) {
     if (splashWindow) { splashWindow.close(); splashWindow = null; }
     const details = encodeURIComponent(err && err.message ? err.message : 'سبب غير معروف');
     mainWindow.loadURL('file://' + path.join(__dirname, 'error.html') + '?message=' + details);
-    mainWindow.show();
+    if (!startHidden) mainWindow.show();
   }
 
   // Restore the standard copy/paste context menu inside the desktop shell.
@@ -265,6 +269,14 @@ async function createWindow() {
     return { action: 'deny' };
   });
 
+  mainWindow.on('close', (event) => {
+    if (!isQuitting && !isHidingWindow) {
+      event.preventDefault();
+      isHidingWindow = true;
+      mainWindow.hide();
+      isHidingWindow = false;
+    }
+  });
   mainWindow.on('closed', () => { mainWindow = null; });
 }
 
@@ -278,6 +290,9 @@ function createTray() {
 
   const contextMenu = Menu.buildFromTemplate([
     { label: 'فتح التطبيق',   click: () => { if (mainWindow) mainWindow.focus(); else createWindow(); } },
+    { label: 'تشغيل تلقائيًا مع Windows', type: 'checkbox', checked: true, click: (item) => {
+      app.setLoginItemSettings({ openAtLogin: item.checked, args: ['--hidden'] });
+    } },
     { label: 'إعادة تشغيل',  click: () => { app.relaunch(); app.exit(0); } },
     { type: 'separator' },
     { label: 'إغلاق التطبيق', click: () => app.quit() },
@@ -290,7 +305,8 @@ function createTray() {
 // ─── App Lifecycle ────────────────────────────────────────────────────────────
 
 app.whenReady().then(async () => {
-  createSplash();
+  app.setLoginItemSettings({ openAtLogin: true, args: ['--hidden'] });
+  if (!startHidden) createSplash();
   startApiServer();
   createTray();
   await createWindow();
@@ -303,7 +319,7 @@ app.whenReady().then(async () => {
 // Closing the main window must fully terminate BSCH. The tray is only a
 // convenience while the app is running; it must not leave a hidden server.
 app.on('window-all-closed', () => {
-  if (!isQuitting) app.quit();
+  // Keep the API server alive; exit explicitly from the tray menu.
 });
 
 function stopApiServer() {

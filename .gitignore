@@ -56,4 +56,5 @@ deploy/windows7/*.key
 
 # Local Electron build output
 electron/dist-electron/
+electron/native/
 releases/BSCH-*.exe

@@ -12,12 +12,13 @@ function peKind(file) {
   return `unknown(0x${machine.toString(16)})`;
 }
 
-const expected = { ia32: "PE32", x64: "PE32+" };
-const root = process.argv[2] || path.resolve(__dirname, "..", "lib", "db", "node_modules", "better-sqlite3");
+const expected = { ia32: "PE32" };
+const root = process.argv[2] || path.resolve(__dirname, "native", "better-sqlite3");
 for (const [arch, kind] of Object.entries(expected)) {
   const candidates = [
     path.join(root, arch, "better_sqlite3.node"),
     path.join(root, "build", arch, "better_sqlite3.node"),
+    path.join(root, "build", "Release", "better_sqlite3.node"),
   ];
   const file = candidates.find(fs.existsSync);
   if (!file) {
