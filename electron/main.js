@@ -13,7 +13,10 @@ const http = require('http');
 const fs = require('fs');
 
 const API_PORT = 8080;
-const API_URL  = `http://localhost:${API_PORT}`;
+// Use the IPv4 loopback explicitly. On Windows 7, `localhost` may resolve to
+// IPv6 first while the bundled server listens on IPv4, producing a blank page.
+const API_HOST = '127.0.0.1';
+const API_URL  = `http://${API_HOST}:${API_PORT}`;
 
 let mainWindow = null;
 let tray       = null;
@@ -236,7 +239,20 @@ async function createWindow() {
 
   try {
     await waitForApi();
+    mainWindow.webContents.on('did-fail-load', (_event, errorCode, errorDescription, validatedURL) => {
+      if (isQuitting) return;
+      const details = encodeURIComponent(`${errorDescription} (${errorCode})\n${validatedURL}`);
+      mainWindow.loadURL('file://' + path.join(__dirname, 'error.html') + '?message=' + details);
+      if (!startHidden) mainWindow.show();
+    });
     mainWindow.loadURL(API_URL);
+    mainWindow.webContents.once('did-finish-load', () => {
+      if (splashWindow) { splashWindow.close(); splashWindow = null; }
+      if (!startHidden) {
+        mainWindow.show();
+        mainWindow.focus();
+      }
+    });
     mainWindow.once('ready-to-show', () => {
       if (splashWindow) { splashWindow.close(); splashWindow = null; }
       if (!startHidden) {
