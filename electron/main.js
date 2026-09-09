@@ -6,7 +6,7 @@
  * Production  : built with electron-builder (nsis / portable)
  */
 
-const { app, BrowserWindow, shell, Menu, Tray, nativeImage, dialog, ipcMain } = require('electron');
+const { app, BrowserWindow, shell, Menu, Tray, nativeImage, dialog, ipcMain, powerSaveBlocker } = require('electron');
 const path = require('path');
 const { spawn, execFileSync } = require('child_process');
 const http = require('http');
@@ -29,6 +29,7 @@ let apiProcess = null;
 let apiStartError = null;
 let isQuitting = false;
 let isHidingWindow = false;
+let sleepBlockerId = null;
 const startHidden = process.argv.includes('--hidden') || app.getLoginItemSettings().wasOpenedAtLogin;
 
 function writeDiagnostic(message) {
@@ -41,6 +42,14 @@ function writeDiagnostic(message) {
 
 process.on('uncaughtException', (err) => writeDiagnostic(`uncaughtException: ${err?.stack || err}`));
 process.on('unhandledRejection', (err) => writeDiagnostic(`unhandledRejection: ${err?.stack || err}`));
+
+function keepServerAvailable() {
+  if (sleepBlockerId !== null) return;
+  // A real Windows Sleep/Standby suspends all user processes. This keeps the
+  // machine awake while Windows may still turn off the display.
+  sleepBlockerId = powerSaveBlocker.start('prevent-app-suspension');
+  writeDiagnostic(`powerSaveBlocker started: ${sleepBlockerId}`);
+}
 
 ipcMain.handle('save-pdf', async (event, payload) => {
   const sourceWindow = BrowserWindow.fromWebContents(event.sender);
@@ -347,6 +356,7 @@ function createTray() {
 // ─── App Lifecycle ────────────────────────────────────────────────────────────
 
 app.whenReady().then(async () => {
+  keepServerAvailable();
   app.setLoginItemSettings({ openAtLogin: true, args: ['--hidden'] });
   if (!startHidden) createSplash();
   startApiServer();
