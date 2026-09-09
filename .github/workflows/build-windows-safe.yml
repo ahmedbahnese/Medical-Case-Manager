@@ -1,0 +1,68 @@
+name: Build safe Windows 7 installer
+
+on:
+  workflow_dispatch:
+
+jobs:
+  build-windows-ia32:
+    runs-on: windows-2022
+    permissions:
+      contents: read
+    defaults:
+      run:
+        shell: bash
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js x64 for web assets
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22.13.0
+          cache: npm
+          cache-dependency-path: electron/package-lock.json
+
+      - name: Install pnpm
+        run: npm install --global pnpm@11.24.0
+
+      - name: Install workspace dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Build production web assets
+        env:
+          BASE_PATH: /
+          NODE_ENV: production
+        run: pnpm run build:api && pnpm run build:frontend
+
+      - name: Switch to x86 Node.js for Electron ia32 build
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22.13.0
+          architecture: x86
+
+      - name: Install Electron build dependencies
+        working-directory: electron
+        run: npm ci
+
+      - name: Build Windows ia32 installer
+        working-directory: electron
+        run: npm run build-installer
+
+      - name: Upload installer
+        uses: actions/upload-artifact@v4
+        with:
+          name: BSCH-Windows-ia32-safe-working
+          path: electron/dist-electron/BSCH-Setup-ia32-*.exe
+          if-no-files-found: error
+          retention-days: 30
+      
+      - name: Upload partial update files
+        uses: actions/upload-artifact@v4
+        with:
+          name: BSCH-Partial-Update-safe-working
+          path: |
+            electron/dist-electron/win-ia32-unpacked/resources/app.asar
+            artifacts/api-server/dist/**
+            artifacts/bsch/dist/public/**
+          if-no-files-found: error
+          retention-days: 30
