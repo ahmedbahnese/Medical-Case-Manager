@@ -1,5 +1,5 @@
-import { useEffect, useState } from "react";
-import { ArrowRight, CheckCircle2, RefreshCw, ShieldAlert } from "lucide-react";
+import { useEffect, useMemo, useState } from "react";
+import { ArrowRight, CheckCircle2, RefreshCw, Search, ShieldAlert } from "lucide-react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -9,7 +9,15 @@ import { Badge } from "@/components/ui/badge";
 import { apiGet, apiPatch } from "@/lib/api";
 import { toast } from "sonner";
 
-type Ovr = { id: number; reportNumber: string; eventDate: string; eventTime?: string; department: string; location: string; eventType: string; patientName?: string; fileNumber?: string; hospitalSupervision?: string; administrativeManager?: string; description: string; immediateAction?: string; reporterName: string; reporterRole?: string; status: string; investigationSummary?: string; rootCause?: string; correctiveAction?: string; preventiveAction?: string; verificationNotes?: string; actionOwner?: string; dueDate?: string; reviewedBy?: string; reviewedAt?: string };
+type Ovr = {
+  id: number; reportNumber: string; eventDate: string; eventTime?: string; department: string; location: string;
+  eventType: string; patientName?: string; fileNumber?: string; hospitalSupervision?: string;
+  administrativeManager?: string; description: string; immediateAction?: string; reporterName: string;
+  reporterRole?: string; status: string; investigationSummary?: string; rootCause?: string;
+  correctiveAction?: string; preventiveAction?: string; verificationNotes?: string; actionOwner?: string;
+  dueDate?: string; reviewedBy?: string; reviewedAt?: string;
+};
+
 const statusLabels: Record<string, string> = { new: "جديد", under_review: "تحت المراجعة", investigating: "تحت التحقيق", corrective_action: "إجراء تصحيحي", verification: "بانتظار التحقق", closed: "مغلق" };
 
 export default function OvrManagementPage() {
@@ -17,20 +25,52 @@ export default function OvrManagementPage() {
   const [selected, setSelected] = useState<Ovr | null>(null);
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
-  const load = async () => { setLoading(true); try { setItems(await apiGet<Ovr[]>("/api/ovr-reports")); } catch (e: any) { toast.error(e?.message ?? "تعذر تحميل بلاغات OVR"); } finally { setLoading(false); } };
-  useEffect(() => { void load(); }, []);
+  const [filters, setFilters] = useState({ q: "", department: "", status: "", from: "", to: "" });
+
+  const departments = useMemo(() => Array.from(new Set(items.map(x => x.department).filter(Boolean))).sort(), [items]);
+  const load = async (activeFilters = filters) => {
+    setLoading(true);
+    try {
+      const params = new URLSearchParams();
+      Object.entries(activeFilters).forEach(([key, value]) => { if (value) params.set(key, value); });
+      const suffix = params.toString() ? `?${params.toString()}` : "";
+      setItems(await apiGet<Ovr[]>(`/api/ovr-reports${suffix}`));
+    } catch (e: any) { toast.error(e?.message ?? "تعذر تحميل بلاغات OVR"); }
+    finally { setLoading(false); }
+  };
+  useEffect(() => { void load({ q: "", department: "", status: "", from: "", to: "" }); }, []);
   const set = (key: keyof Ovr, value: string) => setSelected(s => s ? { ...s, [key]: value } : s);
-  const save = async () => { if (!selected) return; setSaving(true); try { const updated = await apiPatch<Ovr>(`/api/ovr-reports/${selected.id}`, selected); setSelected(updated); setItems(xs => xs.map(x => x.id === updated.id ? updated : x)); toast.success("تم حفظ تحقيق OVR"); } catch (e: any) { toast.error(e?.message ?? "تعذر حفظ التحقيق"); } finally { setSaving(false); } };
+  const save = async () => {
+    if (!selected) return;
+    setSaving(true);
+    try {
+      const updated = await apiPatch<Ovr>(`/api/ovr-reports/${selected.id}`, selected);
+      setSelected(updated); setItems(xs => xs.map(x => x.id === updated.id ? updated : x)); toast.success("تم حفظ تحقيق OVR");
+    } catch (e: any) { toast.error(e?.message ?? "تعذر حفظ التحقيق"); }
+    finally { setSaving(false); }
+  };
+
   if (selected) return <div className="container mx-auto p-4 max-w-5xl space-y-4" dir="rtl">
     <div className="flex items-center justify-between"><Button variant="outline" onClick={() => setSelected(null)}><ArrowRight className="ml-2 h-4 w-4" />كل بلاغات OVR</Button><Badge variant={selected.status === "closed" ? "default" : "secondary"}>{statusLabels[selected.status] ?? selected.status}</Badge></div>
     <Card><CardHeader><CardTitle><ShieldAlert className="inline ml-2 h-5 w-5 text-primary" />{selected.reportNumber} — بيانات OVR فقط</CardTitle></CardHeader><CardContent className="grid gap-4 md:grid-cols-2">
       <div><Label>تاريخ الواقعة</Label><Input value={String(selected.eventDate ?? "").slice(0, 10)} readOnly /></div><div><Label>وقت الواقعة</Label><Input value={selected.eventTime ?? ""} readOnly /></div>
       <div><Label>القسم</Label><Input value={selected.department} readOnly /></div><div><Label>المكان</Label><Input value={selected.location} readOnly /></div><div><Label>نوع الواقعة</Label><Input value={selected.eventType} readOnly /></div><div><Label>الحالة</Label><select className="h-10 w-full rounded-md border bg-background px-3" value={selected.status} onChange={e => set("status", e.target.value)}>{Object.entries(statusLabels).map(([v, l]) => <option key={v} value={v}>{l}</option>)}</select></div>
-      <div><Label>اسم المريض</Label><Input value={selected.patientName ?? ""} readOnly /></div><div><Label>رقم الملف</Label><Input value={selected.fileNumber ?? ""} readOnly /></div><div><Label>بيانات الحساب المبلغ</Label><Input value={`${selected.reporterName}${selected.reporterRole ? ` — ${selected.reporterRole}` : ""}`} readOnly /></div><div><Label>إشراف المستشفى</Label><Input value={selected.hospitalSupervision ?? "إشراف المستشفى"} readOnly /></div><div><Label>المدير الإداري</Label><Input value={selected.administrativeManager ?? "المدير الإداري"} readOnly /></div>
+      <div><Label>اسم المريض</Label><Input value={selected.patientName ?? ""} readOnly /></div><div><Label>رقم الملف</Label><Input value={selected.fileNumber ?? ""} readOnly /></div><div><Label>بيانات المبلغ</Label><Input value={`${selected.reporterName}${selected.reporterRole ? ` — ${selected.reporterRole}` : ""}`} readOnly /></div><div><Label>إشراف المستشفى</Label><Input value={selected.hospitalSupervision ?? ""} readOnly /></div><div><Label>المدير الإداري</Label><Input value={selected.administrativeManager ?? ""} readOnly /></div>
       <div className="md:col-span-2"><Label>البيانات التي أدخلها المبلغ</Label><Textarea value={selected.description} readOnly rows={4} /></div><div className="md:col-span-2"><Label>الإجراء الفوري</Label><Textarea value={selected.immediateAction ?? ""} readOnly rows={3} /></div>
       <div className="md:col-span-2 border-t pt-4"><h3 className="font-semibold">التحقيق وCAPA</h3></div><div className="md:col-span-2"><Label>ملخص التحقيق</Label><Textarea value={selected.investigationSummary ?? ""} onChange={e => set("investigationSummary", e.target.value)} rows={3} /></div><div className="md:col-span-2"><Label>السبب الجذري</Label><Textarea value={selected.rootCause ?? ""} onChange={e => set("rootCause", e.target.value)} rows={3} /></div><div><Label>الإجراء التصحيحي</Label><Textarea value={selected.correctiveAction ?? ""} onChange={e => set("correctiveAction", e.target.value)} rows={3} /></div><div><Label>الإجراء الوقائي</Label><Textarea value={selected.preventiveAction ?? ""} onChange={e => set("preventiveAction", e.target.value)} rows={3} /></div><div className="md:col-span-2"><Label>ملاحظات التحقيق</Label><Textarea value={selected.verificationNotes ?? ""} onChange={e => set("verificationNotes", e.target.value)} rows={3} /></div><div><Label>مسؤول الإجراء</Label><Input value={selected.actionOwner ?? ""} onChange={e => set("actionOwner", e.target.value)} /></div><div><Label>تاريخ الاستحقاق</Label><Input type="date" value={selected.dueDate ? selected.dueDate.slice(0, 10) : ""} onChange={e => set("dueDate", e.target.value)} /></div><div><Label>تاريخ التحقيق</Label><Input value={selected.reviewedAt ? new Date(selected.reviewedAt).toLocaleString("ar-EG") : "يسجل عند الحفظ"} readOnly /></div><div><Label>اسم المسؤول عن الغلق</Label><Input value={selected.status === "closed" ? (selected.reviewedBy ?? "يسجل عند الغلق") : "يسجل تلقائيًا عند اختيار مغلق"} readOnly /></div>
       <div className="md:col-span-2"><Button onClick={save} disabled={saving} className="w-full"><CheckCircle2 className="ml-2 h-4 w-4" />{saving ? "جار الحفظ..." : selected.status === "closed" ? "حفظ وإغلاق البلاغ" : "حفظ التحقيق"}</Button></div>
     </CardContent></Card>
   </div>;
-  return <div className="container mx-auto p-4 max-w-5xl space-y-4" dir="rtl"><div className="flex items-center justify-between"><div><h1 className="text-2xl font-bold flex items-center gap-2"><ShieldAlert className="text-primary" />إدارة بلاغات OVR</h1><p className="text-muted-foreground">هذه الصفحة تعرض بلاغات OVR فقط، ولا تعرض بيانات الحوادث الواردة.</p></div><Button variant="outline" onClick={load}><RefreshCw className="ml-2 h-4 w-4" />تحديث</Button></div><Card><CardContent className="p-0">{loading ? <p className="p-8 text-center">جار التحميل...</p> : <div className="divide-y">{items.map(x => <button key={x.id} className="w-full text-right p-4 hover:bg-muted/40" onClick={() => setSelected(x)}><div className="flex justify-between gap-3"><b>{x.reportNumber} — {x.eventType}</b><Badge>{statusLabels[x.status] ?? x.status}</Badge></div><p className="text-sm text-muted-foreground mt-1">{x.department} — {x.location} — المبلغ: {x.reporterName}</p><p className="text-sm mt-1">{x.patientName ? `المريض: ${x.patientName}` : "بلاغ عام"}</p></button>)}{!items.length && <p className="p-8 text-center text-muted-foreground">لا توجد بلاغات OVR</p>}</div>}</CardContent></Card></div>;
+
+  return <div className="container mx-auto p-4 max-w-5xl space-y-4" dir="rtl">
+    <div className="flex items-center justify-between"><div><h1 className="text-2xl font-bold flex items-center gap-2"><ShieldAlert className="text-primary" />إدارة بلاغات OVR</h1><p className="text-muted-foreground">هذه الصفحة تعرض بلاغات OVR فقط، ولا تعرض بيانات الحوادث الواردة.</p></div><Button variant="outline" onClick={() => void load()}><RefreshCw className="ml-2 h-4 w-4" />تحديث</Button></div>
+    <Card><CardHeader><CardTitle className="flex items-center gap-2"><Search className="h-5 w-5" />بحث وتصنيف البلاغات</CardTitle></CardHeader><CardContent className="grid gap-4 md:grid-cols-5">
+      <div className="md:col-span-2"><Label>بحث في وصف البلاغ</Label><Input value={filters.q} onChange={e => setFilters(f => ({ ...f, q: e.target.value }))} placeholder="اكتب كلمة للبحث" /></div>
+      <div><Label>القسم</Label><select className="h-10 w-full rounded-md border bg-background px-3" value={filters.department} onChange={e => setFilters(f => ({ ...f, department: e.target.value }))}><option value="">كل الأقسام</option>{departments.map(d => <option key={d} value={d}>{d}</option>)}</select></div>
+      <div><Label>الحالة</Label><select className="h-10 w-full rounded-md border bg-background px-3" value={filters.status} onChange={e => setFilters(f => ({ ...f, status: e.target.value }))}><option value="">كل الحالات</option>{Object.entries(statusLabels).map(([v, l]) => <option key={v} value={v}>{l}</option>)}</select></div>
+      <div><Label>من تاريخ</Label><Input type="date" value={filters.from} onChange={e => setFilters(f => ({ ...f, from: e.target.value }))} /></div><div><Label>إلى تاريخ</Label><Input type="date" value={filters.to} onChange={e => setFilters(f => ({ ...f, to: e.target.value }))} /></div>
+      <div className="md:col-span-5 flex gap-2"><Button onClick={() => void load()}><Search className="ml-2 h-4 w-4" />تطبيق البحث</Button><Button variant="outline" onClick={() => { const empty = { q: "", department: "", status: "", from: "", to: "" }; setFilters(empty); void load(empty); }}>مسح التصنيف</Button></div>
+    </CardContent></Card>
+    <Card><CardContent className="p-0">{loading ? <p className="p-8 text-center">جار التحميل...</p> : <div className="divide-y">{items.map(x => <button key={x.id} className="w-full text-right p-4 hover:bg-muted/40" onClick={() => setSelected(x)}><div className="flex justify-between gap-3"><b>{x.reportNumber} — {x.eventType}</b><Badge>{statusLabels[x.status] ?? x.status}</Badge></div><p className="text-sm text-muted-foreground mt-1">{new Date(x.eventDate).toLocaleDateString("ar-EG")} — {x.department} — {x.location} — المبلغ: {x.reporterName}</p><p className="text-sm mt-1">{x.patientName ? `المريض: ${x.patientName}` : "بلاغ عام"}</p></button>)}{!items.length && <p className="p-8 text-center text-muted-foreground">لا توجد بلاغات OVR بهذه المعايير</p>}</div>}</CardContent></Card>
+  </div>;
 }
