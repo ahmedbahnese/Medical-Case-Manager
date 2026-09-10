@@ -9,7 +9,7 @@ export function exportPDF(
   watermarkBase64?: string | null,
 ) {
   const logoHtml = logoBase64
-    ? `<img src="${logoBase64}" alt="logo" style="height:60px;object-fit:contain;margin-bottom:6pt;" /><br/>`
+    ? `<div class="report-logo"><img src="${logoBase64}" alt="logo" /></div>`
     : "";
   const watermarkHtml = watermarkBase64
     ? `<div class="watermark" style="background-image:url('${watermarkBase64}')"></div>`
@@ -25,7 +25,7 @@ export function exportPDF(
     body {
       font-family: 'Arial Unicode MS','Calibri','Tahoma',Arial,sans-serif;
       direction: rtl;
-      font-size: 10pt;
+      font-size: 9.5pt;
       color: #000;
       margin: 0;
       padding: 0;
@@ -35,20 +35,24 @@ export function exportPDF(
       inset: 0;
       background-repeat: no-repeat;
       background-position: center;
-      background-size: 52%;
+      background-size: 28%;
       opacity: .075;
       pointer-events: none;
       z-index: 0;
     }
     body > *:not(.watermark) { position: relative; z-index: 1; }
-    table { border-collapse: collapse; width: 100%; margin-bottom: 8pt; }
+    .report-logo { text-align: center; height: 34pt; margin-bottom: 3pt; }
+    .report-logo img { height: 30pt; max-width: 120pt; object-fit: contain; }
+    table { border-collapse: collapse; width: 100%; margin-bottom: 8pt; page-break-inside: auto; }
+    thead { display: table-header-group; }
+    tr { page-break-inside: avoid; page-break-after: auto; }
     td, th { border: 1px solid #000; padding: 3px 6px; text-align: right; vertical-align: top; }
     th { background-color: #d9e1f2 !important; -webkit-print-color-adjust: exact; print-color-adjust: exact; font-weight: bold; }
     tr:nth-child(even) td { background-color: #f5f5f5 !important; -webkit-print-color-adjust: exact; print-color-adjust: exact; }
     .header { text-align: center; border-bottom: 2px solid #000; padding-bottom: 6pt; margin-bottom: 10pt; }
     h2, h3 { text-align: center; margin: 3pt 0; }
     p { margin: 2pt 0; }
-    @page { size: A4 portrait; margin: 1.5cm 1cm; }
+    @page { size: A4 landscape; margin: 1cm 0.8cm; }
   </style>
 </head>
 <body>
