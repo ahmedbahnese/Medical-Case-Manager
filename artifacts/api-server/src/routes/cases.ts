@@ -8,7 +8,7 @@ import path from "node:path";
 import { createRequire } from "node:module";
 import { createWorker } from "tesseract.js";
 import { eq, and, like, ne, SQL } from "drizzle-orm";
-import { db, medicalCasesTable, departmentsTable } from "@workspace/db";
+import { db, medicalCasesTable, departmentsTable, waitingCasesTable } from "@workspace/db";
 import {
   GetCasesQueryParams,
   CreateCaseBody,
@@ -125,9 +125,17 @@ router.post("/cases", async (req, res): Promise<void> => {
     return;
   }
   const normalizedName = parsed.data.patientName.trim().replace(/\s+/g, " ").toLocaleLowerCase();
-  const existingNames = await db.select({ patientName: medicalCasesTable.patientName }).from(medicalCasesTable);
-  if (existingNames.some(c => c.patientName.trim().replace(/\s+/g, " ").toLocaleLowerCase() === normalizedName)) {
-    res.status(409).json({ error: "يوجد حالة بنفس الاسم" });
+  const existingNames = await db.select({ id: medicalCasesTable.id, patientName: medicalCasesTable.patientName, departmentId: medicalCasesTable.departmentId }).from(medicalCasesTable).where(ne(medicalCasesTable.status, "discharged"));
+  const existingWaiting = await db.select({ patientName: waitingCasesTable.patientName, section: waitingCasesTable.section }).from(waitingCasesTable).where(eq(waitingCasesTable.status, "waiting"));
+  const duplicate = existingNames.find(c => c.patientName.trim().replace(/\s+/g, " ").toLocaleLowerCase() === normalizedName);
+  const duplicateWaiting = existingWaiting.find(c => c.patientName.trim().replace(/\s+/g, " ").toLocaleLowerCase() === normalizedName);
+  if (duplicate || duplicateWaiting) {
+    let location = duplicateWaiting ? `قائمة الانتظار (${duplicateWaiting.section === "servo" ? "السيرفو" : "الاستقبال"})` : "أحد الأقسام";
+    if (duplicate) {
+      const [department] = await db.select({ name: departmentsTable.name }).from(departmentsTable).where(eq(departmentsTable.id, duplicate.departmentId));
+      location = department?.name ?? location;
+    }
+    res.status(409).json({ error: `يوجد حالة بنفس الاسم: ${duplicate?.patientName ?? duplicateWaiting?.patientName} — مكانها: ${location}` });
     return;
   }
 
@@ -417,9 +425,11 @@ router.patch("/cases/:id", async (req, res): Promise<void> => {
   const data = body.data as any;
   if (data.patientName !== undefined) {
     const normalizedName = data.patientName.trim().replace(/\s+/g, " ").toLocaleLowerCase();
-    const names = await db.select({ id: medicalCasesTable.id, patientName: medicalCasesTable.patientName }).from(medicalCasesTable);
-    if (names.some(c => c.id !== params.data.id && c.patientName.trim().replace(/\s+/g, " ").toLocaleLowerCase() === normalizedName)) {
-      res.status(409).json({ error: "يوجد حالة بنفس الاسم" });
+    const names = await db.select({ id: medicalCasesTable.id, patientName: medicalCasesTable.patientName, departmentId: medicalCasesTable.departmentId }).from(medicalCasesTable).where(ne(medicalCasesTable.status, "discharged"));
+    const duplicate = names.find(c => c.id !== params.data.id && c.patientName.trim().replace(/\s+/g, " ").toLocaleLowerCase() === normalizedName);
+    if (duplicate) {
+      const [department] = await db.select({ name: departmentsTable.name }).from(departmentsTable).where(eq(departmentsTable.id, duplicate.departmentId));
+      res.status(409).json({ error: `يوجد حالة بنفس الاسم: ${duplicate.patientName} — مكانها: ${department?.name ?? "أحد الأقسام"}` });
       return;
     }
   }

@@ -53,7 +53,7 @@ const RECEPTION_FILTERS = [
 ];
 
 const EMPTY_FORM = {
-  patientName: "", age: "", diagnosis: "", parentPhone: "", nationalId: "",
+  patientName: "", age: "", diagnosis: "", notes: "", parentPhone: "", nationalId: "",
   careType: "intensive_care_high", artificialRespiration: "no",
   centralRoomRequired: false, centralRoomCode: "",
 };
@@ -186,6 +186,10 @@ function AddForm({ section, onSuccess }: { section: Section; onSuccess: () => vo
               <Textarea value={form.diagnosis} onChange={e => f("diagnosis", e.target.value)} rows={2} className="resize-none" />
             </div>
             <div className="col-span-2 md:col-span-3 space-y-1">
+              <Label className="text-xs">ملاحظات الحالة</Label>
+              <Textarea value={form.notes} onChange={e => f("notes", e.target.value)} rows={2} className="resize-none" placeholder="ملاحظات خاصة بالحالة أو تعليمات المتابعة" />
+            </div>
+            <div className="col-span-2 md:col-span-3 space-y-1">
               <Label className="text-xs">تصوير / اختيار ورقة الطوارئ (اختياري، حتى 10MB)</Label>
               <Input type="file" accept=".pdf,.png,.jpg,.jpeg,.webp" capture="environment" onChange={async e => {
                 const file = e.target.files?.[0];
@@ -241,6 +245,7 @@ function WaitingCaseActionDialog({
     patientName: waitingCase.patientName ?? "",
     age: waitingCase.age ?? "",
     diagnosis: waitingCase.diagnosis ?? "",
+    notes: waitingCase.notes ?? "",
     parentPhone: waitingCase.parentPhone ?? "",
     nationalId: waitingCase.nationalId ?? "",
     careType: waitingCase.careType ?? "intensive_care_high",
@@ -263,7 +268,7 @@ function WaitingCaseActionDialog({
   const isPending = update.isPending || createCase.isPending;
 
   const handleSaveOnly = () => {
-    update.mutate({ id: waitingCase.id, data: { ...form, medicalReport, medicalReportName: reportFile?.name, medicalReportData: reportFile?.data } as any }, {
+    update.mutate({ id: waitingCase.id, data: { ...form, notes: form.notes || undefined, medicalReport, medicalReportName: reportFile?.name, medicalReportData: reportFile?.data } as any }, {
       onSuccess: () => { toast.success("تم تحديث البيانات"); onSuccess(); onClose(); },
       onError: (e: any) => toast.error("خطأ: " + (e?.response?.data?.error ?? e.message)),
     });
@@ -286,7 +291,7 @@ function WaitingCaseActionDialog({
         }
       }, {
         onSuccess: () => {
-          update.mutate({ id: waitingCase.id, data: { status: "admitted" as WaitingCaseUpdateStatus, ...form, medicalReport, medicalReportName: reportFile?.name, medicalReportData: reportFile?.data } as any }, {
+          update.mutate({ id: waitingCase.id, data: { status: "admitted" as WaitingCaseUpdateStatus, ...form, notes: form.notes || undefined, medicalReport, medicalReportName: reportFile?.name, medicalReportData: reportFile?.data } as any }, {
             onSuccess: () => { toast.success("تم نقل الحالة للقسم بنجاح"); onSuccess(); onClose(); },
           });
         },
@@ -296,7 +301,7 @@ function WaitingCaseActionDialog({
       if (exitReason === "transferred" && !transferHospital.trim()) { toast.error("اكتب اسم المستشفى المحول إليها"); return; }
       update.mutate({
         id: waitingCase.id,
-        data: { status: "cancelled" as WaitingCaseUpdateStatus, exitReason, transferDestination: transferHospital, ...form, medicalReport, medicalReportName: reportFile?.name, medicalReportData: reportFile?.data } as any
+        data: { status: "cancelled" as WaitingCaseUpdateStatus, exitReason, transferDestination: transferHospital, ...form, notes: form.notes || undefined, medicalReport, medicalReportName: reportFile?.name, medicalReportData: reportFile?.data } as any
       }, {
         onSuccess: () => { toast.success(`تم تسجيل الخروج — ${EXIT_REASONS.find(r => r.value === exitReason)?.label}`); onSuccess(); onClose(); },
         onError: (e: any) => toast.error("خطأ: " + e.message)
@@ -355,6 +360,10 @@ function WaitingCaseActionDialog({
               <div className="col-span-2 space-y-1">
                 <Label className="text-xs">التشخيص</Label>
                 <Textarea value={form.diagnosis} onChange={e => f("diagnosis", e.target.value)} rows={2} className="resize-none" />
+              </div>
+              <div className="col-span-2 space-y-1">
+                <Label className="text-xs">ملاحظات الحالة</Label>
+                <Textarea value={form.notes} onChange={e => f("notes", e.target.value)} rows={2} className="resize-none" />
               </div>
               <div className="col-span-2 flex items-center gap-3 flex-wrap">
                 <Checkbox id="cr-action" checked={form.centralRoomRequired} onCheckedChange={v => f("centralRoomRequired", !!v)} />

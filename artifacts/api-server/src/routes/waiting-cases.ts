@@ -1,6 +1,6 @@
 import { Router, type IRouter } from "express";
 import { eq, and, ne, SQL } from "drizzle-orm";
-import { db, waitingCasesTable, medicalCasesTable } from "@workspace/db";
+import { db, waitingCasesTable, medicalCasesTable, departmentsTable } from "@workspace/db";
 import {
   GetWaitingCasesQueryParams,
   CreateWaitingCaseBody,
@@ -44,10 +44,18 @@ router.post("/waiting-cases", async (req, res): Promise<void> => {
     return;
   }
   const normalizedName = parsed.data.patientName.trim().replace(/\s+/g, " ").toLocaleLowerCase();
-  const existingWaiting = await db.select({ patientName: waitingCasesTable.patientName }).from(waitingCasesTable).where(eq(waitingCasesTable.status, "waiting"));
-  const existingCases = await db.select({ patientName: medicalCasesTable.patientName }).from(medicalCasesTable).where(ne(medicalCasesTable.status, "discharged"));
-  if ([...existingWaiting, ...existingCases].some(c => c.patientName.trim().replace(/\s+/g, " ").toLocaleLowerCase() === normalizedName)) {
-    res.status(409).json({ error: "يوجد حالة بنفس الاسم" });
+  const existingWaiting = await db.select({ id: waitingCasesTable.id, patientName: waitingCasesTable.patientName, section: waitingCasesTable.section }).from(waitingCasesTable).where(eq(waitingCasesTable.status, "waiting"));
+  const existingCases = await db.select({ id: medicalCasesTable.id, patientName: medicalCasesTable.patientName, departmentId: medicalCasesTable.departmentId }).from(medicalCasesTable).where(ne(medicalCasesTable.status, "discharged"));
+  const duplicateWaiting = existingWaiting.find(c => c.patientName.trim().replace(/\s+/g, " ").toLocaleLowerCase() === normalizedName);
+  const duplicateCase = existingCases.find(c => c.patientName.trim().replace(/\s+/g, " ").toLocaleLowerCase() === normalizedName);
+  if (duplicateWaiting || duplicateCase) {
+    const location = duplicateWaiting ? `قائمة الانتظار — ${duplicateWaiting.section === "servo" ? "السيرفو" : "الاستقبال"}` : (() => "أحد الأقسام")();
+    let departmentName = location;
+    if (duplicateCase) {
+      const [department] = await db.select({ name: departmentsTable.name }).from(departmentsTable).where(eq(departmentsTable.id, duplicateCase.departmentId));
+      departmentName = department?.name ?? location;
+    }
+    res.status(409).json({ error: `يوجد حالة بنفس الاسم: ${duplicateWaiting?.patientName ?? duplicateCase?.patientName} — مكانها: ${departmentName}` });
     return;
   }
 
@@ -55,6 +63,7 @@ router.post("/waiting-cases", async (req, res): Promise<void> => {
     patientName: parsed.data.patientName,
     age: parsed.data.age ?? null,
     diagnosis: parsed.data.diagnosis ?? null,
+    notes: (parsed.data as any).notes ?? null,
     parentPhone: parsed.data.parentPhone ?? null,
     nationalId: parsed.data.nationalId ?? null,
     medicalReport: (parsed.data as any).medicalReport ?? null,
@@ -103,14 +112,20 @@ router.patch("/waiting-cases/:id", async (req, res): Promise<void> => {
   const extraData = req.body as any;
   if (body.data.patientName !== undefined) {
     const normalizedName = body.data.patientName.trim().replace(/\s+/g, " ").toLocaleLowerCase();
-    const names = await db.select({ id: waitingCasesTable.id, patientName: waitingCasesTable.patientName }).from(waitingCasesTable);
-    if (names.some(c => c.id !== params.data.id && c.patientName.trim().replace(/\s+/g, " ").toLocaleLowerCase() === normalizedName)) {
-      res.status(409).json({ error: "يوجد حالة بنفس الاسم" });
+    const names = await db.select({ id: waitingCasesTable.id, patientName: waitingCasesTable.patientName, section: waitingCasesTable.section }).from(waitingCasesTable);
+    const duplicate = names.find(c => c.id !== params.data.id && c.patientName.trim().replace(/\s+/g, " ").toLocaleLowerCase() === normalizedName);
+    if (duplicate) {
+      res.status(409).json({ error: `يوجد حالة بنفس الاسم: ${duplicate.patientName} — مكانها: قائمة الانتظار (${duplicate.section === "servo" ? "السيرفو" : "الاستقبال"})` });
       return;
     }
   }
+  if (extraData.exitReason === "transferred" && !String(extraData.transferDestination ?? "").trim()) {
+    res.status(400).json({ error: "اكتب اسم المستشفى المحول إليها" });
+    return;
+  }
   const updates: Record<string, unknown> = { ...body.data, updatedAt: new Date() };
   if (extraData.transferDestination !== undefined) updates.transferDestination = extraData.transferDestination?.trim() || null;
+  if (extraData.notes !== undefined) updates.notes = extraData.notes || null;
   for (const key of ["medicalReport", "medicalReportName", "medicalReportData"]) {
     if (extraData[key] !== undefined) updates[key] = extraData[key] || null;
   }

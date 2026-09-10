@@ -29,6 +29,7 @@ export const waitingCasesTable = sqliteTable("waiting_cases", {
   patientName: text("patient_name").notNull(),
   age: text("age"),
   diagnosis: text("diagnosis"),
+  notes: text("notes"),
   parentPhone: text("parent_phone"),
   nationalId: text("national_id"),
   medicalReport: text("medical_report"),
