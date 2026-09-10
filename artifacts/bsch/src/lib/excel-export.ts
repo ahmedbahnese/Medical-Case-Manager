@@ -46,19 +46,30 @@ export async function exportArabicXlsx(options: {
   sheet.columns.forEach((column, index) => { column.width = options.columnWidths?.[index] ?? 18; });
   sheet.autoFilter = { from: { row: 5, column: 1 }, to: { row: Math.max(sheet.rowCount, 5), column: last } };
   const safeName = options.filename.toLowerCase().endsWith(".xlsx") ? options.filename : `${options.filename}.xlsx`;
-  const preview = window.open("", "bsch-xlsx-preview", "width=1400,height=900,resizable=yes,scrollbars=yes");
-  if (!preview) { window.alert("يرجى السماح بالنوافذ المنبثقة لعرض معاينة التقرير"); return; }
   const esc = (value: ExcelCell) => String(value ?? "").replace(/[&<>\"]/g, ch => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", "\"": "&quot;" }[ch]!));
+  const overlay = document.createElement("div");
+  overlay.setAttribute("role", "dialog");
+  overlay.setAttribute("aria-modal", "true");
+  overlay.style.cssText = "position:fixed;inset:0;z-index:2147483646;background:#111827;padding:12px;display:flex;flex-direction:column;gap:10px";
+  const toolbar = document.createElement("div");
+  toolbar.style.cssText = "display:flex;align-items:center;justify-content:space-between;gap:8px;color:white;font-family:Tahoma,Arial,sans-serif";
+  const title = document.createElement("strong");
+  title.textContent = `معاينة Excel قبل الحفظ — ${options.rows.length} سجل`;
+  const actions = document.createElement("div");
+  actions.style.cssText = "display:flex;gap:8px";
+  const button = (label: string, color: string) => { const b = document.createElement("button"); b.textContent = label; b.style.cssText = `border:0;border-radius:6px;padding:9px 14px;background:${color};color:white;cursor:pointer;font-weight:bold`; return b; };
+  const saveButton = button("حفظ XLSX", "#16a34a");
+  const printButton = button("طباعة", "#0ea5e9");
+  const closeButton = button("إغلاق", "#475569");
+  const frame = document.createElement("iframe");
+  frame.title = "معاينة جدول Excel";
+  frame.style.cssText = "width:100%;flex:1;border:0;border-radius:6px;background:white";
   const previewRows = options.rows.map(row => `<tr>${row.map(cell => `<td>${esc(cell)}</td>`).join("")}</tr>`).join("");
-  preview.document.write(`<!doctype html><html dir="rtl"><head><meta charset="utf-8"><title>معاينة ${esc(options.reportTitle)}</title><style>
-    body{font-family:Arial,sans-serif;background:#f3f4f6;margin:0;padding:24px;color:#111827}.toolbar{display:flex;gap:10px;align-items:center;justify-content:space-between;margin-bottom:18px}.toolbar button{background:#2563eb;color:white;border:0;border-radius:6px;padding:10px 18px;font-size:15px;cursor:pointer}.toolbar button.secondary{background:#6b7280}main{background:#fff;padding:24px;box-shadow:0 2px 12px #0001;overflow:auto}h1,h2,p{text-align:center;margin:6px}.meta{color:#4b5563}table{border-collapse:collapse;width:100%;min-width:900px;margin-top:20px}th{background:#2563eb;color:#fff;font-weight:bold}th,td{border:1px solid #d1d5db;padding:9px;text-align:right;vertical-align:top;white-space:pre-wrap}tr:nth-child(even){background:#f8fafc}@media print{.toolbar{display:none}body{background:#fff;padding:0}main{box-shadow:none}}
-  </style></head><body><div class="toolbar"><strong>معاينة التقرير قبل الحفظ — ${options.rows.length} سجل</strong><div><button id="save">حفظ XLSX</button> <button class="secondary" onclick="window.print()">طباعة</button> <button class="secondary" onclick="window.close()">إغلاق</button></div></div><main><h1>${esc(options.hospitalName)}</h1><h2>${esc(options.reportTitle)}</h2><p class="meta">${esc(date)} — عدد الحالات: ${options.rows.length}</p><table><thead><tr>${options.columns.map(esc).map(x => `<th>${x}</th>`).join("")}</tr></thead><tbody>${previewRows}</tbody></table></main></body></html>`);
-  preview.document.close();
-  preview.document.getElementById("save")?.addEventListener("click", async () => {
-  const buffer = await workbook.xlsx.writeBuffer();
-  const blob = new Blob([buffer], { type: "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet" });
-  const url = URL.createObjectURL(blob);
-  const a = preview.document.createElement("a"); a.href = url; a.download = safeName; preview.document.body.appendChild(a); a.click(); a.remove();
-  setTimeout(() => URL.revokeObjectURL(url), 1000);
-  });
+  const previewDoc = `<!doctype html><html dir="rtl"><head><meta charset="utf-8"><style>body{font-family:Arial,Tahoma,sans-serif;margin:24px;color:#111827}h1,h2,p{text-align:center;margin:6px}p{color:#4b5563}table{border-collapse:collapse;width:100%;min-width:1100px}th{background:#2563eb;color:#fff;font-weight:bold}th,td{border:1px solid #d1d5db;padding:9px;text-align:right;vertical-align:top;white-space:pre-wrap}tr:nth-child(even){background:#f8fafc}@media print{body{margin:0}h1,h2,p{margin:2px}}</style></head><body><h1>${esc(options.hospitalName)}</h1><h2>${esc(options.reportTitle)}</h2><p>${esc(date)} — عدد الحالات: ${options.rows.length}</p><table><thead><tr>${options.columns.map(esc).map(x => `<th>${x}</th>`).join("")}</tr></thead><tbody>${previewRows}</tbody></table></body></html>`;
+  frame.srcdoc = previewDoc;
+  saveButton.addEventListener("click", async () => { const buffer = await workbook.xlsx.writeBuffer(); const blob = new Blob([buffer], { type: "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet" }); const url = URL.createObjectURL(blob); const a = document.createElement("a"); a.href = url; a.download = safeName; a.click(); setTimeout(() => URL.revokeObjectURL(url), 1000); });
+  printButton.addEventListener("click", () => frame.contentWindow?.print());
+  closeButton.addEventListener("click", () => overlay.remove());
+  actions.append(saveButton, printButton, closeButton); toolbar.append(title, actions); overlay.append(toolbar, frame); document.body.appendChild(overlay);
+
 }
