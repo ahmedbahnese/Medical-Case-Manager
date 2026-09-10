@@ -1,5 +1,5 @@
 import { Router, type IRouter } from "express";
-import { and, desc, eq, gte, lte, like } from "drizzle-orm";
+import { and, desc, eq, gte, lte, like, or } from "drizzle-orm";
 import { db, ovrReportsTable } from "@workspace/db";
 import { logAction } from "./audit-logs";
 import { getCurrentUserAccess } from "../middleware/auth";
@@ -21,7 +21,13 @@ router.get("/ovr-reports", async (req, res) => {
       status ? eq(ovrReportsTable.status, status) : undefined,
       from && !Number.isNaN(from.getTime()) ? gte(ovrReportsTable.eventDate, from) : undefined,
       to && !Number.isNaN(to.getTime()) ? lte(ovrReportsTable.eventDate, to) : undefined,
-      q ? like(ovrReportsTable.description, `%${q}%`) : undefined,
+      q ? or(
+        like(ovrReportsTable.reportNumber, `%${q}%`),
+        like(ovrReportsTable.patientName, `%${q}%`),
+        like(ovrReportsTable.fileNumber, `%${q}%`),
+        like(ovrReportsTable.eventType, `%${q}%`),
+        like(ovrReportsTable.description, `%${q}%`),
+      ) : undefined,
     ].filter(Boolean) as any[];
     const reports = await db.select().from(ovrReportsTable)
       .where(filters.length ? and(...filters) : undefined)
@@ -75,7 +81,7 @@ router.patch("/ovr-reports/:id", async (req, res) => {
   const now = new Date();
   const updates: any = { updatedAt: now, reviewedBy: access.name, reviewedAt: now };
   if (b.status === "closed") { updates.closedBy = access.name; updates.closedAt = now; }
-  for (const k of ["status","severity","investigationSummary","rootCause","correctiveAction","preventiveAction","actionOwner","verificationNotes","dueDate"]) if (b[k] !== undefined) updates[k] = k === "dueDate" && b[k] ? new Date(b[k]) : b[k];
+  for (const k of ["status","severity","investigationSummary","rootCause","correctiveAction","preventiveAction","actionOwner","verificationNotes","investigatorName","dueDate","investigationDate"]) if (b[k] !== undefined) updates[k] = (k === "dueDate" || k === "investigationDate") && b[k] ? new Date(b[k]) : (b[k] || null);
   await db.update(ovrReportsTable).set(updates).where(eq(ovrReportsTable.id, id));
   const [updated] = await db.select().from(ovrReportsTable).where(eq(ovrReportsTable.id, id));
   if (!updated) { res.status(404).json({ error: "البلاغ غير موجود" }); return; }
