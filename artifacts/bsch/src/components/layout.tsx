@@ -1,4 +1,4 @@
-import { ReactNode, useState } from "react";
+import { ReactNode, useEffect, useState } from "react";
 import { Link, useLocation } from "wouter";
 import { useGetMe, useLogout } from "@workspace/api-client-react";
 import { useAppSettings } from "@/contexts/settings-context";
@@ -19,13 +19,17 @@ import {
   FileOutput,
   History,
   ShieldCheck,
+  Bell,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Toaster } from "sonner";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Label } from "@/components/ui/label";
+import { Input } from "@/components/ui/input";
 import { PwaInstallPrompt, useSwUpdateToast } from "@/components/pwa-install-prompt";
+import { apiGet, apiPost } from "@/lib/api";
+import { toast } from "sonner";
 
 const NAV_GROUPS = [
   {
@@ -80,6 +84,27 @@ export function Layout({ children }: { children: ReactNode }) {
   const { hospital_name, logo_base64 } = useAppSettings();
   const [showLogoutDialog, setShowLogoutDialog] = useState(false);
   const [logoutReason, setLogoutReason] = useState("end_shift");
+  const [onlineUsers, setOnlineUsers] = useState<Array<{ name: string; lastSeen: number }>>([]);
+  const [showPresence, setShowPresence] = useState(false);
+  const [noticeText, setNoticeText] = useState("");
+  const [lastNoticeId, setLastNoticeId] = useState(Number(localStorage.getItem("bsch:last-notice") || 0));
+  useEffect(() => {
+    if (!(user as any)?.isAuthenticated) return;
+    const heartbeat = () => apiPost("/api/presence/heartbeat", {}).catch(() => {});
+    const notices = () => apiGet<Array<{ id: number; message: string; from: string }>>(`/api/notifications?since=${lastNoticeId}`).then(items => {
+      for (const item of items) toast.info(`${item.from}: ${item.message}`, { duration: 8000 });
+      const latest = items.at(-1)?.id;
+      if (latest) { setLastNoticeId(latest); localStorage.setItem("bsch:last-notice", String(latest)); }
+    }).catch(() => {});
+    heartbeat(); notices();
+    const timer = window.setInterval(() => { heartbeat(); notices(); }, 30000);
+    return () => window.clearInterval(timer);
+  }, [(user as any)?.isAuthenticated, lastNoticeId]);
+  useEffect(() => {
+    if (!(user as any)?.isFounder) return;
+    const load = () => apiGet<Array<{ name: string; lastSeen: number }>>("/api/presence/online").then(setOnlineUsers).catch(() => {});
+    load(); const timer = window.setInterval(load, 15000); return () => window.clearInterval(timer);
+  }, [(user as any)?.isFounder]);
 
   useSwUpdateToast();
 
@@ -242,6 +267,9 @@ export function Layout({ children }: { children: ReactNode }) {
       {/* Main Content */}
       <main className="flex-1 overflow-x-hidden p-4 md:p-8 bg-background relative w-full">
         <div className="mb-4 flex justify-end no-print">
+          {isFounder && <Button variant="outline" className="ml-2 gap-2" onClick={() => setShowPresence(true)}>
+            <Bell className="h-4 w-4" /> الحسابات المفتوحة ({onlineUsers.length})
+          </Button>}
           <Link
             href="/ovr-incident-report"
             className="inline-flex items-center gap-2 rounded-md bg-destructive px-4 py-2 text-sm font-semibold text-destructive-foreground shadow-sm transition-colors hover:bg-destructive/90"
@@ -265,6 +293,18 @@ export function Layout({ children }: { children: ReactNode }) {
 
       {/* PWA install prompt (Android/Windows banner + iOS instructions) */}
       <PwaInstallPrompt />
+      <Dialog open={showPresence} onOpenChange={setShowPresence}>
+        <DialogContent dir="rtl" className="max-w-lg">
+          <DialogHeader><DialogTitle>الحسابات المفتوحة وإرسال إشعار</DialogTitle></DialogHeader>
+          <div className="space-y-3">
+            <div className="rounded-md border p-3 space-y-2 max-h-48 overflow-y-auto">
+              {onlineUsers.length === 0 ? <p className="text-sm text-muted-foreground">لا توجد حسابات متصلة الآن</p> : onlineUsers.map(u => <div key={u.name} className="flex items-center justify-between text-sm"><span>{u.name}</span><span className="text-green-600">متصل</span></div>)}
+            </div>
+            <Input value={noticeText} onChange={e => setNoticeText(e.target.value)} placeholder="اكتب رسالة تظهر كإشعار للمستخدمين" />
+          </div>
+          <DialogFooter><Button disabled={!noticeText.trim()} onClick={async () => { try { await apiPost("/api/notifications", { message: noticeText }); setNoticeText(""); toast.success("تم إرسال الإشعار"); } catch (e: any) { toast.error(e.message); } }}>إرسال الإشعار</Button></DialogFooter>
+        </DialogContent>
+      </Dialog>
 
       {/* Logout Confirmation Dialog */}
       <Dialog open={showLogoutDialog} onOpenChange={setShowLogoutDialog}>

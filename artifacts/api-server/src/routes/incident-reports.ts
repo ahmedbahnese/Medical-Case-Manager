@@ -8,14 +8,14 @@ const router: IRouter = Router();
 
 router.get("/incident-reports", async (req, res): Promise<void> => {
   const access = await getCurrentUserAccess(req.headers.cookie);
-  if (!access.canReviewOvr) { res.status(403).json({ error: "عرض بلاغات OVR يتطلب صلاحية المؤسس أو مسؤول الجودة" }); return; }
+  if (!access.isFounder && access.role !== "quality") { res.status(403).json({ error: "عرض بيانات الحوادث يتطلب صلاحية الجودة أو المؤسس" }); return; }
   const reports = await db.select().from(incidentReportsTable).orderBy(desc(incidentReportsTable.createdAt));
   res.json(reports.map(r => ({ ...r, cases: JSON.parse(r.casesJson ?? "[]") })));
 });
 
 router.get("/incident-reports/:id", async (req, res): Promise<void> => {
   const access = await getCurrentUserAccess(req.headers.cookie);
-  if (!access.canReviewOvr) { res.status(403).json({ error: "عرض بلاغات OVR يتطلب صلاحية المؤسس أو مسؤول الجودة" }); return; }
+  if (!access.isFounder && access.role !== "quality") { res.status(403).json({ error: "عرض بيانات الحوادث يتطلب صلاحية الجودة أو المؤسس" }); return; }
   const id = parseInt(req.params.id as string, 10);
   const [report] = await db.select().from(incidentReportsTable).where(eq(incidentReportsTable.id, id));
   if (!report) {
@@ -54,7 +54,8 @@ router.post("/incident-reports", async (req, res): Promise<void> => {
 
   const [report] = await db.select().from(incidentReportsTable).where(eq(incidentReportsTable.id, newReportId));
 
-  // Auto-save each case as a waiting case in reception
+  // Incident cases intentionally enter the reception waiting list; this is
+  // separate from OVR, which is stored and managed by its own routes.
   const casesArr: any[] = cases ?? [];
   for (const c of casesArr) {
     if (c.name) {
@@ -69,7 +70,7 @@ router.post("/incident-reports", async (req, res): Promise<void> => {
           centralRoomRequired: false,
           artificialRespiration: "no",
         });
-      } catch { /* skip if invalid */ }
+      } catch { /* duplicate or invalid case does not block report save */ }
     }
   }
 
@@ -79,7 +80,7 @@ router.post("/incident-reports", async (req, res): Promise<void> => {
 
 router.patch("/incident-reports/:id", async (req, res): Promise<void> => {
   const access = await getCurrentUserAccess(req.headers.cookie);
-  if (!access.canReviewOvr) { res.status(403).json({ error: "تعديل والتحقيق في OVR يتطلب صلاحية المؤسس أو مسؤول الجودة" }); return; }
+  if (!access.isFounder && access.role !== "quality") { res.status(403).json({ error: "تعديل بيانات الحوادث يتطلب صلاحية الجودة أو المؤسس" }); return; }
   const id = parseInt(req.params.id as string, 10);
 
   // Verify existence
@@ -118,7 +119,7 @@ router.patch("/incident-reports/:id", async (req, res): Promise<void> => {
 
 router.delete("/incident-reports/:id", async (req, res): Promise<void> => {
   const access = await getCurrentUserAccess(req.headers.cookie);
-  if (!access.isFounder) { res.status(403).json({ error: "حذف بلاغ OVR متاح للمؤسس فقط" }); return; }
+  if (!access.isFounder) { res.status(403).json({ error: "حذف بيانات الحوادث متاح للمؤسس فقط" }); return; }
   const id = parseInt(req.params.id as string, 10);
 
   // MySQL does not support .returning() — select first, then delete

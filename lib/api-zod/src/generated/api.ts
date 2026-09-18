@@ -379,6 +379,9 @@ export const CreateWaitingCaseBody = zod.object({
   "age": zod.string().optional(),
   "diagnosis": zod.string().optional(),
   "notes": zod.string().optional(),
+  "medicalReport": zod.string().optional(),
+  "medicalReportName": zod.string().optional(),
+  "medicalReportData": zod.string().optional(),
   "parentPhone": zod.string().optional(),
   "nationalId": zod.string().optional(),
   "careType": zod.enum(['intensive_care_high', 'intensive_care_medium', 'picu', 'incubator', 'internal']),
@@ -419,6 +422,10 @@ export const UpdateWaitingCaseBody = zod.object({
   "age": zod.string().optional(),
   "diagnosis": zod.string().optional(),
   "notes": zod.string().optional(),
+  "medicalReport": zod.string().optional(),
+  "medicalReportName": zod.string().optional(),
+  "medicalReportData": zod.string().optional(),
+  "transferDestination": zod.string().optional(),
   "parentPhone": zod.string().optional(),
   "nationalId": zod.string().optional(),
   "careType": zod.enum(['intensive_care_high', 'intensive_care_medium', 'picu', 'incubator', 'internal']).optional(),
@@ -509,5 +516,4 @@ export const CreateBackupResponse = zod.object({
   "recordCount": zod.number(),
   "createdAt": zod.coerce.date()
 })
-
 

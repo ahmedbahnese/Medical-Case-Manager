@@ -1,5 +1,5 @@
 import { useState, useEffect } from "react";
-import { AlertTriangle, Plus, Trash2, Printer, Save, Edit, ArrowLeft } from "lucide-react";
+import { AlertTriangle, Plus, Trash2, Printer, Save, Edit, ArrowLeft, FileDown, FileText } from "lucide-react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -12,6 +12,7 @@ import { ConfirmDialog } from "@/components/confirm-dialog";
 import { formatDateTimeAr } from "@/lib/constants";
 import { ReportWatermark } from "@/components/report-watermark";
 import { useAppSettings } from "@/contexts/settings-context";
+import { exportPDF } from "@/lib/pdf-export";
 
 interface IncidentCase {
   id: number;
@@ -53,6 +54,18 @@ interface IncidentReport {
 
 function emptyCase(id: number): IncidentCase {
   return { id, name: "", age: "", address: "", diagnosis: "", hospital: "", followup: "", phone: "", nationalId: "" };
+}
+
+function incidentHtml(report: ReportForm): string {
+  const esc = (value: unknown) => String(value ?? "").replace(/[&<>"']/g, c => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c] ?? c));
+  const rows = report.cases.map((c, i) => `<tr><td>${i + 1}</td><td>${esc(c.name)}</td><td>${esc(c.age)}</td><td>${esc(c.address)}</td><td>${esc(c.diagnosis)}</td><td>${esc(c.hospital)}</td><td>${esc(c.followup)}</td></tr>`).join("");
+  return `<section dir="rtl"><div class="header"><h2>تقرير الحادث</h2></div><p><b>نوع الحادث:</b> ${esc(report.incidentType)} &nbsp; <b>المكان:</b> ${esc(report.incidentLocation)}</p><p><b>التاريخ:</b> ${esc(report.reportDate)} &nbsp; <b>اليوم:</b> ${esc(report.reportDay)} &nbsp; <b>الساعة:</b> ${esc(report.reportTime)}</p><p><b>إجمالي المصابين:</b> ${report.totalInjured} &nbsp; <b>إجمالي الوفيات:</b> ${report.totalDeaths}</p>${report.hospitalsTransferredTo ? `<p><b>المستشفيات المحول إليها:</b> ${esc(report.hospitalsTransferredTo)}</p>` : ""}<p><b>وصف الواقعة:</b> ${esc(report.eventDescription)}</p><h3>بيان الحالات</h3><table><thead><tr><th>م</th><th>الاسم</th><th>السن</th><th>العنوان</th><th>التشخيص</th><th>مستشفى الإخلاء</th><th>المتابعة</th></tr></thead><tbody>${rows}</tbody></table></section>`;
+}
+
+function downloadIncidentWord(report: ReportForm): void {
+  const html = `<!doctype html><html dir="rtl"><head><meta charset="utf-8"><style>body{font-family:Arial,Tahoma,sans-serif;direction:rtl}table{border-collapse:collapse;width:100%}th,td{border:1px solid #000;padding:6px;text-align:right}th{background:#d9e1f2}h2,h3{text-align:center}</style></head><body>${incidentHtml(report)}</body></html>`;
+  const blob = new Blob(["\ufeff", html], { type: "application/msword" });
+  const url = URL.createObjectURL(blob); const a = document.createElement("a"); a.href = url; a.download = `بيان-حادث-${report.reportDate || "report"}.doc`; a.click(); setTimeout(() => URL.revokeObjectURL(url), 1000);
 }
 
 interface ReportForm {
@@ -229,7 +242,7 @@ export default function IncidentReportPage() {
       } else {
         const saved = await apiPost<IncidentReport>("/api/incident-reports", payload);
         setCurrentReport({ ...currentReport, id: saved.id });
-        toast.success("تم حفظ التقرير وإضافة الحالات لقائمة الانتظار");
+        toast.success("تم حفظ التقرير وإضافة الحالات لقائمة انتظار الاستقبال");
       }
       setIsEditing(false);
       setShowPrint(true);
@@ -394,6 +407,14 @@ export default function IncidentReportPage() {
               <Printer className="h-4 w-4" /> طباعة
             </Button>
           )}
+          {showPrint && <>
+            <Button variant="outline" className="gap-2" onClick={() => exportPDF(incidentHtml(currentReport), `بيان حادث ${currentReport.reportDate}`, logo_base64, watermark_enabled ? logo_base64 : null)}>
+              <FileDown className="h-4 w-4" /> PDF
+            </Button>
+            <Button variant="outline" className="gap-2" onClick={() => downloadIncidentWord(currentReport)}>
+              <FileText className="h-4 w-4" /> Word
+            </Button>
+          </>}
         </div>
       </div>
 

@@ -99,7 +99,6 @@ export function exportPDF(
   const frame = document.createElement("iframe");
   frame.title = "معاينة تقرير PDF";
   frame.style.cssText = "width:100%;flex:1;border:0;border-radius:6px;background:#fff";
-  frame.setAttribute("sandbox", "allow-same-origin allow-modals");
   frame.srcdoc = doc;
 
   const close = () => backdrop.remove();
@@ -129,7 +128,7 @@ export function exportPDF(
       return;
     }
     frameWindow.focus();
-    frameWindow.print();
+    window.setTimeout(() => frameWindow.print(), 120);
   });
 
   actions.appendChild(nativePdfButton);
