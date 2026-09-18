@@ -30,6 +30,7 @@ import { Input } from "@/components/ui/input";
 import { PwaInstallPrompt, useSwUpdateToast } from "@/components/pwa-install-prompt";
 import { apiGet, apiPost } from "@/lib/api";
 import { toast } from "sonner";
+import { VoiceCallWidget } from "@/components/voice-call-widget";
 
 const NAV_GROUPS = [
   {
@@ -276,6 +277,7 @@ export function Layout({ children }: { children: ReactNode }) {
       {/* Main Content */}
       <main className="flex-1 overflow-x-hidden p-4 md:p-8 bg-background relative w-full">
         <div className="mb-4 flex justify-end no-print">
+          <VoiceCallWidget isFounder={isFounder} />
           {isFounder && <Button variant="outline" className="ml-2 gap-2" onClick={() => setShowPresence(true)}>
             <Bell className="h-4 w-4" /> الحسابات المفتوحة ({onlineUsers.length})
           </Button>}

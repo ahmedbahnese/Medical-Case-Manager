@@ -12,6 +12,7 @@ import incidentReportsRouter from "./incident-reports";
 import ovrReportsRouter from "./ovr-reports";
 import auditLogsRouter from "./audit-logs";
 import presenceRouter from "./presence";
+import callsRouter from "./calls";
 
 const router: IRouter = Router();
 
@@ -31,5 +32,6 @@ router.use(incidentReportsRouter);
 router.use(ovrReportsRouter);
 router.use(auditLogsRouter);
 router.use(presenceRouter);
+router.use(callsRouter);
 
 export default router;
