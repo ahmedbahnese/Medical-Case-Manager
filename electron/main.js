@@ -30,7 +30,10 @@ let apiStartError = null;
 let isQuitting = false;
 let isHidingWindow = false;
 let sleepBlockerId = null;
-const startHidden = process.argv.includes('--hidden') || app.getLoginItemSettings().wasOpenedAtLogin;
+// Only the explicit startup shortcut argument should hide the window. Reading
+// wasOpenedAtLogin here makes some Windows 7 builds stay hidden on every launch
+// after the application has been added to startup.
+const startHidden = process.argv.includes('--hidden');
 
 function writeDiagnostic(message) {
   try {
@@ -335,8 +338,14 @@ async function createWindow() {
 
 function createTray() {
   // Use a minimal 1×1 transparent icon as fallback (icon replaced by installer)
-  const icon = nativeImage.createEmpty();
-  tray = new Tray(icon);
+  try {
+    const icon = nativeImage.createEmpty();
+    tray = new Tray(icon);
+  } catch (err) {
+    writeDiagnostic(`tray unavailable: ${err?.stack || err}`);
+    tray = null;
+    return;
+  }
   tray.setToolTip('BSCH - نظام إدارة الحالات الطبية');
 
   const contextMenu = Menu.buildFromTemplate([
