@@ -41,7 +41,7 @@ router.get("/notifications", async (req, res): Promise<void> => {
   const history = req.query.history === "1" && user === "المؤسس";
   const rows = await db.select().from(notificationsTable).orderBy(desc(notificationsTable.id)).limit(history ? 500 : 200);
   const visible = rows.filter(row => history || (row.id > since && jsonArray(row.recipientsJson).includes(user))).reverse();
-  res.json(visible.map(row => ({ ...row, recipients: jsonArray(row.recipientsJson), readBy: jsonArray(row.readByJson) })));
+  res.json(visible.map(row => ({ ...row, from: row.fromUser, recipients: jsonArray(row.recipientsJson), readBy: jsonArray(row.readByJson) })));
 });
 
 router.post("/notifications", requireFounder, async (req, res): Promise<void> => {
@@ -62,6 +62,7 @@ router.post("/notifications/:id/read", async (req, res): Promise<void> => {
   const user = getCurrentUserName(req.headers.cookie);
   const [row] = await db.select().from(notificationsTable).where(eq(notificationsTable.id, id));
   if (!row) { res.status(404).json({ error: "الإشعار غير موجود" }); return; }
+  if (!jsonArray(row.recipientsJson).includes(user)) { res.status(403).json({ error: "هذا الإشعار ليس موجهًا لهذا المستخدم" }); return; }
   const readBy = [...new Set([...jsonArray(row.readByJson), user])];
   await db.update(notificationsTable).set({ readByJson: JSON.stringify(readBy) }).where(eq(notificationsTable.id, id));
   res.json({ success: true });
