@@ -58,3 +58,6 @@ deploy/windows7/*.key
 electron/dist-electron/
 electron/native/
 releases/BSCH-*.exe
+
+electron/dist-electron/
+electron/native/
