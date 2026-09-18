@@ -85,14 +85,18 @@ export function Layout({ children }: { children: ReactNode }) {
   const [showLogoutDialog, setShowLogoutDialog] = useState(false);
   const [logoutReason, setLogoutReason] = useState("end_shift");
   const [onlineUsers, setOnlineUsers] = useState<Array<{ name: string; lastSeen: number }>>([]);
+  const [availableUsers, setAvailableUsers] = useState<Array<{ name: string; isOnline: boolean }>>([]);
   const [showPresence, setShowPresence] = useState(false);
   const [noticeText, setNoticeText] = useState("");
+  const [noticeAudience, setNoticeAudience] = useState<"selected" | "all_online">("selected");
+  const [noticeRecipients, setNoticeRecipients] = useState<string[]>([]);
+  const [noticeHistory, setNoticeHistory] = useState<Array<{ id: number; message: string; recipients: string[]; createdAt: string }>>([]);
   const [lastNoticeId, setLastNoticeId] = useState(Number(localStorage.getItem("bsch:last-notice") || 0));
   useEffect(() => {
     if (!(user as any)?.isAuthenticated) return;
     const heartbeat = () => apiPost("/api/presence/heartbeat", {}).catch(() => {});
     const notices = () => apiGet<Array<{ id: number; message: string; from: string }>>(`/api/notifications?since=${lastNoticeId}`).then(items => {
-      for (const item of items) toast.info(`${item.from}: ${item.message}`, { duration: 8000 });
+      for (const item of items) { toast.info(`${item.from}: ${item.message}`, { duration: 8000 }); apiPost(`/api/notifications/${item.id}/read`, {}).catch(() => {}); }
       const latest = items.at(-1)?.id;
       if (latest) { setLastNoticeId(latest); localStorage.setItem("bsch:last-notice", String(latest)); }
     }).catch(() => {});
@@ -103,8 +107,13 @@ export function Layout({ children }: { children: ReactNode }) {
   useEffect(() => {
     if (!(user as any)?.isFounder) return;
     const load = () => apiGet<Array<{ name: string; lastSeen: number }>>("/api/presence/online").then(setOnlineUsers).catch(() => {});
-    load(); const timer = window.setInterval(load, 15000); return () => window.clearInterval(timer);
+    const loadUsers = () => apiGet<Array<{ name: string; isOnline: boolean }>>("/api/presence/users").then(setAvailableUsers).catch(() => {});
+    load(); loadUsers(); const timer = window.setInterval(() => { load(); loadUsers(); }, 15000); return () => window.clearInterval(timer);
   }, [(user as any)?.isFounder]);
+  useEffect(() => {
+    if (!showPresence || !(user as any)?.isFounder) return;
+    apiGet<Array<{ id: number; message: string; recipients: string[]; createdAt: string }>>("/api/notifications?history=1").then(setNoticeHistory).catch(() => {});
+  }, [showPresence, (user as any)?.isFounder]);
 
   useSwUpdateToast();
 
@@ -300,9 +309,13 @@ export function Layout({ children }: { children: ReactNode }) {
             <div className="rounded-md border p-3 space-y-2 max-h-48 overflow-y-auto">
               {onlineUsers.length === 0 ? <p className="text-sm text-muted-foreground">لا توجد حسابات متصلة الآن</p> : onlineUsers.map(u => <div key={u.name} className="flex items-center justify-between text-sm"><span>{u.name}</span><span className="text-green-600">متصل</span></div>)}
             </div>
+            <label className="flex items-center gap-2 text-sm"><input type="radio" name="notice-audience" checked={noticeAudience === "all_online"} onChange={() => setNoticeAudience("all_online")} /> إرسال إلى جميع المستخدمين المتصلين الآن</label>
+            <label className="flex items-center gap-2 text-sm"><input type="radio" name="notice-audience" checked={noticeAudience === "selected"} onChange={() => setNoticeAudience("selected")} /> اختيار مستخدمين محددين</label>
+            {noticeAudience === "selected" && <div className="grid grid-cols-2 gap-2 rounded-md border p-2 max-h-32 overflow-y-auto">{availableUsers.map(u => <label key={u.name} className="flex items-center gap-2 text-sm"><input type="checkbox" checked={noticeRecipients.includes(u.name)} onChange={e => setNoticeRecipients(prev => e.target.checked ? [...prev, u.name] : prev.filter(n => n !== u.name))} />{u.name}{u.isOnline ? <span className="text-green-600">●</span> : <span className="text-muted-foreground">(غير متصل)</span>}</label>)}</div>}
             <Input value={noticeText} onChange={e => setNoticeText(e.target.value)} placeholder="اكتب رسالة تظهر كإشعار للمستخدمين" />
+            <div className="rounded-md border p-2 max-h-40 overflow-y-auto space-y-2"><p className="text-xs font-semibold">سجل الرسائل المحفوظة</p>{noticeHistory.length === 0 ? <p className="text-xs text-muted-foreground">لا توجد رسائل محفوظة</p> : noticeHistory.slice().reverse().map(n => <div key={n.id} className="border-t pt-1 text-xs"><p>{n.message}</p><p className="text-muted-foreground">إلى: {n.recipients.join("، ")}</p></div>)}</div>
           </div>
-          <DialogFooter><Button disabled={!noticeText.trim()} onClick={async () => { try { await apiPost("/api/notifications", { message: noticeText }); setNoticeText(""); toast.success("تم إرسال الإشعار"); } catch (e: any) { toast.error(e.message); } }}>إرسال الإشعار</Button></DialogFooter>
+          <DialogFooter><Button disabled={!noticeText.trim() || (noticeAudience === "selected" && noticeRecipients.length === 0)} onClick={async () => { try { await apiPost("/api/notifications", { message: noticeText, audience: noticeAudience, recipients: noticeRecipients }); setNoticeText(""); setNoticeRecipients([]); toast.success("تم حفظ وإرسال الإشعار"); } catch (e: any) { toast.error(e.message); } }}>إرسال الإشعار</Button></DialogFooter>
         </DialogContent>
       </Dialog>
 

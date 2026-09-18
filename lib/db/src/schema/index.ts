@@ -6,3 +6,4 @@ export * from "./settings";
 export * from "./incident-reports";
 export * from "./ovr-reports";
 export * from "./audit-logs";
+export * from "./notifications";
