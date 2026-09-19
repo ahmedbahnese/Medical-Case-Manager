@@ -33,33 +33,41 @@ import { PwaInstallPrompt, useSwUpdateToast } from "@/components/pwa-install-pro
 import { apiGet, apiPost } from "@/lib/api";
 import { toast } from "sonner";
 
-function playNotificationTone(): Promise<void> {
+function playNotificationTone(tone: string = "single", durationMs = 180): Promise<void> {
   try {
     const AudioContextClass = window.AudioContext || (window as Window & { webkitAudioContext?: typeof AudioContext }).webkitAudioContext;
     if (!AudioContextClass) return Promise.resolve();
     const context = new AudioContextClass();
-    const oscillator = context.createOscillator();
-    const gain = context.createGain();
-    oscillator.type = "sine";
-    oscillator.frequency.value = 880;
-    gain.gain.setValueAtTime(0.0001, context.currentTime);
-    gain.gain.exponentialRampToValueAtTime(0.16, context.currentTime + 0.015);
-    gain.gain.exponentialRampToValueAtTime(0.0001, context.currentTime + 0.18);
-    oscillator.connect(gain).connect(context.destination);
-    oscillator.start();
-    oscillator.stop(context.currentTime + 0.2);
-    return new Promise(resolve => oscillator.addEventListener("ended", () => { void context.close(); resolve(); }, { once: true }));
+    const count = tone === "double" ? 2 : 1;
+    const frequency = tone === "soft" ? 660 : 880;
+    const gap = tone === "double" ? 70 : 0;
+    const total = count * durationMs + (count - 1) * gap;
+    for (let index = 0; index < count; index += 1) {
+      const start = context.currentTime + (index * (durationMs + gap)) / 1000;
+      const oscillator = context.createOscillator();
+      const gain = context.createGain();
+      oscillator.type = tone === "soft" ? "triangle" : "sine";
+      oscillator.frequency.value = frequency;
+      gain.gain.setValueAtTime(0.0001, start);
+      gain.gain.exponentialRampToValueAtTime(0.16, start + 0.015);
+      gain.gain.exponentialRampToValueAtTime(0.0001, start + durationMs / 1000);
+      oscillator.connect(gain).connect(context.destination);
+      oscillator.start(start);
+      oscillator.stop(start + durationMs / 1000);
+      if (index === count - 1) oscillator.addEventListener("ended", () => { void context.close(); }, { once: true });
+    }
+    return new Promise(resolve => window.setTimeout(resolve, total + 30));
   } catch { return Promise.resolve(); }
 }
 
-function speakNotification(item: { message: string; from: string; delivery?: string }) {
+function speakNotification(item: { message: string; from: string; delivery?: string; tone?: string; toneDurationMs?: number }) {
   if (!("speechSynthesis" in window) || !item.message.trim()) return;
   window.speechSynthesis.cancel();
   const utterance = new SpeechSynthesisUtterance(item.message);
-  utterance.lang = "ar-EG";
+  utterance.lang = /[\u0600-\u06FF]/.test(item.message) ? "ar-EG" : "en-US";
   utterance.rate = item.delivery === "call" ? 0.95 : 1;
   utterance.volume = 1;
-  void playNotificationTone().then(() => window.speechSynthesis.speak(utterance));
+  void playNotificationTone(item.tone, item.toneDurationMs).then(() => window.speechSynthesis.speak(utterance));
 }
 
 const NAV_GROUPS = [
@@ -122,12 +130,14 @@ export function Layout({ children }: { children: ReactNode }) {
   const [noticeAudience, setNoticeAudience] = useState<"selected" | "all_online">("selected");
   const [noticeRecipients, setNoticeRecipients] = useState<string[]>([]);
   const [noticeDelivery, setNoticeDelivery] = useState<"call" | "announcement">("announcement");
+  const [noticeTone, setNoticeTone] = useState("single");
+  const [noticeToneDurationMs, setNoticeToneDurationMs] = useState(180);
   const [noticeHistory, setNoticeHistory] = useState<Array<{ id: number; message: string; delivery?: string; recipients: string[]; createdAt: string }>>([]);
   const [lastNoticeId, setLastNoticeId] = useState(Number(localStorage.getItem("bsch:last-notice") || 0));
   useEffect(() => {
     if (!(user as any)?.isAuthenticated) return;
     const heartbeat = () => apiPost("/api/presence/heartbeat", {}).catch(() => {});
-    const notices = () => apiGet<Array<{ id: number; message: string; from: string; delivery?: string }>>(`/api/notifications?since=${lastNoticeId}`).then(items => {
+    const notices = () => apiGet<Array<{ id: number; message: string; from: string; delivery?: string; tone?: string; toneDurationMs?: number }>>(`/api/notifications?since=${lastNoticeId}`).then(items => {
       for (const item of items) { toast.info(`${item.from}: ${item.message}`, { duration: 8000 }); speakNotification(item); apiPost(`/api/notifications/${item.id}/read`, {}).catch(() => {}); }
       const latest = items.at(-1)?.id;
       if (latest) { setLastNoticeId(latest); localStorage.setItem("bsch:last-notice", String(latest)); }
@@ -348,11 +358,15 @@ export function Layout({ children }: { children: ReactNode }) {
               <Button type="button" variant={noticeDelivery === "call" ? "default" : "outline"} className="gap-2" onClick={() => setNoticeDelivery("call")}><PhoneCall className="h-4 w-4" /> مكالمة/نداء فوري</Button>
               <Button type="button" variant={noticeDelivery === "announcement" ? "default" : "outline"} className="gap-2" onClick={() => setNoticeDelivery("announcement")}><Megaphone className="h-4 w-4" /> رسالة منطوقة</Button>
             </div>
-            <p className="text-xs text-muted-foreground">لا توجد مكالمة WebRTC ولا ميكروفون: سيصدر جهاز المستلم صوتًا ويقرأ النص تلقائيًا.</p>
+            <div className="grid grid-cols-2 gap-2">
+              <label className="space-y-1 text-sm">النغمة<select className="h-9 w-full rounded-md border bg-background px-2" value={noticeTone} onChange={e => setNoticeTone(e.target.value)}><option value="single">نغمة واحدة</option><option value="double">نغمتان متتاليتان</option><option value="soft">نغمة هادئة</option></select></label>
+              <label className="space-y-1 text-sm">المدة: {noticeToneDurationMs} مللي ثانية<input className="w-full" type="range" min="80" max="1000" step="20" value={noticeToneDurationMs} onChange={e => setNoticeToneDurationMs(Number(e.target.value))} /></label>
+            </div>
+            <p className="text-xs text-muted-foreground">يُكتشف الصوت تلقائيًا: العربية تُقرأ بصوت عربي، والإنجليزية بصوت إنجليزي. لا توجد مكالمة WebRTC ولا ميكروفون.</p>
             <Input value={noticeText} onChange={e => setNoticeText(e.target.value)} placeholder={noticeDelivery === "call" ? "اكتب نص النداء العاجل" : "اكتب الرسالة التي سيقرأها الكمبيوتر"} />
             <div className="rounded-md border p-2 max-h-40 overflow-y-auto space-y-2"><p className="text-xs font-semibold">سجل الرسائل المحفوظة</p>{noticeHistory.length === 0 ? <p className="text-xs text-muted-foreground">لا توجد رسائل محفوظة</p> : noticeHistory.slice().reverse().map(n => <div key={n.id} className="border-t pt-1 text-xs"><p>{n.message}</p><p className="text-muted-foreground">إلى: {n.recipients.join("، ")}</p></div>)}</div>
           </div>
-          <DialogFooter><Button disabled={!noticeText.trim() || (noticeAudience === "selected" && noticeRecipients.length === 0)} onClick={async () => { try { await apiPost("/api/notifications", { message: noticeText, delivery: noticeDelivery, audience: noticeAudience, recipients: noticeRecipients }); setNoticeText(""); setNoticeRecipients([]); toast.success(noticeDelivery === "call" ? "تم إرسال النداء الصوتي" : "تم إرسال الرسالة المنطوقة"); } catch (e: any) { toast.error(e.message); } }}>{noticeDelivery === "call" ? "إرسال النداء" : "إرسال الرسالة"}</Button></DialogFooter>
+          <DialogFooter><Button disabled={!noticeText.trim() || (noticeAudience === "selected" && noticeRecipients.length === 0)} onClick={async () => { try { await apiPost("/api/notifications", { message: noticeText, delivery: noticeDelivery, tone: noticeTone, toneDurationMs: noticeToneDurationMs, audience: noticeAudience, recipients: noticeRecipients }); setNoticeText(""); setNoticeRecipients([]); toast.success(noticeDelivery === "call" ? "تم إرسال النداء الصوتي" : "تم إرسال الرسالة المنطوقة"); } catch (e: any) { toast.error(e.message); } }}>{noticeDelivery === "call" ? "إرسال النداء" : "إرسال الرسالة"}</Button></DialogFooter>
         </DialogContent>
       </Dialog>
 

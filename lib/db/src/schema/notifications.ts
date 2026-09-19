@@ -5,6 +5,8 @@ export const notificationsTable = sqliteTable("notifications", {
   message: text("message").notNull(),
   fromUser: text("from_user").notNull(),
   delivery: text("delivery").notNull().default("announcement"),
+  tone: text("tone").notNull().default("single"),
+  toneDurationMs: integer("tone_duration_ms").notNull().default(180),
   audience: text("audience").notNull().default("selected"),
   recipientsJson: text("recipients_json").notNull().default("[]"),
   readByJson: text("read_by_json").notNull().default("[]"),
