@@ -19,7 +19,7 @@ import {
   BulkImportCasesBody,
 } from "@workspace/api-zod";
 import { logAction } from "./audit-logs";
-import { getCurrentUserName, requireFounder } from "../middleware/auth";
+import { getCurrentUserName, requireFounder, requireAnyPageAccess, requirePageAccess } from "../middleware/auth";
 
 const router: IRouter = Router();
 const upload = multer({ storage: multer.memoryStorage(), limits: { fileSize: 10 * 1024 * 1024 } });
@@ -50,7 +50,7 @@ async function enrichCaseWithDepartment(c: typeof medicalCasesTable.$inferSelect
   return { ...c, departmentName: dept?.name ?? null };
 }
 
-router.get("/cases/respiration", async (req, res): Promise<void> => {
+router.get("/cases/respiration", requirePageAccess("/artificial-respiration"), async (req, res): Promise<void> => {
   const departmentId = req.query.departmentId ? parseInt(req.query.departmentId as string, 10) : null;
 
   const conditions: SQL[] = [ne(medicalCasesTable.artificialRespiration, "no")];
@@ -72,11 +72,11 @@ router.get("/cases/respiration", async (req, res): Promise<void> => {
   );
 });
 
-router.get("/cases/bulk-import", async (_req, res): Promise<void> => {
+router.get("/cases/bulk-import", requirePageAccess("/bulk-import"), async (_req, res): Promise<void> => {
   res.status(405).json({ error: "Method not allowed" });
 });
 
-router.get("/cases", async (req, res): Promise<void> => {
+router.get("/cases", requireAnyPageAccess(["/dashboard", "/add-case", "/waiting-cases", "/advanced-search", "/discharge-history"], "view"), async (req, res): Promise<void> => {
   const query = GetCasesQueryParams.safeParse(req.query);
   if (!query.success) {
     res.status(400).json({ error: query.error.message });
@@ -118,7 +118,7 @@ router.get("/cases", async (req, res): Promise<void> => {
   );
 });
 
-router.post("/cases", async (req, res): Promise<void> => {
+router.post("/cases", requirePageAccess("/add-case", "edit"), async (req, res): Promise<void> => {
   const parsed = CreateCaseBody.safeParse(req.body);
   if (!parsed.success) {
     res.status(400).json({ error: parsed.error.message });
@@ -175,7 +175,7 @@ router.post("/cases", async (req, res): Promise<void> => {
   res.status(201).json(enriched);
 });
 
-router.post("/cases/bulk-import", async (req, res): Promise<void> => {
+router.post("/cases/bulk-import", requirePageAccess("/bulk-import", "edit"), async (req, res): Promise<void> => {
   const parsed = BulkImportCasesBody.safeParse(req.body);
   if (!parsed.success) {
     res.status(400).json({ error: parsed.error.message });
@@ -212,7 +212,7 @@ router.post("/cases/bulk-import", async (req, res): Promise<void> => {
 });
 
 // Local extraction endpoint: never saves data; it only returns editable suggestions.
-router.post("/cases/extract", upload.single("file"), async (req, res): Promise<void> => {
+router.post("/cases/extract", requirePageAccess("/bulk-import", "edit"), upload.single("file"), async (req, res): Promise<void> => {
   let sourceText = typeof req.body?.text === "string" ? req.body.text : "";
   const file = req.file;
   if (file) {
@@ -374,7 +374,7 @@ export function parseArabicCasesText(text: string, defaultDeptId: number | null 
   return results;
 }
 
-router.get("/cases/:id", async (req, res): Promise<void> => {
+router.get("/cases/:id", requireAnyPageAccess(["/dashboard", "/add-case", "/waiting-cases", "/advanced-search", "/discharge-history"], "view"), async (req, res): Promise<void> => {
   const raw = Array.isArray(req.params.id) ? req.params.id[0] : req.params.id;
   const params = GetCaseParams.safeParse({ id: parseInt(raw, 10) });
   if (!params.success) {
@@ -396,7 +396,7 @@ router.get("/cases/:id", async (req, res): Promise<void> => {
   res.json(enriched);
 });
 
-router.patch("/cases/:id", async (req, res): Promise<void> => {
+router.patch("/cases/:id", requireAnyPageAccess(["/add-case", "/waiting-cases", "/discharge-history"], "edit"), async (req, res): Promise<void> => {
   const raw = Array.isArray(req.params.id) ? req.params.id[0] : req.params.id;
   const params = UpdateCaseParams.safeParse({ id: parseInt(raw, 10) });
   if (!params.success) {

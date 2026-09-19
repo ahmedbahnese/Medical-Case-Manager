@@ -9,11 +9,11 @@ import {
   DeleteWaitingCaseParams,
 } from "@workspace/api-zod";
 import { logAction } from "./audit-logs";
-import { getCurrentUserName, requireFounder } from "../middleware/auth";
+import { getCurrentUserName, requireFounder, requirePageAccess } from "../middleware/auth";
 
 const router: IRouter = Router();
 
-router.get("/waiting-cases", async (req, res): Promise<void> => {
+router.get("/waiting-cases", requirePageAccess("/waiting-cases"), async (req, res): Promise<void> => {
   const query = GetWaitingCasesQueryParams.safeParse(req.query);
   if (!query.success) {
     res.status(400).json({ error: query.error.message });
@@ -37,7 +37,7 @@ router.get("/waiting-cases", async (req, res): Promise<void> => {
   res.json(cases);
 });
 
-router.post("/waiting-cases", async (req, res): Promise<void> => {
+router.post("/waiting-cases", requirePageAccess("/waiting-cases", "edit"), async (req, res): Promise<void> => {
   const parsed = CreateWaitingCaseBody.safeParse(req.body);
   if (!parsed.success) {
     res.status(400).json({ error: parsed.error.message });
@@ -84,7 +84,7 @@ router.post("/waiting-cases", async (req, res): Promise<void> => {
   res.status(201).json(newCase);
 });
 
-router.patch("/waiting-cases/:id", async (req, res): Promise<void> => {
+router.patch("/waiting-cases/:id", requirePageAccess("/waiting-cases", "edit"), async (req, res): Promise<void> => {
   const raw = Array.isArray(req.params.id) ? req.params.id[0] : req.params.id;
   const params = UpdateWaitingCaseParams.safeParse({ id: parseInt(raw, 10) });
   if (!params.success) {
@@ -174,7 +174,7 @@ router.patch("/waiting-cases/:id", async (req, res): Promise<void> => {
   res.json(updated);
 });
 
-router.delete("/waiting-cases/:id", requireFounder, async (req, res): Promise<void> => {
+router.delete("/waiting-cases/:id", requireFounder, requirePageAccess("/waiting-cases", "edit"), async (req, res): Promise<void> => {
   const raw = Array.isArray(req.params.id) ? req.params.id[0] : req.params.id;
   const params = DeleteWaitingCaseParams.safeParse({ id: parseInt(raw, 10) });
   if (!params.success) {

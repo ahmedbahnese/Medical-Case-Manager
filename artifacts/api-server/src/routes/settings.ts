@@ -1,6 +1,7 @@
 import { Router, type IRouter } from "express";
 import { eq } from "drizzle-orm";
 import { db, settingsTable } from "@workspace/db";
+import { requireFounder } from "../middleware/auth";
 
 const router: IRouter = Router();
 
@@ -19,7 +20,7 @@ router.get("/settings", async (_req, res): Promise<void> => {
 });
 
 // Update a setting (requires settings password)
-router.post("/settings", async (req, res): Promise<void> => {
+router.post("/settings", requireFounder, async (req, res): Promise<void> => {
   const { password, key, value } = req.body as { password?: string; key?: string; value?: string };
 
   if (!key || value === undefined) {
@@ -47,7 +48,7 @@ router.post("/settings", async (req, res): Promise<void> => {
 });
 
 // Verify settings password
-router.post("/settings/verify-password", async (req, res): Promise<void> => {
+router.post("/settings/verify-password", requireFounder, async (req, res): Promise<void> => {
   const { password } = req.body as { password?: string };
   if (password === SETTINGS_PASSWORD) {
     res.json({ valid: true });

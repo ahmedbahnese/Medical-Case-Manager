@@ -131,7 +131,7 @@ export function Layout({ children }: { children: ReactNode }) {
     if (isFounder) return "edit";
     if (pagePermissions.length > 0) {
       const pp = pagePermissions.find(p => p.href === href);
-      return (pp?.access ?? "edit") as "none" | "view" | "edit";
+      return (pp?.access ?? "none") as "none" | "view" | "edit";
     }
     // Legacy
     if (legacyAllowedPages.length > 0 && !legacyAllowedPages.includes(href)) return "none";

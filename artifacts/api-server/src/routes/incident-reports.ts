@@ -2,20 +2,18 @@ import { Router, type IRouter } from "express";
 import { eq, desc } from "drizzle-orm";
 import { db, incidentReportsTable, waitingCasesTable } from "@workspace/db";
 import { logAction } from "./audit-logs";
-import { getCurrentUserName, getCurrentUserAccess } from "../middleware/auth";
+import { getCurrentUserName, getCurrentUserAccess, requirePageAccess } from "../middleware/auth";
 
 const router: IRouter = Router();
 
-router.get("/incident-reports", async (req, res): Promise<void> => {
-  const access = await getCurrentUserAccess(req.headers.cookie);
-  if (!access.isFounder && access.role !== "quality") { res.status(403).json({ error: "عرض بيانات الحوادث يتطلب صلاحية الجودة أو المؤسس" }); return; }
+router.get("/incident-reports", requirePageAccess("/incident-report"), async (req, res): Promise<void> => {
+  await getCurrentUserAccess(req.headers.cookie);
   const reports = await db.select().from(incidentReportsTable).orderBy(desc(incidentReportsTable.createdAt));
   res.json(reports.map(r => ({ ...r, cases: JSON.parse(r.casesJson ?? "[]") })));
 });
 
-router.get("/incident-reports/:id", async (req, res): Promise<void> => {
-  const access = await getCurrentUserAccess(req.headers.cookie);
-  if (!access.isFounder && access.role !== "quality") { res.status(403).json({ error: "عرض بيانات الحوادث يتطلب صلاحية الجودة أو المؤسس" }); return; }
+router.get("/incident-reports/:id", requirePageAccess("/incident-report"), async (req, res): Promise<void> => {
+  await getCurrentUserAccess(req.headers.cookie);
   const id = parseInt(req.params.id as string, 10);
   const [report] = await db.select().from(incidentReportsTable).where(eq(incidentReportsTable.id, id));
   if (!report) {
@@ -25,7 +23,7 @@ router.get("/incident-reports/:id", async (req, res): Promise<void> => {
   res.json({ ...report, cases: JSON.parse(report.casesJson ?? "[]") });
 });
 
-router.post("/incident-reports", async (req, res): Promise<void> => {
+router.post("/incident-reports", requirePageAccess("/incident-report", "edit"), async (req, res): Promise<void> => {
   const access = await getCurrentUserAccess(req.headers.cookie);
   const { incidentType, incidentLocation, reportDate, reportDay, reportTime, totalInjured, totalDeaths, hospitalsTransferredTo, cases, severity, eventDescription, immediateAction, reporterName, reporterRole } = req.body as any;
 
@@ -78,9 +76,8 @@ router.post("/incident-reports", async (req, res): Promise<void> => {
   await logAction("إضافة تقرير حادث", "incident_report", report.id, report.incidentType, null, getCurrentUserName(req.headers.cookie));
 });
 
-router.patch("/incident-reports/:id", async (req, res): Promise<void> => {
+router.patch("/incident-reports/:id", requirePageAccess("/incident-report", "edit"), async (req, res): Promise<void> => {
   const access = await getCurrentUserAccess(req.headers.cookie);
-  if (!access.isFounder && access.role !== "quality") { res.status(403).json({ error: "تعديل بيانات الحوادث يتطلب صلاحية الجودة أو المؤسس" }); return; }
   const id = parseInt(req.params.id as string, 10);
 
   // Verify existence
@@ -117,7 +114,7 @@ router.patch("/incident-reports/:id", async (req, res): Promise<void> => {
   await logAction("تعديل تقرير حادث", "incident_report", updated.id, updated.incidentType, null, getCurrentUserName(req.headers.cookie));
 });
 
-router.delete("/incident-reports/:id", async (req, res): Promise<void> => {
+router.delete("/incident-reports/:id", requirePageAccess("/incident-report", "edit"), async (req, res): Promise<void> => {
   const access = await getCurrentUserAccess(req.headers.cookie);
   if (!access.isFounder) { res.status(403).json({ error: "حذف بيانات الحوادث متاح للمؤسس فقط" }); return; }
   const id = parseInt(req.params.id as string, 10);

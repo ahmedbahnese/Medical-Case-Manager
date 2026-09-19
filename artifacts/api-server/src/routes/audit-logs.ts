@@ -1,9 +1,10 @@
 import { Router, type IRouter } from "express";
 import { desc, lt, sql } from "drizzle-orm";
 import { db, auditLogsTable } from "@workspace/db";
-import { getCurrentUserName } from "../middleware/auth";
+import { getCurrentUserName, requireFounder } from "../middleware/auth";
 
 const router: IRouter = Router();
+router.use(requireFounder);
 
 router.get("/audit-logs", async (req, res): Promise<void> => {
   await db.delete(auditLogsTable).where(

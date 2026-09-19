@@ -10,7 +10,15 @@ type CallInfo = { id: string; owner: string; createdAt: number; recipients?: str
 type LegacyNavigator = Navigator & { getUserMedia?: (constraints: MediaStreamConstraints, success: (stream: MediaStream) => void, failure: (error: unknown) => void) => void; webkitGetUserMedia?: (constraints: MediaStreamConstraints, success: (stream: MediaStream) => void, failure: (error: unknown) => void) => void };
 type LegacyWindow = Window & { webkitRTCPeerConnection?: typeof RTCPeerConnection };
 type PeerMap = Record<string, RTCPeerConnection>;
-const rtcConfig: RTCConfiguration = { iceServers: [{ urls: "stun:stun.l.google.com:19302" }] };
+const iceServers: RTCIceServer[] = [{ urls: "stun:stun.l.google.com:19302" }];
+if (import.meta.env.VITE_TURN_URL) {
+  iceServers.push({
+    urls: String(import.meta.env.VITE_TURN_URL),
+    username: import.meta.env.VITE_TURN_USERNAME ? String(import.meta.env.VITE_TURN_USERNAME) : undefined,
+    credential: import.meta.env.VITE_TURN_CREDENTIAL ? String(import.meta.env.VITE_TURN_CREDENTIAL) : undefined,
+  });
+}
+const rtcConfig: RTCConfiguration = { iceServers };
 
 function createPeerConnection(): RTCPeerConnection {
   const Peer = window.RTCPeerConnection || (window as LegacyWindow).webkitRTCPeerConnection;

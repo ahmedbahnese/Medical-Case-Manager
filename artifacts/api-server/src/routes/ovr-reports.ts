@@ -5,7 +5,7 @@ import { logAction } from "./audit-logs";
 import { getCurrentUserAccess } from "../middleware/auth";
 
 const router: IRouter = Router();
-const canReview = (a: Awaited<ReturnType<typeof getCurrentUserAccess>>) => a.isFounder || a.role === "quality";
+const canReview = (a: Awaited<ReturnType<typeof getCurrentUserAccess>>) => a.isFounder || a.canReviewOvr;
 
 router.get("/ovr-reports", async (req, res) => {
   const access = await getCurrentUserAccess(req.headers.cookie);

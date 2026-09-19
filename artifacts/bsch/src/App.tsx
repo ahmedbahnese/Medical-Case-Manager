@@ -36,11 +36,26 @@ function NotFound() {
   );
 }
 
-function ProtectedRoute({ component: Component }: { component: React.ComponentType }) {
+function AccessDenied() {
+  return <div className="flex min-h-[60vh] items-center justify-center p-8 text-center"><div><h1 className="text-3xl font-bold mb-3">لا توجد صلاحية</h1><p className="text-muted-foreground">هذا الحساب لا يملك صلاحية الوصول إلى هذه الصفحة.</p></div></div>;
+}
+
+function hasPageAccess(user: any, href?: string, founderOnly = false) {
+  if (founderOnly) return Boolean(user?.isFounder);
+  if (!href || user?.isFounder) return true;
+  if (Array.isArray(user?.pagePermissions) && user.pagePermissions.length > 0) {
+    return user.pagePermissions.find((permission: any) => permission.href === href)?.access !== "none";
+  }
+  if (Array.isArray(user?.allowedPages) && user.allowedPages.length > 0) return user.allowedPages.includes(href);
+  return true;
+}
+
+function ProtectedRoute({ component: Component, pageHref, founderOnly = false }: { component: React.ComponentType; pageHref?: string; founderOnly?: boolean }) {
   const { data: user, isLoading } = useGetMe();
 
   if (isLoading) return <div className="h-screen bg-background" />;
   if (!user?.isAuthenticated) return <Redirect to="/" />;
+  if (!hasPageAccess(user, pageHref, founderOnly)) return <Layout><AccessDenied /></Layout>;
 
   return (
     <Layout>
@@ -64,32 +79,32 @@ function Router() {
       <Route path="/" component={Login} />
 
       {/* Core */}
-      <Route path="/dashboard"><ProtectedRoute component={Dashboard} /></Route>
+      <Route path="/dashboard"><ProtectedRoute component={Dashboard} pageHref="/dashboard" /></Route>
       <Route path="/departments/:id"><ProtectedRoute component={DepartmentDetail} /></Route>
-      <Route path="/add-case"><ProtectedRoute component={AddCase} /></Route>
+      <Route path="/add-case"><ProtectedRoute component={AddCase} pageHref="/add-case" /></Route>
       <Route path="/case/:id"><ProtectedRoute component={CaseDetail} /></Route>
-      <Route path="/waiting-cases"><ProtectedRoute component={WaitingCases} /></Route>
-      <Route path="/artificial-respiration"><ProtectedRoute component={RespirationList} /></Route>
+      <Route path="/waiting-cases"><ProtectedRoute component={WaitingCases} pageHref="/waiting-cases" /></Route>
+      <Route path="/artificial-respiration"><ProtectedRoute component={RespirationList} pageHref="/artificial-respiration" /></Route>
 
       {/* Import */}
-      <Route path="/bulk-import"><ProtectedRoute component={BulkImport} /></Route>
+      <Route path="/bulk-import"><ProtectedRoute component={BulkImport} pageHref="/bulk-import" /></Route>
 
       {/* Reports */}
-      <Route path="/occupancy-report"><ProtectedRoute component={OccupancyReport} /></Route>
-      <Route path="/print-reports"><ProtectedRoute component={PrintReports} /></Route>
-      <Route path="/incident-report"><ProtectedRoute component={IncidentReport} /></Route>
-      <Route path="/ovr-incident-report"><ProtectedRoute component={OvrIncidentReport} /></Route>
-      <Route path="/ovr-management"><ProtectedRoute component={OvrManagement} /></Route>
-      <Route path="/quality-dashboard"><ProtectedRoute component={QualityDashboard} /></Route>
+      <Route path="/occupancy-report"><ProtectedRoute component={OccupancyReport} pageHref="/occupancy-report" /></Route>
+      <Route path="/print-reports"><ProtectedRoute component={PrintReports} pageHref="/print-reports" /></Route>
+      <Route path="/incident-report"><ProtectedRoute component={IncidentReport} pageHref="/incident-report" /></Route>
+      <Route path="/ovr-incident-report"><ProtectedRoute component={OvrIncidentReport} pageHref="/ovr-incident-report" /></Route>
+      <Route path="/ovr-management"><ProtectedRoute component={OvrManagement} pageHref="/ovr-management" /></Route>
+      <Route path="/quality-dashboard"><ProtectedRoute component={QualityDashboard} pageHref="/quality-dashboard" /></Route>
 
       {/* Search & History */}
-      <Route path="/advanced-search"><ProtectedRoute component={Search} /></Route>
-      <Route path="/discharge-history"><ProtectedRoute component={DischargeHistory} /></Route>
-      <Route path="/audit-log"><ProtectedRoute component={AuditLog} /></Route>
+      <Route path="/advanced-search"><ProtectedRoute component={Search} pageHref="/advanced-search" /></Route>
+      <Route path="/discharge-history"><ProtectedRoute component={DischargeHistory} pageHref="/discharge-history" /></Route>
+      <Route path="/audit-log"><ProtectedRoute component={AuditLog} founderOnly /></Route>
 
       {/* System */}
-      <Route path="/backup"><ProtectedRoute component={Backup} /></Route>
-      <Route path="/settings"><ProtectedRoute component={Settings} /></Route>
+      <Route path="/backup"><ProtectedRoute component={Backup} founderOnly /></Route>
+      <Route path="/settings"><ProtectedRoute component={Settings} founderOnly /></Route>
 
       <Route><ProtectedRoute component={NotFound} /></Route>
     </Switch>

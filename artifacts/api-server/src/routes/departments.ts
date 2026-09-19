@@ -3,7 +3,7 @@ import { eq, count } from "drizzle-orm";
 import { db, departmentsTable, medicalCasesTable } from "@workspace/db";
 import { GetDepartmentParams } from "@workspace/api-zod";
 import { logAction } from "./audit-logs";
-import { getCurrentUserName } from "../middleware/auth";
+import { getCurrentUserName, requireFounder } from "../middleware/auth";
 
 const router: IRouter = Router();
 
@@ -67,7 +67,7 @@ router.get("/departments/:id", async (req, res): Promise<void> => {
 
 /* ──────────────────────── CRUD (settings-gated) ──────────────────── */
 
-router.post("/departments", async (req, res): Promise<void> => {
+router.post("/departments", requireFounder, async (req, res): Promise<void> => {
   const { name, code, description, capacity, departmentType, reportFields, reportFieldsJson } = req.body as any;
   if (!name || !code || !departmentType) {
     res.status(400).json({ error: "name, code, departmentType مطلوبة" });
@@ -91,7 +91,7 @@ router.post("/departments", async (req, res): Promise<void> => {
   res.status(201).json(dept);
 });
 
-router.patch("/departments/:id", async (req, res): Promise<void> => {
+router.patch("/departments/:id", requireFounder, async (req, res): Promise<void> => {
   const id = parseInt(req.params.id as string, 10);
   if (isNaN(id)) { res.status(400).json({ error: "id غير صالح" }); return; }
 
@@ -117,7 +117,7 @@ router.patch("/departments/:id", async (req, res): Promise<void> => {
   res.json(updated);
 });
 
-router.delete("/departments/:id", async (req, res): Promise<void> => {
+router.delete("/departments/:id", requireFounder, async (req, res): Promise<void> => {
   const id = parseInt(req.params.id as string, 10);
   if (isNaN(id)) { res.status(400).json({ error: "id غير صالح" }); return; }
 

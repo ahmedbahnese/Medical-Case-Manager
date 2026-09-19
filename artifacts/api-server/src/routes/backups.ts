@@ -3,8 +3,10 @@ import { eq } from "drizzle-orm";
 import { db, backupsTable, medicalCasesTable, waitingCasesTable } from "@workspace/db";
 import { CreateBackupBody } from "@workspace/api-zod";
 import { count } from "drizzle-orm";
+import { requireFounder } from "../middleware/auth";
 
 const router: IRouter = Router();
+router.use(requireFounder);
 
 router.get("/backups", async (_req, res): Promise<void> => {
   const backups = await db
