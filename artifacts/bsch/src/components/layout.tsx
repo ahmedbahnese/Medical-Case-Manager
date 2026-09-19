@@ -20,6 +20,8 @@ import {
   History,
   ShieldCheck,
   Bell,
+  Megaphone,
+  PhoneCall,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Toaster } from "sonner";
@@ -30,7 +32,17 @@ import { Input } from "@/components/ui/input";
 import { PwaInstallPrompt, useSwUpdateToast } from "@/components/pwa-install-prompt";
 import { apiGet, apiPost } from "@/lib/api";
 import { toast } from "sonner";
-import { VoiceCallWidget } from "@/components/voice-call-widget";
+
+function speakNotification(item: { message: string; from: string; delivery?: string }) {
+  if (!("speechSynthesis" in window) || !item.message.trim()) return;
+  window.speechSynthesis.cancel();
+  const prefix = item.delivery === "call" ? "نداء عاجل من المؤسس. " : "رسالة من المؤسس. ";
+  const utterance = new SpeechSynthesisUtterance(`${prefix}${item.message}`);
+  utterance.lang = "ar-EG";
+  utterance.rate = item.delivery === "call" ? 0.95 : 1;
+  utterance.volume = 1;
+  window.speechSynthesis.speak(utterance);
+}
 
 const NAV_GROUPS = [
   {
@@ -91,13 +103,14 @@ export function Layout({ children }: { children: ReactNode }) {
   const [noticeText, setNoticeText] = useState("");
   const [noticeAudience, setNoticeAudience] = useState<"selected" | "all_online">("selected");
   const [noticeRecipients, setNoticeRecipients] = useState<string[]>([]);
-  const [noticeHistory, setNoticeHistory] = useState<Array<{ id: number; message: string; recipients: string[]; createdAt: string }>>([]);
+  const [noticeDelivery, setNoticeDelivery] = useState<"call" | "announcement">("announcement");
+  const [noticeHistory, setNoticeHistory] = useState<Array<{ id: number; message: string; delivery?: string; recipients: string[]; createdAt: string }>>([]);
   const [lastNoticeId, setLastNoticeId] = useState(Number(localStorage.getItem("bsch:last-notice") || 0));
   useEffect(() => {
     if (!(user as any)?.isAuthenticated) return;
     const heartbeat = () => apiPost("/api/presence/heartbeat", {}).catch(() => {});
-    const notices = () => apiGet<Array<{ id: number; message: string; from: string }>>(`/api/notifications?since=${lastNoticeId}`).then(items => {
-      for (const item of items) { toast.info(`${item.from}: ${item.message}`, { duration: 8000 }); apiPost(`/api/notifications/${item.id}/read`, {}).catch(() => {}); }
+    const notices = () => apiGet<Array<{ id: number; message: string; from: string; delivery?: string }>>(`/api/notifications?since=${lastNoticeId}`).then(items => {
+      for (const item of items) { toast.info(`${item.from}: ${item.message}`, { duration: 8000 }); speakNotification(item); apiPost(`/api/notifications/${item.id}/read`, {}).catch(() => {}); }
       const latest = items.at(-1)?.id;
       if (latest) { setLastNoticeId(latest); localStorage.setItem("bsch:last-notice", String(latest)); }
     }).catch(() => {});
@@ -277,7 +290,6 @@ export function Layout({ children }: { children: ReactNode }) {
       {/* Main Content */}
       <main className="flex-1 overflow-x-hidden p-4 md:p-8 bg-background relative w-full">
         <div className="mb-4 flex flex-wrap items-center justify-end gap-2 no-print">
-          <VoiceCallWidget isFounder={isFounder} />
           {isFounder && <Button variant="outline" className="ml-2 gap-2" onClick={() => setShowPresence(true)}>
             <Bell className="h-4 w-4" /> الحسابات المفتوحة ({onlineUsers.length})
           </Button>}
@@ -306,7 +318,7 @@ export function Layout({ children }: { children: ReactNode }) {
       <PwaInstallPrompt />
       <Dialog open={showPresence} onOpenChange={setShowPresence}>
         <DialogContent dir="rtl" className="max-w-lg">
-          <DialogHeader><DialogTitle>الحسابات المفتوحة وإرسال إشعار</DialogTitle></DialogHeader>
+          <DialogHeader><DialogTitle>الحسابات المفتوحة والنداء الصوتي</DialogTitle></DialogHeader>
           <div className="space-y-3">
             <div className="rounded-md border p-3 space-y-2 max-h-48 overflow-y-auto">
               {onlineUsers.length === 0 ? <p className="text-sm text-muted-foreground">لا توجد حسابات متصلة الآن</p> : onlineUsers.map(u => <div key={u.name} className="flex items-center justify-between text-sm"><span>{u.name}</span><span className="text-green-600">متصل</span></div>)}
@@ -314,10 +326,15 @@ export function Layout({ children }: { children: ReactNode }) {
             <label className="flex items-center gap-2 text-sm"><input type="radio" name="notice-audience" checked={noticeAudience === "all_online"} onChange={() => setNoticeAudience("all_online")} /> إرسال إلى جميع المستخدمين المتصلين الآن</label>
             <label className="flex items-center gap-2 text-sm"><input type="radio" name="notice-audience" checked={noticeAudience === "selected"} onChange={() => setNoticeAudience("selected")} /> اختيار مستخدمين محددين</label>
             {noticeAudience === "selected" && <div className="grid grid-cols-2 gap-2 rounded-md border p-2 max-h-32 overflow-y-auto">{availableUsers.map(u => <label key={u.name} className="flex items-center gap-2 text-sm"><input type="checkbox" checked={noticeRecipients.includes(u.name)} onChange={e => setNoticeRecipients(prev => e.target.checked ? [...prev, u.name] : prev.filter(n => n !== u.name))} />{u.name}{u.isOnline ? <span className="text-green-600">●</span> : <span className="text-muted-foreground">(غير متصل)</span>}</label>)}</div>}
-            <Input value={noticeText} onChange={e => setNoticeText(e.target.value)} placeholder="اكتب رسالة تظهر كإشعار للمستخدمين" />
+            <div className="grid grid-cols-2 gap-2">
+              <Button type="button" variant={noticeDelivery === "call" ? "default" : "outline"} className="gap-2" onClick={() => setNoticeDelivery("call")}><PhoneCall className="h-4 w-4" /> مكالمة/نداء فوري</Button>
+              <Button type="button" variant={noticeDelivery === "announcement" ? "default" : "outline"} className="gap-2" onClick={() => setNoticeDelivery("announcement")}><Megaphone className="h-4 w-4" /> رسالة منطوقة</Button>
+            </div>
+            <p className="text-xs text-muted-foreground">لا توجد مكالمة WebRTC ولا ميكروفون: سيصدر جهاز المستلم صوتًا ويقرأ النص تلقائيًا.</p>
+            <Input value={noticeText} onChange={e => setNoticeText(e.target.value)} placeholder={noticeDelivery === "call" ? "اكتب نص النداء العاجل" : "اكتب الرسالة التي سيقرأها الكمبيوتر"} />
             <div className="rounded-md border p-2 max-h-40 overflow-y-auto space-y-2"><p className="text-xs font-semibold">سجل الرسائل المحفوظة</p>{noticeHistory.length === 0 ? <p className="text-xs text-muted-foreground">لا توجد رسائل محفوظة</p> : noticeHistory.slice().reverse().map(n => <div key={n.id} className="border-t pt-1 text-xs"><p>{n.message}</p><p className="text-muted-foreground">إلى: {n.recipients.join("، ")}</p></div>)}</div>
           </div>
-          <DialogFooter><Button disabled={!noticeText.trim() || (noticeAudience === "selected" && noticeRecipients.length === 0)} onClick={async () => { try { await apiPost("/api/notifications", { message: noticeText, audience: noticeAudience, recipients: noticeRecipients }); setNoticeText(""); setNoticeRecipients([]); toast.success("تم حفظ وإرسال الإشعار"); } catch (e: any) { toast.error(e.message); } }}>إرسال الإشعار</Button></DialogFooter>
+          <DialogFooter><Button disabled={!noticeText.trim() || (noticeAudience === "selected" && noticeRecipients.length === 0)} onClick={async () => { try { await apiPost("/api/notifications", { message: noticeText, delivery: noticeDelivery, audience: noticeAudience, recipients: noticeRecipients }); setNoticeText(""); setNoticeRecipients([]); toast.success(noticeDelivery === "call" ? "تم إرسال النداء الصوتي" : "تم إرسال الرسالة المنطوقة"); } catch (e: any) { toast.error(e.message); } }}>{noticeDelivery === "call" ? "إرسال النداء" : "إرسال الرسالة"}</Button></DialogFooter>
         </DialogContent>
       </Dialog>
 

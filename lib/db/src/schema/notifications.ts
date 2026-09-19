@@ -4,6 +4,7 @@ export const notificationsTable = sqliteTable("notifications", {
   id: integer("id").primaryKey({ autoIncrement: true }),
   message: text("message").notNull(),
   fromUser: text("from_user").notNull(),
+  delivery: text("delivery").notNull().default("announcement"),
   audience: text("audience").notNull().default("selected"),
   recipientsJson: text("recipients_json").notNull().default("[]"),
   readByJson: text("read_by_json").notNull().default("[]"),
