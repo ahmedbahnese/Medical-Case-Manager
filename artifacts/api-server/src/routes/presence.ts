@@ -49,13 +49,15 @@ router.post("/notifications", requireFounder, async (req, res): Promise<void> =>
   const delivery = req.body?.delivery === "call" ? "call" : "announcement";
   const tone = ["single", "double", "soft"].includes(String(req.body?.tone)) ? String(req.body.tone) : "single";
   const toneDurationMs = Math.max(80, Math.min(1000, Number(req.body?.toneDurationMs) || 180));
+  const speak = req.body?.speak === false ? 0 : 1;
+  const speechLanguage = ["auto", "ar", "en"].includes(String(req.body?.speechLanguage)) ? String(req.body.speechLanguage) : "auto";
   const audience = req.body?.audience === "all_online" ? "all_online" : "selected";
   const requested: string[] = Array.isArray(req.body?.recipients) ? req.body.recipients.map((value: unknown) => String(value).trim()).filter((value: string) => Boolean(value)) : [];
   const recipients = audience === "all_online" ? activeNames() : [...new Set(requested)];
   if (!message) { res.status(400).json({ error: "اكتب نص الرسالة" }); return; }
   if (recipients.length === 0) { res.status(400).json({ error: "حدد مستخدمًا واحدًا على الأقل أو اختر جميع المتصلين" }); return; }
   const [created] = await db.insert(notificationsTable).values({
-    message: message.slice(0, 500), fromUser: "المؤسس", delivery, tone, toneDurationMs, audience, recipientsJson: JSON.stringify(recipients), readByJson: "[]",
+    message: message.slice(0, 500), fromUser: "المؤسس", delivery, tone, toneDurationMs, speak, speechLanguage, audience, recipientsJson: JSON.stringify(recipients), readByJson: "[]",
   }).returning();
   res.status(201).json({ ...created, recipients, readBy: [] });
 });

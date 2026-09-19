@@ -60,14 +60,19 @@ function playNotificationTone(tone: string = "single", durationMs = 180): Promis
   } catch { return Promise.resolve(); }
 }
 
-function speakNotification(item: { message: string; from: string; delivery?: string; tone?: string; toneDurationMs?: number }) {
-  if (!("speechSynthesis" in window) || !item.message.trim()) return;
-  window.speechSynthesis.cancel();
-  const utterance = new SpeechSynthesisUtterance(item.message);
-  utterance.lang = /[\u0600-\u06FF]/.test(item.message) ? "ar-EG" : "en-US";
-  utterance.rate = item.delivery === "call" ? 0.95 : 1;
-  utterance.volume = 1;
-  void playNotificationTone(item.tone, item.toneDurationMs).then(() => window.speechSynthesis.speak(utterance));
+function speakNotification(item: { message: string; from: string; delivery?: string; tone?: string; toneDurationMs?: number; speak?: number; speechLanguage?: string }) {
+  if (!item.message.trim()) return;
+  if ("speechSynthesis" in window) window.speechSynthesis.cancel();
+  void playNotificationTone(item.tone, item.toneDurationMs).then(() => {
+    if (item.speak === 0 || !("speechSynthesis" in window)) return;
+    const lang = item.speechLanguage === "ar" ? "ar-EG" : item.speechLanguage === "en" ? "en-US" : /[\u0600-\u06FF]/.test(item.message) ? "ar-EG" : "en-US";
+    const utterance = new SpeechSynthesisUtterance(item.message);
+    utterance.lang = lang;
+    utterance.voice = window.speechSynthesis.getVoices().find(voice => voice.lang.toLowerCase().startsWith(lang.slice(0, 2).toLowerCase())) ?? null;
+    utterance.rate = item.delivery === "call" ? 0.95 : 1;
+    utterance.volume = 1;
+    window.speechSynthesis.speak(utterance);
+  });
 }
 
 const NAV_GROUPS = [
@@ -132,12 +137,14 @@ export function Layout({ children }: { children: ReactNode }) {
   const [noticeDelivery, setNoticeDelivery] = useState<"call" | "announcement">("announcement");
   const [noticeTone, setNoticeTone] = useState("single");
   const [noticeToneDurationMs, setNoticeToneDurationMs] = useState(180);
+  const [noticeSpeak, setNoticeSpeak] = useState(true);
+  const [noticeSpeechLanguage, setNoticeSpeechLanguage] = useState<"auto" | "ar" | "en">("auto");
   const [noticeHistory, setNoticeHistory] = useState<Array<{ id: number; message: string; delivery?: string; recipients: string[]; createdAt: string }>>([]);
   const [lastNoticeId, setLastNoticeId] = useState(Number(localStorage.getItem("bsch:last-notice") || 0));
   useEffect(() => {
     if (!(user as any)?.isAuthenticated) return;
     const heartbeat = () => apiPost("/api/presence/heartbeat", {}).catch(() => {});
-    const notices = () => apiGet<Array<{ id: number; message: string; from: string; delivery?: string; tone?: string; toneDurationMs?: number }>>(`/api/notifications?since=${lastNoticeId}`).then(items => {
+    const notices = () => apiGet<Array<{ id: number; message: string; from: string; delivery?: string; tone?: string; toneDurationMs?: number; speak?: number; speechLanguage?: string }>>(`/api/notifications?since=${lastNoticeId}`).then(items => {
       for (const item of items) { toast.info(`${item.from}: ${item.message}`, { duration: 8000 }); speakNotification(item); apiPost(`/api/notifications/${item.id}/read`, {}).catch(() => {}); }
       const latest = items.at(-1)?.id;
       if (latest) { setLastNoticeId(latest); localStorage.setItem("bsch:last-notice", String(latest)); }
@@ -362,11 +369,16 @@ export function Layout({ children }: { children: ReactNode }) {
               <label className="space-y-1 text-sm">النغمة<select className="h-9 w-full rounded-md border bg-background px-2" value={noticeTone} onChange={e => setNoticeTone(e.target.value)}><option value="single">نغمة واحدة</option><option value="double">نغمتان متتاليتان</option><option value="soft">نغمة هادئة</option></select></label>
               <label className="space-y-1 text-sm">المدة: {noticeToneDurationMs} مللي ثانية<input className="w-full" type="range" min="80" max="1000" step="20" value={noticeToneDurationMs} onChange={e => setNoticeToneDurationMs(Number(e.target.value))} /></label>
             </div>
-            <p className="text-xs text-muted-foreground">يُكتشف الصوت تلقائيًا: العربية تُقرأ بصوت عربي، والإنجليزية بصوت إنجليزي. لا توجد مكالمة WebRTC ولا ميكروفون.</p>
+            <div className="grid grid-cols-2 gap-2 items-end">
+              <label className="flex items-center gap-2 text-sm"><input type="checkbox" checked={noticeSpeak} onChange={e => setNoticeSpeak(e.target.checked)} /> قراءة الرسالة بصوت</label>
+              <label className="space-y-1 text-sm">لغة الصوت<select className="h-9 w-full rounded-md border bg-background px-2" value={noticeSpeechLanguage} onChange={e => setNoticeSpeechLanguage(e.target.value as "auto" | "ar" | "en")}><option value="auto">تلقائي حسب النص</option><option value="ar">العربية</option><option value="en">English</option></select></label>
+            </div>
+            <div className="flex gap-2 items-center"><Button type="button" variant="secondary" onClick={() => speakNotification({ from: "المؤسس", message: noticeSpeechLanguage === "en" ? "This is a voice test" : "هذه تجربة للصوت والنغمة", delivery: noticeDelivery, tone: noticeTone, toneDurationMs: noticeToneDurationMs, speak: noticeSpeak ? 1 : 0, speechLanguage: noticeSpeechLanguage })}>تجربة النغمة والصوت</Button><p className="text-xs text-muted-foreground">العربية والإنجليزية تستخدمان أصوات الجهاز المثبتة محليًا.</p></div>
+            <p className="text-xs text-muted-foreground">لا توجد مكالمة WebRTC ولا ميكروفون. عند إلغاء القراءة ستصل النغمة فقط.</p>
             <Input value={noticeText} onChange={e => setNoticeText(e.target.value)} placeholder={noticeDelivery === "call" ? "اكتب نص النداء العاجل" : "اكتب الرسالة التي سيقرأها الكمبيوتر"} />
             <div className="rounded-md border p-2 max-h-40 overflow-y-auto space-y-2"><p className="text-xs font-semibold">سجل الرسائل المحفوظة</p>{noticeHistory.length === 0 ? <p className="text-xs text-muted-foreground">لا توجد رسائل محفوظة</p> : noticeHistory.slice().reverse().map(n => <div key={n.id} className="border-t pt-1 text-xs"><p>{n.message}</p><p className="text-muted-foreground">إلى: {n.recipients.join("، ")}</p></div>)}</div>
           </div>
-          <DialogFooter><Button disabled={!noticeText.trim() || (noticeAudience === "selected" && noticeRecipients.length === 0)} onClick={async () => { try { await apiPost("/api/notifications", { message: noticeText, delivery: noticeDelivery, tone: noticeTone, toneDurationMs: noticeToneDurationMs, audience: noticeAudience, recipients: noticeRecipients }); setNoticeText(""); setNoticeRecipients([]); toast.success(noticeDelivery === "call" ? "تم إرسال النداء الصوتي" : "تم إرسال الرسالة المنطوقة"); } catch (e: any) { toast.error(e.message); } }}>{noticeDelivery === "call" ? "إرسال النداء" : "إرسال الرسالة"}</Button></DialogFooter>
+          <DialogFooter><Button disabled={!noticeText.trim() || (noticeAudience === "selected" && noticeRecipients.length === 0)} onClick={async () => { try { await apiPost("/api/notifications", { message: noticeText, delivery: noticeDelivery, tone: noticeTone, toneDurationMs: noticeToneDurationMs, speak: noticeSpeak, speechLanguage: noticeSpeechLanguage, audience: noticeAudience, recipients: noticeRecipients }); setNoticeText(""); setNoticeRecipients([]); toast.success(noticeDelivery === "call" ? "تم إرسال النداء الصوتي" : "تم إرسال الرسالة المنطوقة"); } catch (e: any) { toast.error(e.message); } }}>{noticeDelivery === "call" ? "إرسال النداء" : "إرسال الرسالة"}</Button></DialogFooter>
         </DialogContent>
       </Dialog>
 
