@@ -1,13 +1,11 @@
 import { Router, type IRouter } from "express";
 import { count, eq, ne, sql } from "drizzle-orm";
 import { db, departmentsTable, medicalCasesTable, waitingCasesTable, incidentReportsTable, ovrReportsTable } from "@workspace/db";
-import { getCurrentUserAccess } from "../middleware/auth";
+import { requirePageAccess } from "../middleware/auth";
 
 const router: IRouter = Router();
 
-router.get("/quality/dashboard", async (req, res): Promise<void> => {
-  const access = await getCurrentUserAccess(req.headers.cookie);
-  if (!access.canReviewOvr) { res.status(403).json({ error: "لوحة الجودة تتطلب صلاحية المؤسس أو مسؤول الجودة" }); return; }
+router.get("/quality/dashboard", requirePageAccess("/quality-dashboard"), async (req, res): Promise<void> => {
   const departments = await db.select().from(departmentsTable);
   const departmentNames = new Map(departments.map(d => [d.id, d.name]));
   const [total] = await db.select({ count: count() }).from(ovrReportsTable);
@@ -25,7 +23,7 @@ router.get("/quality/dashboard", async (req, res): Promise<void> => {
   res.json({ totalOvr: Number(total?.count ?? 0), openOvr: Number(open?.count ?? 0), overdueCapa: Number(overdue?.count ?? 0), byStatus: byStatus.map(r => ({ status: r.status, count: Number(r.count) })), bySeverity: bySeverity.map(r => ({ severity: r.severity, count: Number(r.count) })), byType: byType.map(r => ({ type: r.type, count: Number(r.count) })), monthlyVisits: monthlyVisits.map(r => ({ month: r.month, count: Number(r.count) })), departmentVisits: departmentVisits.map(r => ({ departmentId: r.department, departmentName: departmentNames.get(r.department) ?? "غير محدد", count: Number(r.count) })), dischargeByReason: dischargeByReason.map(r => ({ reason: r.reason ?? "غير محدد", count: Number(r.count) })), dischargeByDepartment: dischargeByDepartment.map(r => ({ departmentName: departmentNames.get(r.department) ?? "غير محدد", count: Number(r.count) })), respirationPeriods: { daily: respirationDaily.map(r => ({ period: r.period, count: Number(r.count) })), weekly: respirationWeekly.map(r => ({ period: r.period, count: Number(r.count) })), monthly: monthlyVisits.map(r => ({ period: r.month, count: Number(r.count) })) } });
 });
 
-router.get("/dashboard/stats", async (req, res): Promise<void> => {
+router.get("/dashboard/stats", requirePageAccess("/dashboard"), async (req, res): Promise<void> => {
   const [totalResult] = await db.select({ count: count() }).from(medicalCasesTable);
   const [activeResult] = await db.select({ count: count() }).from(medicalCasesTable).where(eq(medicalCasesTable.status, "active"));
   const [criticalResult] = await db.select({ count: count() }).from(medicalCasesTable).where(eq(medicalCasesTable.status, "critical"));

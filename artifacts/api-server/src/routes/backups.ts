@@ -6,9 +6,8 @@ import { count } from "drizzle-orm";
 import { requireFounder } from "../middleware/auth";
 
 const router: IRouter = Router();
-router.use(requireFounder);
 
-router.get("/backups", async (_req, res): Promise<void> => {
+router.get("/backups", requireFounder, async (_req, res): Promise<void> => {
   const backups = await db
     .select({
       id: backupsTable.id,
@@ -22,7 +21,7 @@ router.get("/backups", async (_req, res): Promise<void> => {
   res.json(backups);
 });
 
-router.post("/backups", async (req, res): Promise<void> => {
+router.post("/backups", requireFounder, async (req, res): Promise<void> => {
   const parsed = CreateBackupBody.safeParse(req.body);
   if (!parsed.success) {
     res.status(400).json({ error: parsed.error.message });
@@ -55,7 +54,7 @@ router.post("/backups", async (req, res): Promise<void> => {
 });
 
 // Download a backup as JSON
-router.get("/backups/:id/download", async (req, res): Promise<void> => {
+router.get("/backups/:id/download", requireFounder, async (req, res): Promise<void> => {
   const id = parseInt(req.params.id as string, 10);
   const [backup] = await db.select().from(backupsTable).where(eq(backupsTable.id, id));
   if (!backup) {
@@ -69,7 +68,7 @@ router.get("/backups/:id/download", async (req, res): Promise<void> => {
 });
 
 // Delete a backup
-router.delete("/backups/:id", async (req, res): Promise<void> => {
+router.delete("/backups/:id", requireFounder, async (req, res): Promise<void> => {
   const id = parseInt(req.params.id as string, 10);
 
   // MySQL does not support .returning() — select first, then delete
@@ -97,7 +96,7 @@ function parseBackupData(value: unknown): { cases: any[]; waitingCases: any[] } 
   return { cases: data.cases, waitingCases: data.waitingCases };
 }
 
-router.post("/backups/import", async (req, res): Promise<void> => {
+router.post("/backups/import", requireFounder, async (req, res): Promise<void> => {
   try {
     const { backupName, backupData } = req.body as { backupName?: string; backupData?: unknown };
     const data = parseBackupData(backupData);
@@ -124,7 +123,7 @@ router.post("/backups/import", async (req, res): Promise<void> => {
   }
 });
 
-router.post("/backups/:id/restore", async (req, res): Promise<void> => {
+router.post("/backups/:id/restore", requireFounder, async (req, res): Promise<void> => {
   const id = parseInt(req.params.id as string, 10);
   if (!req.body?.confirm || !req.body?.replaceExisting) {
     res.status(400).json({ error: "يجب تأكيد استبدال البيانات الحالية صراحةً" });

@@ -1,18 +1,20 @@
 import { Router, type IRouter } from "express";
 import { eq } from "drizzle-orm";
 import { db, settingsTable } from "@workspace/db";
-import { requireFounder } from "../middleware/auth";
+import { requireFounder, getCurrentUserAccess } from "../middleware/auth";
 
 const router: IRouter = Router();
 
 const SETTINGS_PASSWORD = process.env.SETTINGS_PASSWORD ?? "@Bahnasy";
 
 // Get all settings (public keys only - no passwords returned)
-router.get("/settings", async (_req, res): Promise<void> => {
+router.get("/settings", async (req, res): Promise<void> => {
   const rows = await db.select().from(settingsTable);
   const map: Record<string, string | null> = {};
+  const publicKeys = new Set(["hospital_name", "logo_base64", "theme_color", "watermark_enabled", "supervisors"]);
+  const isFounder = (await getCurrentUserAccess(req.headers.cookie)).isFounder;
   for (const row of rows) {
-    if (row.key !== "settings_password") {
+    if (publicKeys.has(row.key) || (isFounder && row.key === "named_passwords")) {
       map[row.key] = row.value;
     }
   }

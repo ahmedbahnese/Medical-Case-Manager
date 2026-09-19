@@ -27,6 +27,9 @@ function createPeerConnection(): RTCPeerConnection {
 }
 
 function getUserMediaCompat(constraints: MediaStreamConstraints): Promise<MediaStream> {
+  if (window.isSecureContext === false && !["localhost", "127.0.0.1"].includes(window.location.hostname)) {
+    return Promise.reject(new Error("لا يمكن تشغيل الميكروفون من الهاتف عبر HTTP. افتح النظام عبر HTTPS ثم اسمح بالميكروفون."));
+  }
   const modern = navigator.mediaDevices?.getUserMedia;
   if (modern) return modern.call(navigator.mediaDevices, constraints);
   const legacy = (navigator as LegacyNavigator).getUserMedia || (navigator as LegacyNavigator).webkitGetUserMedia;

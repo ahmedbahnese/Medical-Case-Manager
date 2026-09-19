@@ -3,11 +3,11 @@ import { eq, count } from "drizzle-orm";
 import { db, departmentsTable, medicalCasesTable } from "@workspace/db";
 import { GetDepartmentParams } from "@workspace/api-zod";
 import { logAction } from "./audit-logs";
-import { getCurrentUserName, requireFounder } from "../middleware/auth";
+import { getCurrentUserName, requireFounder, requireAnyPageAccess } from "../middleware/auth";
 
 const router: IRouter = Router();
 
-router.get("/departments", async (req, res): Promise<void> => {
+router.get("/departments", requireAnyPageAccess(["/dashboard", "/add-case", "/waiting-cases", "/occupancy-report", "/artificial-respiration"], "view"), async (req, res): Promise<void> => {
   const departments = await db.select().from(departmentsTable).orderBy(departmentsTable.id);
 
   const activeCounts = await db
@@ -29,7 +29,7 @@ router.get("/departments", async (req, res): Promise<void> => {
   res.json(result);
 });
 
-router.get("/departments/:id", async (req, res): Promise<void> => {
+router.get("/departments/:id", requireAnyPageAccess(["/dashboard", "/add-case", "/waiting-cases", "/occupancy-report", "/artificial-respiration"], "view"), async (req, res): Promise<void> => {
   const raw = Array.isArray(req.params.id) ? req.params.id[0] : req.params.id;
   const params = GetDepartmentParams.safeParse({ id: parseInt(raw, 10) });
   if (!params.success) {

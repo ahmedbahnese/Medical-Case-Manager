@@ -4,9 +4,8 @@ import { db, auditLogsTable } from "@workspace/db";
 import { getCurrentUserName, requireFounder } from "../middleware/auth";
 
 const router: IRouter = Router();
-router.use(requireFounder);
 
-router.get("/audit-logs", async (req, res): Promise<void> => {
+router.get("/audit-logs", requireFounder, async (req, res): Promise<void> => {
   await db.delete(auditLogsTable).where(
     lt(auditLogsTable.createdAt, sql`(strftime('%s', 'now') * 1000) - (30 * 24 * 60 * 60 * 1000)`),
   );
@@ -19,7 +18,7 @@ router.get("/audit-logs", async (req, res): Promise<void> => {
   res.json(logs);
 });
 
-router.delete("/audit-logs", async (_req, res): Promise<void> => {
+router.delete("/audit-logs", requireFounder, async (_req, res): Promise<void> => {
   await db.delete(auditLogsTable);
   res.json({ success: true });
 });
