@@ -27,7 +27,8 @@ function createPeerConnection(): RTCPeerConnection {
 }
 
 function getUserMediaCompat(constraints: MediaStreamConstraints): Promise<MediaStream> {
-  if (window.isSecureContext === false && !["localhost", "127.0.0.1"].includes(window.location.hostname)) {
+  const isNativeMobileApp = /BSCH-(Android-Founder|Mobile-App)/i.test(navigator.userAgent);
+  if (!isNativeMobileApp && window.isSecureContext === false && !["localhost", "127.0.0.1"].includes(window.location.hostname)) {
     return Promise.reject(new Error("لا يمكن تشغيل الميكروفون من الهاتف عبر HTTP. افتح النظام عبر HTTPS ثم اسمح بالميكروفون."));
   }
   const modern = navigator.mediaDevices?.getUserMedia;
