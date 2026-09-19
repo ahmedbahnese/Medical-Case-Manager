@@ -33,15 +33,33 @@ import { PwaInstallPrompt, useSwUpdateToast } from "@/components/pwa-install-pro
 import { apiGet, apiPost } from "@/lib/api";
 import { toast } from "sonner";
 
+function playNotificationTone(): Promise<void> {
+  try {
+    const AudioContextClass = window.AudioContext || (window as Window & { webkitAudioContext?: typeof AudioContext }).webkitAudioContext;
+    if (!AudioContextClass) return Promise.resolve();
+    const context = new AudioContextClass();
+    const oscillator = context.createOscillator();
+    const gain = context.createGain();
+    oscillator.type = "sine";
+    oscillator.frequency.value = 880;
+    gain.gain.setValueAtTime(0.0001, context.currentTime);
+    gain.gain.exponentialRampToValueAtTime(0.16, context.currentTime + 0.015);
+    gain.gain.exponentialRampToValueAtTime(0.0001, context.currentTime + 0.18);
+    oscillator.connect(gain).connect(context.destination);
+    oscillator.start();
+    oscillator.stop(context.currentTime + 0.2);
+    return new Promise(resolve => oscillator.addEventListener("ended", () => { void context.close(); resolve(); }, { once: true }));
+  } catch { return Promise.resolve(); }
+}
+
 function speakNotification(item: { message: string; from: string; delivery?: string }) {
   if (!("speechSynthesis" in window) || !item.message.trim()) return;
   window.speechSynthesis.cancel();
-  const prefix = item.delivery === "call" ? "نداء عاجل من المؤسس. " : "رسالة من المؤسس. ";
-  const utterance = new SpeechSynthesisUtterance(`${prefix}${item.message}`);
+  const utterance = new SpeechSynthesisUtterance(item.message);
   utterance.lang = "ar-EG";
   utterance.rate = item.delivery === "call" ? 0.95 : 1;
   utterance.volume = 1;
-  window.speechSynthesis.speak(utterance);
+  void playNotificationTone().then(() => window.speechSynthesis.speak(utterance));
 }
 
 const NAV_GROUPS = [
