@@ -7,8 +7,36 @@ import { toast } from "sonner";
 
 type User = { name: string; isOnline: boolean };
 type CallInfo = { id: string; owner: string; createdAt: number; recipients?: string[] };
+type LegacyNavigator = Navigator & { getUserMedia?: (constraints: MediaStreamConstraints, success: (stream: MediaStream) => void, failure: (error: unknown) => void) => void; webkitGetUserMedia?: (constraints: MediaStreamConstraints, success: (stream: MediaStream) => void, failure: (error: unknown) => void) => void };
+type LegacyWindow = Window & { webkitRTCPeerConnection?: typeof RTCPeerConnection };
 type PeerMap = Record<string, RTCPeerConnection>;
 const rtcConfig: RTCConfiguration = { iceServers: [{ urls: "stun:stun.l.google.com:19302" }] };
+
+function createPeerConnection(): RTCPeerConnection {
+  const Peer = window.RTCPeerConnection || (window as LegacyWindow).webkitRTCPeerConnection;
+  if (!Peer) throw new Error("هذا الإصدار من Chromium لا يدعم WebRTC");
+  return new Peer(rtcConfig);
+}
+
+function getUserMediaCompat(constraints: MediaStreamConstraints): Promise<MediaStream> {
+  const modern = navigator.mediaDevices?.getUserMedia;
+  if (modern) return modern.call(navigator.mediaDevices, constraints);
+  const legacy = (navigator as LegacyNavigator).getUserMedia || (navigator as LegacyNavigator).webkitGetUserMedia;
+  if (!legacy) return Promise.reject(new Error("لا يمكن الوصول إلى الميكروفون في هذا الإصدار من Chromium"));
+  return new Promise((resolve, reject) => legacy.call(navigator, constraints, resolve, reject));
+}
+
+function attachLocalStream(pc: RTCPeerConnection, local: MediaStream) {
+  if (typeof pc.addTrack === "function") local.getTracks().forEach(track => pc.addTrack(track, local));
+  else (pc as RTCPeerConnection & { addStream?: (stream: MediaStream) => void }).addStream?.(local);
+}
+
+function attachRemoteAudio(pc: RTCPeerConnection, audio: HTMLAudioElement | null) {
+  pc.ontrack = event => { if (audio && event.streams[0]) { audio.srcObject = event.streams[0]; void audio.play().catch(() => {}); } };
+  (pc as RTCPeerConnection & { onaddstream?: (event: { stream: MediaStream }) => void }).onaddstream = event => {
+    if (audio) { audio.srcObject = event.stream; void audio.play().catch(() => {}); }
+  };
+}
 
 async function waitForIce(pc: RTCPeerConnection) {
   if (pc.iceGatheringState === "complete") return;
@@ -42,12 +70,12 @@ export function VoiceCallWidget({ isFounder }: { isFounder: boolean }) {
     if (!recipients.length) { toast.error("حدد مستخدمًا واحدًا على الأقل للمكالمة"); return; }
     try {
       const call = await apiPost<CallInfo>("/api/calls", { audience, recipients });
-      stream.current = await navigator.mediaDevices.getUserMedia({ audio: true, video: false });
+      stream.current = await getUserMediaCompat({ audio: true, video: false });
       setActive(call); setOpen(false); setStatus("جاري الاتصال...");
       for (const user of recipients.filter(name => name !== "المؤسس")) {
-        const pc = new RTCPeerConnection(rtcConfig); pcs.current[user] = pc;
-        stream.current.getTracks().forEach(track => pc.addTrack(track, stream.current!));
-        pc.ontrack = e => { if (audio.current) { audio.current.srcObject = e.streams[0]; void audio.current.play().catch(() => {}); } };
+        const pc = createPeerConnection(); pcs.current[user] = pc;
+        attachLocalStream(pc, stream.current);
+        attachRemoteAudio(pc, audio.current);
         const offer = await pc.createOffer(); await pc.setLocalDescription(offer); await waitForIce(pc);
         await sendSignal(call.id, user, "offer", pc.localDescription);
       }
@@ -56,7 +84,7 @@ export function VoiceCallWidget({ isFounder }: { isFounder: boolean }) {
   };
 
   const acceptIncoming = async (call: CallInfo) => {
-    try { stream.current = await navigator.mediaDevices.getUserMedia({ audio: true, video: false }); await apiPost(`/api/calls/${call.id}/join`, {}); setIncoming(call); setStatus("جاري الاتصال..."); }
+    try { stream.current = await getUserMediaCompat({ audio: true, video: false }); await apiPost(`/api/calls/${call.id}/join`, {}); setIncoming(call); setStatus("جاري الاتصال..."); }
     catch (e: any) { toast.error(e?.message ?? "تعذر تشغيل الميكروفون"); }
   };
 
@@ -79,9 +107,9 @@ export function VoiceCallWidget({ isFounder }: { isFounder: boolean }) {
         lastSignal.current = Math.max(lastSignal.current, signal.id);
         if (signal.type === "answer" && isFounder) { const pc = pcs.current[signal.from]; if (pc && signal.payload) await pc.setRemoteDescription(signal.payload); }
         if (signal.type === "offer" && !isFounder) {
-          const pc = new RTCPeerConnection(rtcConfig); pcs.current[signal.from] = pc;
-          stream.current?.getTracks().forEach(track => pc.addTrack(track, stream.current!));
-          pc.ontrack = e => { if (audio.current) { audio.current.srcObject = e.streams[0]; void audio.current.play().catch(() => {}); } };
+          const pc = createPeerConnection(); pcs.current[signal.from] = pc;
+          if (stream.current) attachLocalStream(pc, stream.current);
+          attachRemoteAudio(pc, audio.current);
           await pc.setRemoteDescription(signal.payload); const answer = await pc.createAnswer(); await pc.setLocalDescription(answer); await waitForIce(pc);
           await sendSignal(call.id, signal.from, "answer", pc.localDescription);
           setStatus("المكالمة جارية");
@@ -96,7 +124,7 @@ export function VoiceCallWidget({ isFounder }: { isFounder: boolean }) {
   if (!isFounder && !incoming && !active) return null;
   return <>
     {isFounder && <Button variant="outline" className="ml-2 gap-2" onClick={async () => { const list = await apiGet<User[]>("/api/presence/users").catch(() => []); setUsers(list); setOpen(true); }}><Phone className="h-4 w-4" /> مكالمة صوتية</Button>}
-    <audio ref={audio} autoPlay />
+    <audio ref={audio} autoPlay playsInline />
     <Dialog open={open} onOpenChange={setOpen}><DialogContent dir="rtl" className="max-w-lg"><DialogHeader><DialogTitle className="flex items-center gap-2"><Phone className="h-5 w-5" /> بدء مكالمة صوتية</DialogTitle></DialogHeader><div className="space-y-3"><label className="flex items-center gap-2 text-sm"><input type="radio" checked={audience === "all_online"} onChange={() => setAudience("all_online")} /> جميع المتصلين الآن</label><label className="flex items-center gap-2 text-sm"><input type="radio" checked={audience === "selected"} onChange={() => setAudience("selected")} /> مستخدمون محددون</label>{audience === "selected" && <div className="grid grid-cols-2 gap-2 border rounded-md p-2 max-h-40 overflow-y-auto">{users.map(u => <label key={u.name} className="flex items-center gap-2 text-sm"><input type="checkbox" checked={selected.includes(u.name)} onChange={e => setSelected(p => e.target.checked ? [...p, u.name] : p.filter(n => n !== u.name))} />{u.name}{u.isOnline ? <span className="text-green-600">●</span> : <span className="text-muted-foreground">(غير متصل)</span>}</label>)}</div>}<p className="text-xs text-muted-foreground">سيطلب المتصفح إذن الميكروفون عند بدء المكالمة. لا يتم حفظ الصوت في قاعدة البيانات.</p></div><DialogFooter><Button onClick={() => void startCall()}><Phone className="ml-2 h-4 w-4" /> بدء المكالمة</Button></DialogFooter></DialogContent></Dialog>
     {(incoming || active) && <div className="fixed bottom-4 left-4 z-50 flex items-center gap-3 rounded-lg border bg-background p-3 shadow-lg"><Users className="h-5 w-5 text-green-600" /><span className="text-sm">{status || "مكالمة صوتية"}</span><Button size="sm" variant="destructive" onClick={() => void closeCall()}><PhoneOff className="ml-1 h-4 w-4" /> إنهاء</Button></div>}
   </>;

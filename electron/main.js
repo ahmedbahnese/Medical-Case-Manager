@@ -16,6 +16,9 @@ const fs = require('fs');
 app.disableHardwareAcceleration();
 app.commandLine.appendSwitch('disable-gpu');
 app.commandLine.appendSwitch('disable-gpu-compositing');
+// Incoming WebRTC audio must start without a second click, including on
+// Chromium 108/Electron 22 used by the Windows 7 build.
+app.commandLine.appendSwitch('autoplay-policy', 'no-user-gesture-required');
 
 const API_PORT = 8080;
 // Use the IPv4 loopback explicitly. On Windows 7, `localhost` may resolve to
