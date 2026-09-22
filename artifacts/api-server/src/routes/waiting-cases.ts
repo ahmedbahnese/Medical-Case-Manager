@@ -38,7 +38,11 @@ router.get("/waiting-cases", requirePageAccess("/waiting-cases"), async (req, re
 });
 
 router.post("/waiting-cases", requirePageAccess("/waiting-cases", "edit"), async (req, res): Promise<void> => {
-  const parsed = CreateWaitingCaseBody.safeParse(req.body);
+  const normalizedBody = { ...(req.body ?? {}) } as Record<string, unknown>;
+  for (const key of ["medicalReport", "medicalReportName", "medicalReportData"]) {
+    if (normalizedBody[key] === null) delete normalizedBody[key];
+  }
+  const parsed = CreateWaitingCaseBody.safeParse(normalizedBody);
   if (!parsed.success) {
     res.status(400).json({ error: parsed.error.message });
     return;
@@ -92,7 +96,11 @@ router.patch("/waiting-cases/:id", requirePageAccess("/waiting-cases", "edit"), 
     return;
   }
 
-  const body = UpdateWaitingCaseBody.safeParse(req.body);
+  const normalizedBody = { ...(req.body ?? {}) } as Record<string, unknown>;
+  for (const key of ["medicalReport", "medicalReportName", "medicalReportData"]) {
+    if (normalizedBody[key] === null) delete normalizedBody[key];
+  }
+  const body = UpdateWaitingCaseBody.safeParse(normalizedBody);
   if (!body.success) {
     res.status(400).json({ error: body.error.message });
     return;

@@ -46,7 +46,8 @@ router.get("/notifications", async (req, res): Promise<void> => {
 
 router.post("/notifications", requireFounder, async (req, res): Promise<void> => {
   const message = String(req.body?.message ?? "").trim();
-  const delivery = req.body?.delivery === "call" ? "call" : "announcement";
+  // WebRTC voice calls were removed for Windows 7 compatibility.
+  const delivery = "announcement";
   const tone = ["single", "double", "soft"].includes(String(req.body?.tone)) ? String(req.body.tone) : "single";
   const toneDurationMs = Math.max(80, Math.min(1000, Number(req.body?.toneDurationMs) || 180));
   const speak = req.body?.speak === false ? 0 : 1;
@@ -60,6 +61,23 @@ router.post("/notifications", requireFounder, async (req, res): Promise<void> =>
     message: message.slice(0, 500), fromUser: "المؤسس", delivery, tone, toneDurationMs, speak, speechLanguage, audience, recipientsJson: JSON.stringify(recipients), readByJson: "[]",
   }).returning();
   res.status(201).json({ ...created, recipients, readBy: [] });
+});
+
+// A notification doubles as a lightweight chat message: recipients can reply
+// immediately, and the founder receives the reply through the same fast channel.
+router.post("/notifications/:id/reply", async (req, res): Promise<void> => {
+  const id = Number(req.params.id);
+  const user = getCurrentUserName(req.headers.cookie);
+  const message = String(req.body?.message ?? "").trim().slice(0, 500);
+  const [source] = await db.select().from(notificationsTable).where(eq(notificationsTable.id, id));
+  if (!source) { res.status(404).json({ error: "الرسالة غير موجودة" }); return; }
+  if (!jsonArray(source.recipientsJson).includes(user)) { res.status(403).json({ error: "لا يمكن الرد على هذه الرسالة" }); return; }
+  if (!message) { res.status(400).json({ error: "اكتب نص الرد" }); return; }
+  const [created] = await db.insert(notificationsTable).values({
+    message, fromUser: user, delivery: "announcement", tone: "single", toneDurationMs: 180,
+    speak: 1, speechLanguage: "auto", audience: "selected", recipientsJson: JSON.stringify(["المؤسس"]), readByJson: "[]",
+  }).returning();
+  res.status(201).json({ ...created, from: user, recipients: ["المؤسس"], readBy: [] });
 });
 
 router.post("/notifications/:id/read", async (req, res): Promise<void> => {

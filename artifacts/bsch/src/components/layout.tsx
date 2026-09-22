@@ -21,7 +21,6 @@ import {
   ShieldCheck,
   Bell,
   Megaphone,
-  PhoneCall,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Toaster } from "sonner";
@@ -69,10 +68,19 @@ function speakNotification(item: { message: string; from: string; delivery?: str
     const utterance = new SpeechSynthesisUtterance(item.message);
     utterance.lang = lang;
     utterance.voice = window.speechSynthesis.getVoices().find(voice => voice.lang.toLowerCase().startsWith(lang.slice(0, 2).toLowerCase())) ?? null;
-    utterance.rate = item.delivery === "call" ? 0.95 : 1;
+    utterance.rate = 1;
     utterance.volume = 1;
     window.speechSynthesis.speak(utterance);
   });
+}
+function showSystemNotification(item: { message: string; from: string }) {
+  if (!("Notification" in window) || Notification.permission !== "granted") return;
+  try {
+    const notification = new Notification(`BSCH — ${item.from}`, {
+      body: item.message, icon: "/icons/icon-192.png", tag: "bsch-medical-notice", dir: "rtl", lang: "ar",
+    });
+    notification.onclick = () => { window.focus(); notification.close(); };
+  } catch { /* unsupported in some old browsers */ }
 }
 
 const NAV_GROUPS = [
@@ -134,7 +142,7 @@ export function Layout({ children }: { children: ReactNode }) {
   const [noticeText, setNoticeText] = useState("");
   const [noticeAudience, setNoticeAudience] = useState<"selected" | "all_online">("selected");
   const [noticeRecipients, setNoticeRecipients] = useState<string[]>([]);
-  const [noticeDelivery, setNoticeDelivery] = useState<"call" | "announcement">("announcement");
+  const noticeDelivery = "announcement" as const;
   const [noticeTone, setNoticeTone] = useState("single");
   const [noticeToneDurationMs, setNoticeToneDurationMs] = useState(180);
   const [noticeSpeak, setNoticeSpeak] = useState(true);
@@ -143,14 +151,29 @@ export function Layout({ children }: { children: ReactNode }) {
   const [lastNoticeId, setLastNoticeId] = useState(Number(localStorage.getItem("bsch:last-notice") || 0));
   useEffect(() => {
     if (!(user as any)?.isAuthenticated) return;
+    if ("Notification" in window && Notification.permission === "default") void Notification.requestPermission();
     const heartbeat = () => apiPost("/api/presence/heartbeat", {}).catch(() => {});
     const notices = () => apiGet<Array<{ id: number; message: string; from: string; delivery?: string; tone?: string; toneDurationMs?: number; speak?: number; speechLanguage?: string }>>(`/api/notifications?since=${lastNoticeId}`).then(items => {
-      for (const item of items) { toast.info(`${item.from}: ${item.message}`, { duration: 8000 }); speakNotification(item); apiPost(`/api/notifications/${item.id}/read`, {}).catch(() => {}); }
+      for (const item of items) {
+        toast.info(`${item.from}: ${item.message}`, {
+          duration: 8000,
+          action: {
+            label: "رد",
+            onClick: () => {
+              const reply = window.prompt("اكتب الرد على الرسالة:");
+              if (reply?.trim()) apiPost(`/api/notifications/${item.id}/reply`, { message: reply.trim() }).then(() => toast.success("تم إرسال الرد فورياً")).catch((e: any) => toast.error(e.message));
+            },
+          },
+        });
+        speakNotification(item);
+        showSystemNotification(item);
+        apiPost(`/api/notifications/${item.id}/read`, {}).catch(() => {});
+      }
       const latest = items.at(-1)?.id;
       if (latest) { setLastNoticeId(latest); localStorage.setItem("bsch:last-notice", String(latest)); }
     }).catch(() => {});
     heartbeat(); notices();
-    const timer = window.setInterval(() => { heartbeat(); notices(); }, 30000);
+    const timer = window.setInterval(() => { heartbeat(); notices(); }, 3000);
     return () => window.clearInterval(timer);
   }, [(user as any)?.isAuthenticated, lastNoticeId]);
   useEffect(() => {
@@ -362,8 +385,7 @@ export function Layout({ children }: { children: ReactNode }) {
             <label className="flex items-center gap-2 text-sm"><input type="radio" name="notice-audience" checked={noticeAudience === "selected"} onChange={() => setNoticeAudience("selected")} /> اختيار مستخدمين محددين</label>
             {noticeAudience === "selected" && <div className="grid grid-cols-2 gap-2 rounded-md border p-2 max-h-32 overflow-y-auto">{availableUsers.map(u => <label key={u.name} className="flex items-center gap-2 text-sm"><input type="checkbox" checked={noticeRecipients.includes(u.name)} onChange={e => setNoticeRecipients(prev => e.target.checked ? [...prev, u.name] : prev.filter(n => n !== u.name))} />{u.name}{u.isOnline ? <span className="text-green-600">●</span> : <span className="text-muted-foreground">(غير متصل)</span>}</label>)}</div>}
             <div className="grid grid-cols-2 gap-2">
-              <Button type="button" variant={noticeDelivery === "call" ? "default" : "outline"} className="gap-2" onClick={() => setNoticeDelivery("call")}><PhoneCall className="h-4 w-4" /> مكالمة/نداء فوري</Button>
-              <Button type="button" variant={noticeDelivery === "announcement" ? "default" : "outline"} className="gap-2" onClick={() => setNoticeDelivery("announcement")}><Megaphone className="h-4 w-4" /> رسالة منطوقة</Button>
+              <Button type="button" variant="default" className="gap-2"><Megaphone className="h-4 w-4" /> رسالة مسجلة</Button>
             </div>
             <div className="grid grid-cols-2 gap-2">
               <label className="space-y-1 text-sm">النغمة<select className="h-9 w-full rounded-md border bg-background px-2" value={noticeTone} onChange={e => setNoticeTone(e.target.value)}><option value="single">نغمة واحدة</option><option value="double">نغمتان متتاليتان</option><option value="soft">نغمة هادئة</option></select></label>
@@ -374,11 +396,11 @@ export function Layout({ children }: { children: ReactNode }) {
               <label className="space-y-1 text-sm">لغة الصوت<select className="h-9 w-full rounded-md border bg-background px-2" value={noticeSpeechLanguage} onChange={e => setNoticeSpeechLanguage(e.target.value as "auto" | "ar" | "en")}><option value="auto">تلقائي حسب النص</option><option value="ar">العربية</option><option value="en">English</option></select></label>
             </div>
             <div className="flex gap-2 items-center"><Button type="button" variant="secondary" onClick={() => speakNotification({ from: "المؤسس", message: noticeSpeechLanguage === "en" ? "This is a voice test" : "هذه تجربة للصوت والنغمة", delivery: noticeDelivery, tone: noticeTone, toneDurationMs: noticeToneDurationMs, speak: noticeSpeak ? 1 : 0, speechLanguage: noticeSpeechLanguage })}>تجربة النغمة والصوت</Button><p className="text-xs text-muted-foreground">العربية والإنجليزية تستخدمان أصوات الجهاز المثبتة محليًا.</p></div>
-            <p className="text-xs text-muted-foreground">لا توجد مكالمة WebRTC ولا ميكروفون. عند إلغاء القراءة ستصل النغمة فقط.</p>
-            <Input value={noticeText} onChange={e => setNoticeText(e.target.value)} placeholder={noticeDelivery === "call" ? "اكتب نص النداء العاجل" : "اكتب الرسالة التي سيقرأها الكمبيوتر"} />
+            <p className="text-xs text-muted-foreground">تصل الرسالة فورياً بتنبيه صوتي وإشعار سطح المكتب أو شاشة قفل الهاتف بعد السماح بالإشعارات.</p>
+            <Input value={noticeText} onChange={e => setNoticeText(e.target.value)} placeholder="اكتب الرسالة التي سيقرأها الكمبيوتر" />
             <div className="rounded-md border p-2 max-h-40 overflow-y-auto space-y-2"><p className="text-xs font-semibold">سجل الرسائل المحفوظة</p>{noticeHistory.length === 0 ? <p className="text-xs text-muted-foreground">لا توجد رسائل محفوظة</p> : noticeHistory.slice().reverse().map(n => <div key={n.id} className="border-t pt-1 text-xs"><p>{n.message}</p><p className="text-muted-foreground">إلى: {n.recipients.join("، ")}</p></div>)}</div>
           </div>
-          <DialogFooter><Button disabled={!noticeText.trim() || (noticeAudience === "selected" && noticeRecipients.length === 0)} onClick={async () => { try { await apiPost("/api/notifications", { message: noticeText, delivery: noticeDelivery, tone: noticeTone, toneDurationMs: noticeToneDurationMs, speak: noticeSpeak, speechLanguage: noticeSpeechLanguage, audience: noticeAudience, recipients: noticeRecipients }); setNoticeText(""); setNoticeRecipients([]); toast.success(noticeDelivery === "call" ? "تم إرسال النداء الصوتي" : "تم إرسال الرسالة المنطوقة"); } catch (e: any) { toast.error(e.message); } }}>{noticeDelivery === "call" ? "إرسال النداء" : "إرسال الرسالة"}</Button></DialogFooter>
+          <DialogFooter><Button disabled={!noticeText.trim() || (noticeAudience === "selected" && noticeRecipients.length === 0)} onClick={async () => { try { await apiPost("/api/notifications", { message: noticeText, delivery: "announcement", tone: noticeTone, toneDurationMs: noticeToneDurationMs, speak: noticeSpeak, speechLanguage: noticeSpeechLanguage, audience: noticeAudience, recipients: noticeRecipients }); setNoticeText(""); setNoticeRecipients([]); toast.success("تم إرسال الرسالة المسجلة"); } catch (e: any) { toast.error(e.message); } }}>إرسال الرسالة</Button></DialogFooter>
         </DialogContent>
       </Dialog>
 

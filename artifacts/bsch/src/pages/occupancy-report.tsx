@@ -378,9 +378,6 @@ export default function OccupancyReport() {
             <span>مديرية الصحة بالبحيرة</span>
             <span>★★★★★★</span>
           </div>
-          {logo_base64 && (
-            <img src={logo_base64} alt="logo" className="h-14 object-contain mx-auto mb-1" />
-          )}
           <h2 className="font-bold" style={{ fontSize: fs + 4 }}>{hospital_name}</h2>
           <h3 className="font-bold" style={{ fontSize: fs + 2 }}>بيان الخدمة الطارئة</h3>
           <p>عن يوم {dayName} الموافق {formatted}</p>

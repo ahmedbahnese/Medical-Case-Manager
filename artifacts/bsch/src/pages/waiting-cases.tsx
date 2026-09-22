@@ -115,12 +115,17 @@ function AddForm({ section, onSuccess }: { section: Section; onSuccess: () => vo
 
   const handleSubmit = () => {
     if (!form.patientName.trim()) { toast.error("اسم المريض مطلوب"); return; }
-    create.mutate({ data: {
+    const data: Record<string, unknown> = {
       ...form,
       section,
-      medicalReportName: reportFile?.name ?? null,
-      medicalReportData: reportFile?.data ?? null,
-    } as any }, {
+    };
+    // Optional string fields are omitted when no file is selected; null is
+    // rejected by the generated Zod contract (Windows 7 exposed this clearly).
+    if (reportFile) {
+      data.medicalReportName = reportFile.name;
+      data.medicalReportData = reportFile.data;
+    }
+    create.mutate({ data: data as any }, {
       onSuccess: () => {
         toast.success("تمت الإضافة لقائمة الانتظار");
         setForm({ ...EMPTY_FORM });
@@ -268,7 +273,13 @@ function WaitingCaseActionDialog({
   const isPending = update.isPending || createCase.isPending;
 
   const handleSaveOnly = () => {
-    update.mutate({ id: waitingCase.id, data: { ...form, notes: form.notes || undefined, medicalReport, medicalReportName: reportFile?.name, medicalReportData: reportFile?.data } as any }, {
+    const data: Record<string, unknown> = { ...form, notes: form.notes || undefined };
+    if (medicalReport.trim()) data.medicalReport = medicalReport;
+    if (reportFile) {
+      data.medicalReportName = reportFile.name;
+      data.medicalReportData = reportFile.data;
+    }
+    update.mutate({ id: waitingCase.id, data: data as any }, {
       onSuccess: () => { toast.success("تم تحديث البيانات"); onSuccess(); onClose(); },
       onError: (e: any) => toast.error("خطأ: " + (e?.response?.data?.error ?? e.message)),
     });
