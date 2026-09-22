@@ -6,7 +6,7 @@
  * Production  : built with electron-builder (nsis / portable)
  */
 
-const { app, BrowserWindow, shell, Menu, Tray, nativeImage, dialog, ipcMain, powerSaveBlocker } = require('electron');
+const { app, BrowserWindow, shell, Menu, Tray, nativeImage, dialog, ipcMain, powerSaveBlocker, session } = require('electron');
 const path = require('path');
 const { spawn, execFileSync } = require('child_process');
 const http = require('http');
@@ -55,6 +55,15 @@ function keepServerAvailable() {
   // machine awake while Windows may still turn off the display.
   sleepBlockerId = powerSaveBlocker.start('prevent-app-suspension');
   writeDiagnostic(`powerSaveBlocker started: ${sleepBlockerId}`);
+}
+
+function allowDesktopNotifications() {
+  // Electron desktop builds are trusted local applications, so notification
+  // permission is granted without showing Chromium's permission prompt.
+  session.defaultSession.setPermissionRequestHandler((_webContents, permission, callback) => {
+    callback(permission === 'notifications');
+  });
+  session.defaultSession.setPermissionCheckHandler((_webContents, permission) => permission === 'notifications');
 }
 
 ipcMain.handle('save-pdf', async (event, payload) => {
@@ -150,6 +159,10 @@ function startApiServer() {
       // Electron's executable must be switched to Node mode for the API child.
       ELECTRON_RUN_AS_NODE: '1',
       FRONTEND_DIR: FRONTEND_DIR,
+      // better-sqlite3 remains external in the API bundle because it is native.
+      NODE_PATH: isDev
+        ? path.join(__dirname, '..', 'node_modules')
+        : path.join(process.resourcesPath, 'api-server', 'node_modules'),
       ...dbConfig,
     },
     stdio: ['ignore', 'pipe', 'pipe'],
@@ -368,6 +381,7 @@ function createTray() {
 // ─── App Lifecycle ────────────────────────────────────────────────────────────
 
 app.whenReady().then(async () => {
+  allowDesktopNotifications();
   keepServerAvailable();
   app.setLoginItemSettings({ openAtLogin: true, args: ['--hidden'] });
   if (!startHidden) createSplash();

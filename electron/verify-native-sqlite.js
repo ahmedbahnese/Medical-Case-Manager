@@ -12,7 +12,8 @@ function peKind(file) {
   return `unknown(0x${machine.toString(16)})`;
 }
 
-const expected = { ia32: "PE32" };
+const requestedArch = process.env.ELECTRON_ARCH || process.env.npm_config_arch || "ia32";
+const expected = { [requestedArch]: requestedArch === "x64" ? "PE32+" : "PE32" };
 const root = process.argv[2] || path.resolve(__dirname, "native", "better-sqlite3");
 for (const [arch, kind] of Object.entries(expected)) {
   const candidates = [

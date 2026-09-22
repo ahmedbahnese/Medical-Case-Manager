@@ -43,13 +43,27 @@ jobs:
 
       - name: Install Electron dependencies
         working-directory: electron
-        run: npm ci --ignore-scripts --no-audit --no-fund
+        run: npm ci --no-audit --no-fund
 
-      - name: Build Windows installers
+      - name: Build Windows ia32 installer with native SQLite
         working-directory: electron
+        shell: cmd
         run: |
-          npx electron-builder --win nsis --x64 --publish never
-          npx electron-builder --win nsis --ia32 --publish never
+          set ELECTRON_ARCH=ia32
+          call npm run prepare-native
+          call npm run rebuild-native
+          call npm run verify-sqlite
+          call npx electron-builder --win nsis --ia32 --publish never
+
+      - name: Build Windows x64 installer with native SQLite
+        working-directory: electron
+        shell: cmd
+        run: |
+          set ELECTRON_ARCH=x64
+          call npm run prepare-native
+          call npm run rebuild-native
+          call npm run verify-sqlite
+          call npx electron-builder --win nsis --x64 --publish never
 
       - name: Upload installer artifact
         uses: actions/upload-artifact@v4

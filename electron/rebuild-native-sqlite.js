@@ -4,6 +4,7 @@ const { spawnSync } = require('child_process');
 
 const packageDir = path.join(__dirname, 'native', 'better-sqlite3');
 const prebuildBin = require.resolve('prebuild-install/bin.js', { paths: [packageDir] });
+const arch = process.env.ELECTRON_ARCH || process.env.npm_config_arch || 'ia32';
 
 if (!fs.existsSync(packageDir)) {
   console.error(`Native package directory not found: ${packageDir}`);
@@ -14,7 +15,7 @@ const result = spawnSync(process.execPath, [
   prebuildBin,
   '--runtime', 'electron',
   '--target', '22.3.27',
-  '--arch', 'ia32',
+  '--arch', arch,
   '--platform', 'win32',
   '--verbose',
 ], { cwd: packageDir, stdio: 'inherit', windowsHide: true });
