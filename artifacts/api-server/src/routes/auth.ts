@@ -38,6 +38,7 @@ interface NamedPasswordRecord {
   name: string; password: string;
   canEdit?: boolean; allowedPages?: string[];
   pagePermissions?: PagePermission[];
+  startPage?: string;
 }
 
 /** Returns named users from DB or [] */
@@ -70,13 +71,14 @@ router.get("/auth/me", async (req, res): Promise<void> => {
   const named = await getNamedPasswords();
   const entry = named.find(np => np.name === base.name);
   if (entry?.pagePermissions?.length) {
-    res.json({ ...base, pagePermissions: entry.pagePermissions });
+    res.json({ ...base, pagePermissions: entry.pagePermissions, startPage: entry.startPage ?? "/dashboard" });
   } else {
     // legacy format fallback
     res.json({
       ...base,
       canEdit: entry?.canEdit !== false,
       allowedPages: entry?.allowedPages ?? [],
+      startPage: entry?.startPage ?? "/dashboard",
     });
   }
 });
@@ -105,7 +107,7 @@ router.post("/auth/founder-login", async (req, res): Promise<void> => {
   if (matched) {
     res.cookie(SESSION_COOKIE, `user:${matched.name}`, { ...COOKIE_OPTIONS });
     await logAction("تسجيل دخول", "auth", null, matched.name, null, matched.name);
-    res.json({ isAuthenticated: true, isFounder: false, name: matched.name });
+    res.json({ isAuthenticated: true, isFounder: false, name: matched.name, startPage: matched.startPage ?? "/dashboard" });
     return;
   }
 

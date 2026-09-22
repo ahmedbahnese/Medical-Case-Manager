@@ -71,7 +71,7 @@ function Router() {
   if (isLoading) return <div className="h-screen bg-background" />;
 
   if (user?.isAuthenticated && location === '/') {
-    return <Redirect to="/dashboard" />;
+    return <Redirect to={user.isFounder ? "/dashboard" : ((user as any).startPage || "/dashboard")} />;
   }
 
   return (

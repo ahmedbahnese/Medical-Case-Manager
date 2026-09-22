@@ -98,6 +98,7 @@ interface NamedPassword {
   allowedPages?: string[];
   pagePermissions?: PagePermission[];
   role?: "user" | "quality" | "infection_control" | "insurance" | "statistics";
+  startPage?: string;
 }
 
 const ACCESS_LABELS: Record<string, string> = { none: "لا وصول", view: "عرض", edit: "تعديل" };
@@ -119,7 +120,10 @@ const ALL_USER_PAGES = [
   { href: "/advanced-search",       label: "بحث متقدم" },
   { href: "/discharge-history",     label: "سجل الخروج" },
   { href: "/bulk-import",           label: "الاستيراد الذكي" },
+  { href: "/open-accounts",        label: "الحسابات المفتوحة" },
 ];
+
+const START_PAGE_OPTIONS = ALL_USER_PAGES.filter(p => p.href !== "/open-accounts");
 
 const DEFAULT_PAGE_PERMS: PagePermission[] = ALL_USER_PAGES.map(p => ({ href: p.href, access: "edit" as const }));
 
@@ -161,6 +165,7 @@ export default function SettingsPage() {
   const [newNpName, setNewNpName] = useState("");
   const [newNpPassword, setNewNpPassword] = useState("");
   const [newNpRole, setNewNpRole] = useState<NamedPassword["role"]>("user");
+  const [newNpStartPage, setNewNpStartPage] = useState("/dashboard");
   const [showNewNpPw, setShowNewNpPw] = useState(false);
   const [newNpPagePerms, setNewNpPagePerms] = useState<PagePermission[]>([...DEFAULT_PAGE_PERMS]);
   // Edit existing user
@@ -168,6 +173,7 @@ export default function SettingsPage() {
   const [editUserName, setEditUserName] = useState("");
   const [editUserPw, setEditUserPw] = useState("");
   const [editUserRole, setEditUserRole] = useState<NamedPassword["role"]>("user");
+  const [editUserStartPage, setEditUserStartPage] = useState("/dashboard");
   const [editUserPerms, setEditUserPerms] = useState<PagePermission[]>([]);
   const [showEditUserPw, setShowEditUserPw] = useState(false);
 
@@ -279,10 +285,11 @@ export default function SettingsPage() {
       password: newNpPassword.trim(),
       role: newNpRole,
       pagePermissions: newNpPagePerms,
+      startPage: newNpStartPage,
     };
     const updated = [...namedPasswords, newUser];
     setNamedPasswords(updated);
-    setNewNpName(""); setNewNpPassword(""); setNewNpRole("user"); setNewNpPagePerms([...DEFAULT_PAGE_PERMS]);
+    setNewNpName(""); setNewNpPassword(""); setNewNpRole("user"); setNewNpStartPage("/dashboard"); setNewNpPagePerms([...DEFAULT_PAGE_PERMS]);
     saveNamedPasswords(updated);
   };
   const removeNamedPassword = (i: number) => {
@@ -295,10 +302,11 @@ export default function SettingsPage() {
     setEditUserName(np.name);
     setEditUserPw("");
     setEditUserRole(np.role ?? "user");
+    setEditUserStartPage(np.startPage ?? "/dashboard");
     setEditUserPerms(migrateUserToPagePerms(np));
     setShowEditUserPw(false);
   };
-  const cancelEditUser = () => { setEditingUserIdx(null); setEditUserName(""); setEditUserPw(""); setEditUserRole("user"); setEditUserPerms([]); };
+  const cancelEditUser = () => { setEditingUserIdx(null); setEditUserName(""); setEditUserPw(""); setEditUserRole("user"); setEditUserStartPage("/dashboard"); setEditUserPerms([]); };
   const saveEditUser = (i: number) => {
     if (!editUserName.trim()) { toast.error("اسم المستخدم مطلوب"); return; }
     const list = [...namedPasswords];
@@ -307,6 +315,7 @@ export default function SettingsPage() {
       password: editUserPw.trim() || list[i].password,
       role: editUserRole,
       pagePermissions: editUserPerms,
+      startPage: editUserStartPage,
     };
     setNamedPasswords(list);
     saveNamedPasswords(list);
@@ -960,6 +969,13 @@ export default function SettingsPage() {
                           <SelectContent><SelectItem value="user">مستخدم عادي</SelectItem><SelectItem value="quality">مسؤول الجودة</SelectItem><SelectItem value="infection_control">مسؤول مكافحة العدوى</SelectItem><SelectItem value="insurance">مسؤول التأمين</SelectItem><SelectItem value="statistics">مسؤول الإحصاء</SelectItem></SelectContent>
                         </Select>
                       </div>
+                      <div className="space-y-1">
+                        <Label className="text-xs">صفحة البدء بعد الدخول</Label>
+                        <Select value={editUserStartPage} onValueChange={setEditUserStartPage}>
+                          <SelectTrigger className="h-9"><SelectValue /></SelectTrigger>
+                          <SelectContent>{START_PAGE_OPTIONS.map(page => <SelectItem key={page.href} value={page.href}>{page.label}</SelectItem>)}</SelectContent>
+                        </Select>
+                      </div>
                       <div className="space-y-1.5">
                         <div className="flex items-center justify-between">
                           <Label className="text-xs font-medium">صلاحيات كل صفحة</Label>
@@ -1061,6 +1077,13 @@ export default function SettingsPage() {
               <Select value={newNpRole ?? "user"} onValueChange={v => setNewNpRole(v as NamedPassword["role"])}>
                 <SelectTrigger className="h-9"><SelectValue /></SelectTrigger>
                 <SelectContent><SelectItem value="user">مستخدم عادي</SelectItem><SelectItem value="quality">مسؤول الجودة</SelectItem><SelectItem value="infection_control">مسؤول مكافحة العدوى</SelectItem><SelectItem value="insurance">مسؤول التأمين</SelectItem><SelectItem value="statistics">مسؤول الإحصاء</SelectItem></SelectContent>
+              </Select>
+            </div>
+            <div className="space-y-1">
+              <Label className="text-xs">صفحة البدء بعد الدخول</Label>
+              <Select value={newNpStartPage} onValueChange={setNewNpStartPage}>
+                <SelectTrigger className="h-9"><SelectValue /></SelectTrigger>
+                <SelectContent>{START_PAGE_OPTIONS.map(page => <SelectItem key={page.href} value={page.href}>{page.label}</SelectItem>)}</SelectContent>
               </Select>
             </div>
             <div className="space-y-1.5">

@@ -1,7 +1,7 @@
 import { useState } from "react";
 import {
   useGetWaitingCases, useUpdateWaitingCase, useDeleteWaitingCase,
-  useCreateWaitingCase, useGetDepartments, useCreateCase,
+  useCreateWaitingCase, useGetDepartments,
   useGetMe,
   WaitingCaseUpdateStatus
 } from "@workspace/api-client-react";
@@ -23,7 +23,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Checkbox } from "@/components/ui/checkbox";
 import { Textarea } from "@/components/ui/textarea";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
-import { LABELS, translate, deptTypeToCaseType, formatDateAr } from "@/lib/constants";
+import { LABELS, translate, formatDateAr } from "@/lib/constants";
 import { exportWordDoc } from "@/lib/word-export";
 import { exportPDF } from "@/lib/pdf-export";
 import { exportArabicXlsx } from "@/lib/excel-export";
@@ -243,7 +243,6 @@ function WaitingCaseActionDialog({
 }: { waitingCase: any; onClose: () => void; onSuccess: () => void }) {
   const { data: departments } = useGetDepartments();
   const update = useUpdateWaitingCase();
-  const createCase = useCreateCase();
 
   // Editable fields
   const [form, setForm] = useState({
@@ -270,7 +269,7 @@ function WaitingCaseActionDialog({
     waitingCase.medicalReportData ? { name: waitingCase.medicalReportName ?? "تقرير محفوظ", data: waitingCase.medicalReportData } : null
   );
 
-  const isPending = update.isPending || createCase.isPending;
+  const isPending = update.isPending;
 
   const handleSaveOnly = () => {
     const data: Record<string, unknown> = { ...form, notes: form.notes || undefined };
@@ -288,25 +287,12 @@ function WaitingCaseActionDialog({
   const handleConfirmAction = () => {
     if (action === "admit") {
       if (!deptId) { toast.error("الرجاء اختيار القسم"); return; }
-      const dept = (departments as any[] ?? []).find((d: any) => d.id.toString() === deptId);
-      createCase.mutate({
-        data: {
-          departmentId: parseInt(deptId),
-          patientName: form.patientName,
-          age: form.age || undefined,
-          diagnosis: form.diagnosis || undefined,
-          artificialRespiration: (form.artificialRespiration ?? "no") as any,
-          caseType: dept ? deptTypeToCaseType(dept.departmentType as string) as any : "intensive_care_high",
-          admissionDate: new Date().toISOString(),
-          ...(medicalReport ? { notes: medicalReport } : {}),
-        }
-      }, {
-        onSuccess: () => {
-          update.mutate({ id: waitingCase.id, data: { status: "admitted" as WaitingCaseUpdateStatus, ...form, notes: form.notes || undefined, medicalReport, medicalReportName: reportFile?.name, medicalReportData: reportFile?.data } as any }, {
-            onSuccess: () => { toast.success("تم نقل الحالة للقسم بنجاح"); onSuccess(); onClose(); },
-          });
-        },
-        onError: (e: any) => toast.error("خطأ في الإضافة: " + (e?.response?.data?.error ?? e.message))
+      // The API performs the admission and creates the medical case in one
+      // operation. Posting /cases first incorrectly detects this waiting
+      // record as a duplicate.
+      update.mutate({ id: waitingCase.id, data: { status: "admitted" as WaitingCaseUpdateStatus, admitToDepartmentId: parseInt(deptId), ...form, notes: form.notes || undefined, medicalReport, medicalReportName: reportFile?.name, medicalReportData: reportFile?.data } as any }, {
+        onSuccess: () => { toast.success("تم نقل الحالة للقسم بنجاح"); onSuccess(); onClose(); },
+        onError: (e: any) => toast.error("خطأ في الحجز: " + (e?.response?.data?.error ?? e.message))
       });
     } else if (action === "exit") {
       if (exitReason === "transferred" && !transferHospital.trim()) { toast.error("اكتب اسم المستشفى المحول إليها"); return; }

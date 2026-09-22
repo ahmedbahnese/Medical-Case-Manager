@@ -19,8 +19,8 @@ export default function Login() {
     login.mutate(
       { data: { password } },
       {
-        onSuccess: () => {
-          setLocation("/dashboard");
+        onSuccess: (data: any) => {
+          setLocation(data?.isFounder ? "/dashboard" : (data?.startPage || "/dashboard"));
         },
         onError: () => {
           toast.error("كلمة المرور غير صحيحة");

@@ -149,21 +149,20 @@ router.patch("/waiting-cases/:id", requirePageAccess("/waiting-cases", "edit"), 
     .from(waitingCasesTable)
     .where(eq(waitingCasesTable.id, params.data.id));
 
-  // If admitting with a specific department, create a medical case
+  // If admitting with a specific department, create or move the medical case.
+  // The lookup makes this idempotent when an older client already created the
+  // case before the waiting record was updated.
   if (body.data.status === "admitted" && extraData.admitToDepartmentId && existing.status !== "admitted") {
     try {
-      await db.insert(medicalCasesTable).values({
-        patientName: updated.patientName,
-        departmentId: parseInt(extraData.admitToDepartmentId, 10),
-        age: updated.age,
-        diagnosis: updated.diagnosis,
-        parentPhone: updated.parentPhone,
-        nationalId: updated.nationalId,
-        caseType: updated.careType as any,
-        artificialRespiration: updated.artificialRespiration as any,
-        centralRoomRequired: updated.centralRoomRequired,
-        status: "active",
-      } as any);
+      const normalizedName = updated.patientName.trim().replace(/\s+/g, " ").toLocaleLowerCase();
+      const activeCases = await db.select({ id: medicalCasesTable.id, patientName: medicalCasesTable.patientName })
+        .from(medicalCasesTable).where(ne(medicalCasesTable.status, "discharged"));
+      const existingCase = activeCases.find(c => c.patientName.trim().replace(/\s+/g, " ").toLocaleLowerCase() === normalizedName);
+      if (existingCase) {
+        await db.update(medicalCasesTable).set({ departmentId: parseInt(extraData.admitToDepartmentId, 10), age: updated.age, diagnosis: updated.diagnosis, parentPhone: updated.parentPhone, nationalId: updated.nationalId, status: "active", updatedAt: new Date() }).where(eq(medicalCasesTable.id, existingCase.id));
+      } else {
+        await db.insert(medicalCasesTable).values({ patientName: updated.patientName, departmentId: parseInt(extraData.admitToDepartmentId, 10), age: updated.age, diagnosis: updated.diagnosis, parentPhone: updated.parentPhone, nationalId: updated.nationalId, caseType: updated.careType as any, artificialRespiration: updated.artificialRespiration as any, centralRoomRequired: updated.centralRoomRequired, status: "active" } as any);
+      }
     } catch { /* non-critical */ }
   }
 

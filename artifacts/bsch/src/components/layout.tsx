@@ -139,6 +139,8 @@ export function Layout({ children }: { children: ReactNode }) {
   const [onlineUsers, setOnlineUsers] = useState<Array<{ name: string; lastSeen: number }>>([]);
   const [availableUsers, setAvailableUsers] = useState<Array<{ name: string; isOnline: boolean }>>([]);
   const [showPresence, setShowPresence] = useState(false);
+  const [presenceMinimized, setPresenceMinimized] = useState(false);
+  const [presenceWide, setPresenceWide] = useState(false);
   const [noticeText, setNoticeText] = useState("");
   const [noticeAudience, setNoticeAudience] = useState<"selected" | "all_online">("selected");
   const [noticeRecipients, setNoticeRecipients] = useState<string[]>([]);
@@ -177,15 +179,16 @@ export function Layout({ children }: { children: ReactNode }) {
     return () => window.clearInterval(timer);
   }, [(user as any)?.isAuthenticated, lastNoticeId]);
   useEffect(() => {
-    if (!(user as any)?.isFounder) return;
+    const allowed = (user as any)?.isFounder || (user as any)?.pagePermissions?.some((p: any) => p.href === "/open-accounts" && p.access !== "none");
+    if (!allowed) return;
     const load = () => apiGet<Array<{ name: string; lastSeen: number }>>("/api/presence/online").then(setOnlineUsers).catch(() => {});
     const loadUsers = () => apiGet<Array<{ name: string; isOnline: boolean }>>("/api/presence/users").then(setAvailableUsers).catch(() => {});
     load(); loadUsers(); const timer = window.setInterval(() => { load(); loadUsers(); }, 15000); return () => window.clearInterval(timer);
-  }, [(user as any)?.isFounder]);
+  }, [(user as any)?.isFounder, JSON.stringify((user as any)?.pagePermissions)]);
   useEffect(() => {
-    if (!showPresence || !(user as any)?.isFounder) return;
+    if (!showPresence) return;
     apiGet<Array<{ id: number; message: string; recipients: string[]; createdAt: string }>>("/api/notifications?history=1").then(setNoticeHistory).catch(() => {});
-  }, [showPresence, (user as any)?.isFounder]);
+  }, [showPresence]);
 
   useSwUpdateToast();
 
@@ -218,6 +221,8 @@ export function Layout({ children }: { children: ReactNode }) {
     if (!isFounder && getPageAccess(item.href) === "none") return false;
     return true;
   };
+
+  const canOpenPresence = isFounder || getPageAccess("/open-accounts") !== "none";
 
   const filteredGroups = NAV_GROUPS
     .map(g => ({ ...g, items: g.items.filter(isItemVisible) }))
@@ -348,7 +353,7 @@ export function Layout({ children }: { children: ReactNode }) {
       {/* Main Content */}
       <main className="flex-1 overflow-x-hidden p-4 md:p-8 bg-background relative w-full">
         <div className="mb-4 flex flex-wrap items-center justify-end gap-2 no-print">
-          {isFounder && <Button variant="outline" className="ml-2 gap-2" onClick={() => setShowPresence(true)}>
+          {canOpenPresence && <Button variant="outline" className="ml-2 gap-2" onClick={() => { setPresenceMinimized(false); setShowPresence(true); }}>
             <Bell className="h-4 w-4" /> الحسابات المفتوحة ({onlineUsers.length})
           </Button>}
           <Link
@@ -375,9 +380,9 @@ export function Layout({ children }: { children: ReactNode }) {
       {/* PWA install prompt (Android/Windows banner + iOS instructions) */}
       <PwaInstallPrompt />
       <Dialog open={showPresence} onOpenChange={setShowPresence}>
-        <DialogContent dir="rtl" className="max-w-lg">
-          <DialogHeader><DialogTitle>الحسابات المفتوحة والنداء الصوتي</DialogTitle></DialogHeader>
-          <div className="space-y-3">
+        <DialogContent dir="rtl" className={`${presenceWide ? "max-w-3xl" : "max-w-lg"} w-[calc(100%-1rem)] max-h-[calc(100dvh-1rem)] overflow-y-auto`}>
+          <DialogHeader><div className="flex items-center justify-between gap-2"><DialogTitle>الحسابات المفتوحة والنداء الصوتي</DialogTitle><div className="flex gap-1"><Button type="button" size="sm" variant="ghost" onClick={() => setPresenceWide(v => !v)}>{presenceWide ? "تصغير العرض" : "تكبير العرض"}</Button><Button type="button" size="sm" variant="ghost" onClick={() => setPresenceMinimized(v => !v)}>{presenceMinimized ? "فتح" : "تصغير"}</Button></div></div></DialogHeader>
+          {!presenceMinimized && <div className="space-y-3">
             <div className="rounded-md border p-3 space-y-2 max-h-48 overflow-y-auto">
               {onlineUsers.length === 0 ? <p className="text-sm text-muted-foreground">لا توجد حسابات متصلة الآن</p> : onlineUsers.map(u => <div key={u.name} className="flex items-center justify-between text-sm"><span>{u.name}</span><span className="text-green-600">متصل</span></div>)}
             </div>
@@ -399,7 +404,7 @@ export function Layout({ children }: { children: ReactNode }) {
             <p className="text-xs text-muted-foreground">تصل الرسالة فورياً بتنبيه صوتي وإشعار سطح المكتب أو شاشة قفل الهاتف بعد السماح بالإشعارات.</p>
             <Input value={noticeText} onChange={e => setNoticeText(e.target.value)} placeholder="اكتب الرسالة التي سيقرأها الكمبيوتر" />
             <div className="rounded-md border p-2 max-h-40 overflow-y-auto space-y-2"><p className="text-xs font-semibold">سجل الرسائل المحفوظة</p>{noticeHistory.length === 0 ? <p className="text-xs text-muted-foreground">لا توجد رسائل محفوظة</p> : noticeHistory.slice().reverse().map(n => <div key={n.id} className="border-t pt-1 text-xs"><p>{n.message}</p><p className="text-muted-foreground">إلى: {n.recipients.join("، ")}</p></div>)}</div>
-          </div>
+          </div>}
           <DialogFooter><Button disabled={!noticeText.trim() || (noticeAudience === "selected" && noticeRecipients.length === 0)} onClick={async () => { try { await apiPost("/api/notifications", { message: noticeText, delivery: "announcement", tone: noticeTone, toneDurationMs: noticeToneDurationMs, speak: noticeSpeak, speechLanguage: noticeSpeechLanguage, audience: noticeAudience, recipients: noticeRecipients }); setNoticeText(""); setNoticeRecipients([]); toast.success("تم إرسال الرسالة المسجلة"); } catch (e: any) { toast.error(e.message); } }}>إرسال الرسالة</Button></DialogFooter>
         </DialogContent>
       </Dialog>
