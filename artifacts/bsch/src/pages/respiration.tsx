@@ -210,7 +210,7 @@ export default function RespirationList() {
     setLoading(true);
     try {
       const data = await apiGet<Case[]>("/api/cases/respiration");
-      const trueVentilationModes = new Set(["high_frequency", "vent", "cpap", "standby"]);
+      const trueVentilationModes = new Set(["high_frequency", "vent", "cpap", "hfnc", "standby"]);
       setAllCases(data.filter(c => trueVentilationModes.has(c.artificialRespiration ?? "")));
     } catch { toast.error("فشل تحميل البيانات"); }
     finally { setLoading(false); }
