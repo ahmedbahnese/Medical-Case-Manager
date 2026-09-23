@@ -3,7 +3,7 @@ import { useGetDepartments, useUpdateCase } from "@workspace/api-client-react";
 import { Link } from "wouter";
 import { Wind, ArrowLeft, Activity, Printer, FileSpreadsheet, ZoomIn, ZoomOut, FileText, FileDown } from "lucide-react";
 import { exportWordDoc } from "@/lib/word-export";
-import { exportPDF } from "@/lib/pdf-export";
+import { exportPDF, exportPDFDirect } from "@/lib/pdf-export";
 import { useAppSettings } from "@/contexts/settings-context";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
@@ -200,6 +200,8 @@ export default function RespirationList() {
   const [allCases, setAllCases] = useState<Case[] | null>(null);
   const [loading, setLoading] = useState(false);
   const [localEdits, setLocalEdits] = useState<Record<number, Record<string, any>>>({});
+  const [searchText, setSearchText] = useState("");
+  const [filterMode, setFilterMode] = useState("all");
 
   const { data: departments } = useGetDepartments();
   const depts = departments ?? [];
@@ -234,6 +236,10 @@ export default function RespirationList() {
 
   const cases = (allCases ?? [])
     .filter(c => selectedDeptIds.size === 0 || selectedDeptIds.has(c.departmentId))
+    .filter(c => {
+      const q = searchText.trim().toLowerCase();
+      return (!q || [c.patientName, c.diagnosis ?? "", c.departmentName ?? ""].some(v => v.toLowerCase().includes(q))) && (filterMode === "all" || c.artificialRespiration === filterMode);
+    })
     .map(c => ({ ...c, ...(localEdits[c.id]??{}) }));
 
   // Group summary
@@ -293,7 +299,7 @@ export default function RespirationList() {
                 </tr>
                 ${rows}
               </table>`;
-            exportPDF(html, `respiration-${new Date().toISOString().slice(0,10)}.pdf`, logo_base64, watermark_enabled ? logo_base64 : null);
+            void exportPDFDirect(html, `respiration-${new Date().toISOString().slice(0,10)}.pdf`, logo_base64, watermark_enabled ? logo_base64 : null);
           }}>
             <FileDown className="h-4 w-4" /> PDF
           </Button>
@@ -304,6 +310,7 @@ export default function RespirationList() {
       </div>
 
       {/* Dept selection + font */}
+      <Card className="no-print"><CardHeader className="pb-2 pt-3"><CardTitle className="text-sm">بحث وتصنيف الحالات</CardTitle></CardHeader><CardContent><div className="grid gap-3 md:grid-cols-2"><input className="h-9 rounded-md border bg-background px-3 text-sm" placeholder="اسم الحالة أو التشخيص" value={searchText} onChange={e => setSearchText(e.target.value)} /><Select value={filterMode} onValueChange={setFilterMode}><SelectTrigger><SelectValue placeholder="كل أوضاع التنفس" /></SelectTrigger><SelectContent><SelectItem value="all">كل أوضاع التنفس</SelectItem>{RESP_OPTIONS.filter(o => o.value !== "no").map(o => <SelectItem key={o.value} value={o.value}>{o.label}</SelectItem>)}</SelectContent></Select></div><p className="text-xs text-muted-foreground mt-2">عدد النتائج: {cases.length}</p></CardContent></Card>
       <div className="no-print grid md:grid-cols-2 gap-4">
         <Card>
           <CardHeader className="pb-2 pt-3">

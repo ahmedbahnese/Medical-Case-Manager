@@ -141,3 +141,29 @@ export function exportPDF(
   document.body.appendChild(backdrop);
   closeButton.focus();
 }
+
+/** Save a PDF directly through the Electron native dialog without opening the preview. */
+export async function exportPDFDirect(
+  htmlBody: string,
+  title: string,
+  logoBase64?: string | null,
+  watermarkBase64?: string | null,
+) {
+  const savePDF = (window as any).electronAPI?.savePDF;
+  if (!savePDF) {
+    alert("الحفظ المباشر لملف PDF متاح داخل نسخة البرنامج المثبتة فقط.");
+    return { canceled: true };
+  }
+  const logoHtml = logoBase64 ? `<div class="report-logo"><img src="${logoBase64}" alt="logo" /></div>` : "";
+  const watermarkHtml = watermarkBase64 ? `<div class="watermark" style="background-image:url('${watermarkBase64}')"></div>` : "";
+  const doc = `<!DOCTYPE html><html dir="rtl" lang="ar"><head><meta charset="utf-8"/><title>${title}</title><style>*{box-sizing:border-box}body{font-family:'Arial Unicode MS','Calibri','Tahoma',Arial,sans-serif;direction:rtl;font-size:9.5pt;color:#000;margin:0;padding:0}.watermark{position:fixed;inset:0;background-repeat:no-repeat;background-position:center;background-size:28%;opacity:.075;pointer-events:none}.report-logo{text-align:center;height:34pt;margin-bottom:3pt}.report-logo img{height:30pt;max-width:120pt;object-fit:contain}table{border-collapse:collapse;width:100%;margin-bottom:8pt}td,th{border:1px solid #000;padding:3px 6px;text-align:right;vertical-align:top}th{background:#d9e1f2;font-weight:bold}.header{text-align:center;border-bottom:2px solid #000;padding-bottom:6pt;margin-bottom:10pt}h2,h3{text-align:center;margin:3pt 0}@page{size:A4 landscape;margin:1cm .8cm}</style></head><body>${watermarkHtml}${logoHtml}${htmlBody}</body></html>`;
+  try {
+    const result = await savePDF(doc, title.toLowerCase().endsWith(".pdf") ? title : `${title}.pdf`);
+    if (!result?.canceled) alert("تم تنزيل ملف PDF مباشرة بنجاح.");
+    return result;
+  } catch (error) {
+    console.error("Direct PDF save failed", error);
+    alert("تعذر تنزيل ملف PDF مباشرة.");
+    return { canceled: true };
+  }
+}

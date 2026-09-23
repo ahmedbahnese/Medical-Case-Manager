@@ -5,7 +5,7 @@ import {
 } from "@workspace/api-client-react";
 import { Printer, ZoomIn, ZoomOut, FileSpreadsheet, FileText, FileDown, Save } from "lucide-react";
 import { exportWordDoc } from "@/lib/word-export";
-import { exportPDF } from "@/lib/pdf-export";
+import { exportPDF, exportPDFDirect } from "@/lib/pdf-export";
 import { useAppSettings } from "@/contexts/settings-context";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -328,6 +328,7 @@ export default function PrintReports() {
   const hasContent = selectedDeptIds.size > 0 || ((includeServo && (waitingServo?.length ?? 0) > 0) || (includeReception && (waitingReception?.length ?? 0) > 0));
 
   const handleExportPDF = () => exportPDF(buildReportHtml(), `daily-report-${reportDate}.pdf`, logo_base64, watermark_enabled ? logo_base64 : null);
+  const handleSavePDFDirect = () => void exportPDFDirect(buildReportHtml(), `daily-report-${reportDate}.pdf`, logo_base64, watermark_enabled ? logo_base64 : null);
 
   const handleExportWord = () => exportWordDoc(buildReportHtml(), `daily-report-${reportDate}.doc`);
 
@@ -352,7 +353,7 @@ export default function PrintReports() {
             <Button variant="outline" className="gap-2" disabled={!hasContent} onClick={handleExportPDF}>
               <FileDown className="h-4 w-4" /> عرض PDF
             </Button>
-            <Button variant="outline" className="gap-2" disabled={!hasContent} onClick={handleExportPDF} title="يفتح نافذة PDF وبها زر الحفظ المباشر داخل نسخة سطح المكتب">
+            <Button variant="outline" className="gap-2" disabled={!hasContent} onClick={handleSavePDFDirect} title="تنزيل PDF مباشرة بدون فتح المعاينة">
               <Save className="h-4 w-4" /> حفظ PDF
             </Button>
             <Button className="gap-2" disabled={!hasContent} onClick={handlePrint}>

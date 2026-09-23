@@ -1,7 +1,7 @@
 import { useState, useCallback } from "react";
 import { useGetDepartments, useGetCases, useGetWaitingCases } from "@workspace/api-client-react";
 import { Printer, FileSpreadsheet, ZoomIn, ZoomOut, FileText, FileDown } from "lucide-react";
-import { exportPDF } from "@/lib/pdf-export";
+import { exportPDF, exportPDFDirect } from "@/lib/pdf-export";
 import { exportWordDoc } from "@/lib/word-export";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -279,7 +279,7 @@ export default function OccupancyReport() {
             </Button>
             <Button variant="outline" size="sm" className="gap-1" onClick={() => {
               const el = document.getElementById("occupancy-print-content");
-              if (el) exportPDF(el.innerHTML, `occupancy-${reportDate}.pdf`, logo_base64, watermark_enabled ? logo_base64 : null);
+              if (el) void exportPDFDirect(el.innerHTML, `occupancy-${reportDate}.pdf`, logo_base64, watermark_enabled ? logo_base64 : null);
             }}>
               <FileDown className="h-4 w-4" /> PDF
             </Button>
