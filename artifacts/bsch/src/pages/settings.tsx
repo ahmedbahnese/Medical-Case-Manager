@@ -99,6 +99,7 @@ interface NamedPassword {
   pagePermissions?: PagePermission[];
   role?: "user" | "quality" | "infection_control" | "insurance" | "statistics";
   startPage?: string;
+  outpatientRole?: "reception" | "doctor" | "nurse";
 }
 
 const ACCESS_LABELS: Record<string, string> = { none: "لا وصول", view: "عرض", edit: "تعديل" };
@@ -112,6 +113,7 @@ const ALL_USER_PAGES = [
   { href: "/dashboard",             label: "لوحة التحكم" },
   { href: "/add-case",              label: "إضافة حالة" },
   { href: "/waiting-cases",         label: "قوائم الانتظار" },
+  { href: "/outpatient-clinics",    label: "العيادات الخارجية" },
   { href: "/artificial-respiration",label: "التنفس الصناعي" },
   { href: "/occupancy-report",      label: "بيان الإشغال" },
   { href: "/print-reports",         label: "التقرير اليومي" },
@@ -165,6 +167,7 @@ export default function SettingsPage() {
   const [newNpName, setNewNpName] = useState("");
   const [newNpPassword, setNewNpPassword] = useState("");
   const [newNpRole, setNewNpRole] = useState<NamedPassword["role"]>("user");
+  const [newOutpatientRole, setNewOutpatientRole] = useState<NamedPassword["outpatientRole"]>(undefined);
   const [newNpStartPage, setNewNpStartPage] = useState("/dashboard");
   const [showNewNpPw, setShowNewNpPw] = useState(false);
   const [newNpPagePerms, setNewNpPagePerms] = useState<PagePermission[]>([...DEFAULT_PAGE_PERMS]);
@@ -173,6 +176,7 @@ export default function SettingsPage() {
   const [editUserName, setEditUserName] = useState("");
   const [editUserPw, setEditUserPw] = useState("");
   const [editUserRole, setEditUserRole] = useState<NamedPassword["role"]>("user");
+  const [editOutpatientRole, setEditOutpatientRole] = useState<NamedPassword["outpatientRole"]>(undefined);
   const [editUserStartPage, setEditUserStartPage] = useState("/dashboard");
   const [editUserPerms, setEditUserPerms] = useState<PagePermission[]>([]);
   const [showEditUserPw, setShowEditUserPw] = useState(false);
@@ -284,12 +288,13 @@ export default function SettingsPage() {
       name: newNpName.trim(),
       password: newNpPassword.trim(),
       role: newNpRole,
+      outpatientRole: newOutpatientRole,
       pagePermissions: newNpPagePerms,
       startPage: newNpStartPage,
     };
     const updated = [...namedPasswords, newUser];
     setNamedPasswords(updated);
-    setNewNpName(""); setNewNpPassword(""); setNewNpRole("user"); setNewNpStartPage("/dashboard"); setNewNpPagePerms([...DEFAULT_PAGE_PERMS]);
+    setNewNpName(""); setNewNpPassword(""); setNewNpRole("user"); setNewOutpatientRole(undefined); setNewNpStartPage("/dashboard"); setNewNpPagePerms([...DEFAULT_PAGE_PERMS]);
     saveNamedPasswords(updated);
   };
   const removeNamedPassword = (i: number) => {
@@ -302,11 +307,12 @@ export default function SettingsPage() {
     setEditUserName(np.name);
     setEditUserPw("");
     setEditUserRole(np.role ?? "user");
+    setEditOutpatientRole(np.outpatientRole);
     setEditUserStartPage(np.startPage ?? "/dashboard");
     setEditUserPerms(migrateUserToPagePerms(np));
     setShowEditUserPw(false);
   };
-  const cancelEditUser = () => { setEditingUserIdx(null); setEditUserName(""); setEditUserPw(""); setEditUserRole("user"); setEditUserStartPage("/dashboard"); setEditUserPerms([]); };
+  const cancelEditUser = () => { setEditingUserIdx(null); setEditUserName(""); setEditUserPw(""); setEditUserRole("user"); setEditOutpatientRole(undefined); setEditUserStartPage("/dashboard"); setEditUserPerms([]); };
   const saveEditUser = (i: number) => {
     if (!editUserName.trim()) { toast.error("اسم المستخدم مطلوب"); return; }
     const list = [...namedPasswords];
@@ -314,6 +320,7 @@ export default function SettingsPage() {
       name: editUserName.trim(),
       password: editUserPw.trim() || list[i].password,
       role: editUserRole,
+      outpatientRole: editOutpatientRole,
       pagePermissions: editUserPerms,
       startPage: editUserStartPage,
     };
@@ -970,6 +977,13 @@ export default function SettingsPage() {
                         </Select>
                       </div>
                       <div className="space-y-1">
+                        <Label className="text-xs">صلاحية العيادات الخارجية</Label>
+                        <Select value={editOutpatientRole ?? "none"} onValueChange={v => setEditOutpatientRole(v === "none" ? undefined : v as NamedPassword["outpatientRole"])}>
+                          <SelectTrigger className="h-9"><SelectValue /></SelectTrigger>
+                          <SelectContent><SelectItem value="none">بدون صلاحية عيادات</SelectItem><SelectItem value="reception">استقبال — حجز وإيقاف/استمرار الحجز</SelectItem><SelectItem value="doctor">طبيب — إظهار/نداء الرقم وتحديث الكشف</SelectItem><SelectItem value="nurse">تمريض — إظهار/نداء الرقم وتحديث الدور</SelectItem></SelectContent>
+                        </Select>
+                      </div>
+                      <div className="space-y-1">
                         <Label className="text-xs">صفحة البدء بعد الدخول</Label>
                         <Select value={editUserStartPage} onValueChange={setEditUserStartPage}>
                           <SelectTrigger className="h-9"><SelectValue /></SelectTrigger>
@@ -1077,6 +1091,13 @@ export default function SettingsPage() {
               <Select value={newNpRole ?? "user"} onValueChange={v => setNewNpRole(v as NamedPassword["role"])}>
                 <SelectTrigger className="h-9"><SelectValue /></SelectTrigger>
                 <SelectContent><SelectItem value="user">مستخدم عادي</SelectItem><SelectItem value="quality">مسؤول الجودة</SelectItem><SelectItem value="infection_control">مسؤول مكافحة العدوى</SelectItem><SelectItem value="insurance">مسؤول التأمين</SelectItem><SelectItem value="statistics">مسؤول الإحصاء</SelectItem></SelectContent>
+              </Select>
+            </div>
+            <div className="space-y-1">
+              <Label className="text-xs">صلاحية العيادات الخارجية</Label>
+              <Select value={newOutpatientRole ?? "none"} onValueChange={v => setNewOutpatientRole(v === "none" ? undefined : v as NamedPassword["outpatientRole"])}>
+                <SelectTrigger className="h-9"><SelectValue /></SelectTrigger>
+                <SelectContent><SelectItem value="none">بدون صلاحية عيادات</SelectItem><SelectItem value="reception">استقبال — حجز وإيقاف/استمرار الحجز</SelectItem><SelectItem value="doctor">طبيب — إظهار/نداء الرقم وتحديث الكشف</SelectItem><SelectItem value="nurse">تمريض — إظهار/نداء الرقم وتحديث الدور</SelectItem></SelectContent>
               </Select>
             </div>
             <div className="space-y-1">

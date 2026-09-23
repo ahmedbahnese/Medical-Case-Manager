@@ -3,7 +3,7 @@ import { format } from "date-fns";
 import {
   useGetCases, useGetDepartments, useGetWaitingCases, useUpdateCase,
 } from "@workspace/api-client-react";
-import { Printer, ZoomIn, ZoomOut, FileSpreadsheet, FileText, FileDown } from "lucide-react";
+import { Printer, ZoomIn, ZoomOut, FileSpreadsheet, FileText, FileDown, Save } from "lucide-react";
 import { exportWordDoc } from "@/lib/word-export";
 import { exportPDF } from "@/lib/pdf-export";
 import { useAppSettings } from "@/contexts/settings-context";
@@ -350,7 +350,10 @@ export default function PrintReports() {
               <FileText className="h-4 w-4" /> Word
             </Button>
             <Button variant="outline" className="gap-2" disabled={!hasContent} onClick={handleExportPDF}>
-              <FileDown className="h-4 w-4" /> PDF
+              <FileDown className="h-4 w-4" /> عرض PDF
+            </Button>
+            <Button variant="outline" className="gap-2" disabled={!hasContent} onClick={handleExportPDF} title="يفتح نافذة PDF وبها زر الحفظ المباشر داخل نسخة سطح المكتب">
+              <Save className="h-4 w-4" /> حفظ PDF
             </Button>
             <Button className="gap-2" disabled={!hasContent} onClick={handlePrint}>
               <Printer className="h-4 w-4" /> طباعة

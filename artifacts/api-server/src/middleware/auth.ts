@@ -21,10 +21,11 @@ export function getCurrentUserName(cookieHeader: string | undefined): string {
 }
 
 export type UserRole = "founder" | "quality" | "infection_control" | "insurance" | "statistics" | "user";
-export interface CurrentUserAccess { name: string; role: UserRole; isFounder: boolean; canSubmitOvr: boolean; canReviewOvr: boolean; }
+export type OutpatientRole = "reception" | "doctor" | "nurse";
+export interface CurrentUserAccess { name: string; role: UserRole; isFounder: boolean; canSubmitOvr: boolean; canReviewOvr: boolean; outpatientRole?: OutpatientRole; }
 
 type PagePermission = { href: string; access: "none" | "view" | "edit" };
-type NamedAccessRecord = { name?: string; canEdit?: boolean; allowedPages?: string[]; pagePermissions?: PagePermission[] };
+type NamedAccessRecord = { name?: string; canEdit?: boolean; allowedPages?: string[]; pagePermissions?: PagePermission[]; outpatientRole?: OutpatientRole };
 
 async function getNamedAccess(name: string): Promise<NamedAccessRecord | undefined> {
   try {
@@ -66,6 +67,17 @@ export function requireAnyPageAccess(hrefs: string[], required: "view" | "edit" 
   };
 }
 
+export function requireOutpatientRole(roles: OutpatientRole[]): RequestHandler {
+  return async (req, res, next) => {
+    const session = getSession(req.headers.cookie);
+    if (session === "founder") { next(); return; }
+    const name = session?.startsWith("user:") ? session.slice(5) : "";
+    const account = await getNamedAccess(name);
+    if (account?.outpatientRole && roles.includes(account.outpatientRole)) { next(); return; }
+    res.status(403).json({ error: "هذا الحساب لا يملك صلاحية تشغيل العيادات المطلوبة" });
+  };
+}
+
 export async function getCurrentUserAccess(cookieHeader: string | undefined): Promise<CurrentUserAccess> {
   const session = getSession(cookieHeader);
   if (session === "founder") return { name: "المؤسس", role: "founder", isFounder: true, canSubmitOvr: true, canReviewOvr: true };
@@ -76,7 +88,7 @@ export async function getCurrentUserAccess(cookieHeader: string | undefined): Pr
   role = (account as NamedAccessRecord & { role?: UserRole } | undefined)?.role ?? "user";
   const canSubmitOvr = meetsAccess(pageAccess(account, "/ovr-incident-report"), "edit");
   const canReviewOvr = meetsAccess(pageAccess(account, "/ovr-management"), "view");
-  return { name, role, isFounder: false, canSubmitOvr, canReviewOvr };
+  return { name, role, isFounder: false, canSubmitOvr, canReviewOvr, outpatientRole: account?.outpatientRole };
 }
 
 /** Require any valid session (founder or named user) */

@@ -23,6 +23,7 @@ import Settings from '@/pages/settings';
 import DischargeHistory from '@/pages/discharge-history';
 import AuditLog from '@/pages/audit-log';
 import QualityDashboard from '@/pages/quality-dashboard';
+import OutpatientClinics from '@/pages/outpatient-clinics';
 
 const queryClient = new QueryClient();
 
@@ -84,6 +85,7 @@ function Router() {
       <Route path="/add-case"><ProtectedRoute component={AddCase} pageHref="/add-case" /></Route>
       <Route path="/case/:id"><ProtectedRoute component={CaseDetail} /></Route>
       <Route path="/waiting-cases"><ProtectedRoute component={WaitingCases} pageHref="/waiting-cases" /></Route>
+      <Route path="/outpatient-clinics"><ProtectedRoute component={OutpatientClinics} pageHref="/outpatient-clinics" /></Route>
       <Route path="/artificial-respiration"><ProtectedRoute component={RespirationList} pageHref="/artificial-respiration" /></Route>
 
       {/* Import */}

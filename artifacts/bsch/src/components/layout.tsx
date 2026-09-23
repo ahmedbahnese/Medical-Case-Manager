@@ -21,6 +21,7 @@ import {
   ShieldCheck,
   Bell,
   Megaphone,
+  Hospital,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Toaster } from "sonner";
@@ -90,6 +91,7 @@ const NAV_GROUPS = [
       { name: "لوحة التحكم", href: "/dashboard", icon: Activity },
       { name: "إضافة حالة", href: "/add-case", icon: ListPlus },
       { name: "قوائم الانتظار", href: "/waiting-cases", icon: Users },
+      { name: "العيادات الخارجية", href: "/outpatient-clinics", icon: Hospital },
       { name: "التنفس الصناعي", href: "/artificial-respiration", icon: Wind },
     ],
   },

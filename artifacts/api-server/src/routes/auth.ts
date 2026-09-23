@@ -39,6 +39,8 @@ interface NamedPasswordRecord {
   canEdit?: boolean; allowedPages?: string[];
   pagePermissions?: PagePermission[];
   startPage?: string;
+  role?: string;
+  outpatientRole?: "reception" | "doctor" | "nurse";
 }
 
 /** Returns named users from DB or [] */
@@ -71,7 +73,7 @@ router.get("/auth/me", async (req, res): Promise<void> => {
   const named = await getNamedPasswords();
   const entry = named.find(np => np.name === base.name);
   if (entry?.pagePermissions?.length) {
-    res.json({ ...base, pagePermissions: entry.pagePermissions, startPage: entry.startPage ?? "/dashboard" });
+    res.json({ ...base, pagePermissions: entry.pagePermissions, startPage: entry.startPage ?? "/dashboard", role: entry.role ?? "user", outpatientRole: entry.outpatientRole });
   } else {
     // legacy format fallback
     res.json({
@@ -79,6 +81,8 @@ router.get("/auth/me", async (req, res): Promise<void> => {
       canEdit: entry?.canEdit !== false,
       allowedPages: entry?.allowedPages ?? [],
       startPage: entry?.startPage ?? "/dashboard",
+      role: entry?.role ?? "user",
+      outpatientRole: entry?.outpatientRole,
     });
   }
 });
