@@ -2,6 +2,7 @@ import { useEffect, useMemo, useState } from "react";
 import { apiDelete, apiGet, apiPatch, apiPost } from "@/lib/api";
 import { exportWordDoc } from "@/lib/word-export";
 import { exportPDF, exportPDFDirect } from "@/lib/pdf-export";
+import QRCode from "qrcode";
 import { useGetMe } from "@workspace/api-client-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -10,15 +11,15 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Dialog, DialogContent, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { CalendarDays, ClipboardPlus, Clock3, Edit3, FileDown, FileText, Hospital, Phone, Plus, Printer, Save, Stethoscope, Trash2, UsersRound, Megaphone } from "lucide-react";
+import { CalendarDays, ClipboardPlus, Clock3, Copy, Edit3, FileDown, FileText, Hospital, Phone, Plus, Printer, Save, Stethoscope, Trash2, UsersRound, Megaphone } from "lucide-react";
 import { toast } from "sonner";
 
-type Appointment = { id: number; clinicId: number; patientName: string; age?: string | null; phone?: string | null; appointmentDate: string; appointmentTime?: string | null; queueNumber: number; source: string; status: string; notes?: string | null; clinicName?: string };
+type Appointment = { id: number; clinicId: number; patientName: string; age?: string | null; phone?: string | null; appointmentDate: string; appointmentTime?: string | null; queueNumber: number; source: string; status: string; notes?: string | null; clinicName?: string; publicToken?: string | null; publicUrl?: string };
 type Clinic = { id: number; name: string; specialty?: string | null; doctorName: string; room?: string | null; phone?: string | null; dailyCapacity: number; appointmentDuration: number; isOpen: boolean; appointmentsCount: number; waitingCount: number; appointments: Appointment[] };
 
 const today = () => new Date().toISOString().slice(0, 10);
-const statusLabels: Record<string, string> = { waiting: "في الانتظار", called: "تم النداء", in_service: "داخل الكشف", completed: "اكتملت", cancelled: "ملغى" };
-const sourceLabels: Record<string, string> = { system: "حجز من النظام", external: "حجز خارجي" };
+const statusLabels: Record<string, string> = { waiting: "في الانتظار", called: "تم النداء", in_service: "داخل الكشف", completed: "اكتملت", cancelled: "ملغى", no_show: "لم يحضر", skipped: "تم التخطي" };
+const sourceLabels: Record<string, string> = { system: "حجز من النظام", external: "حجز خارجي", staff: "حجز بواسطة الموظف" };
 
 const emptyClinic = { name: "", specialty: "", doctorName: "", room: "", phone: "", dailyCapacity: 30, appointmentDuration: 15, isOpen: true };
 const emptyAppointment = { patientName: "", age: "", phone: "", nationalId: "", appointmentTime: "", source: "system", notes: "" };
@@ -38,6 +39,8 @@ export default function OutpatientClinics() {
   const [filterClinic, setFilterClinic] = useState("all");
   const [filterStatus, setFilterStatus] = useState("all");
   const [filterSource, setFilterSource] = useState("all");
+  const [shareData, setShareData] = useState<{ url: string; queueNumber: number; clinicName: string } | null>(null);
+  const [shareQr, setShareQr] = useState("");
   const isFounder = Boolean((user as any)?.isFounder);
   const outpatientRole = (user as any)?.outpatientRole as "reception" | "doctor" | "nurse" | undefined;
   const canReception = isFounder || outpatientRole === "reception";
@@ -48,6 +51,7 @@ export default function OutpatientClinics() {
     catch (error: any) { toast.error(error.message || "تعذر تحميل العيادات"); }
   };
   useEffect(() => { void load(); }, [date]);
+  useEffect(() => { if (shareData) void QRCode.toDataURL(shareData.url, { width: 220, margin: 2 }).then(setShareQr); }, [shareData]);
 
   const selectedClinic = useMemo(() => clinics.find(c => c.id === selectedClinicId) ?? clinics[0], [clinics, selectedClinicId]);
   const allAppointments = clinics.flatMap(c => c.appointments.map(a => ({ ...a, clinicName: c.name })));
@@ -82,8 +86,8 @@ export default function OutpatientClinics() {
     if (!selectedClinic?.id || !appointmentForm.patientName.trim()) { toast.error("اختر العيادة واكتب اسم الحالة"); return; }
     setLoading(true);
     try {
-      await apiPost("/api/outpatient/appointments", { ...appointmentForm, clinicId: selectedClinic.id, appointmentDate: date });
-      toast.success("تم الحجز وإصدار رقم الحالة"); setAppointmentDialog(false); await load();
+      const created = await apiPost<Appointment>("/api/outpatient/appointments", { ...appointmentForm, clinicId: selectedClinic.id, appointmentDate: date });
+      toast.success("تم الحجز وإصدار رقم الحالة"); setAppointmentDialog(false); if (created.publicUrl) setShareData({ url: `${window.location.origin}${created.publicUrl}`, queueNumber: created.queueNumber, clinicName: selectedClinic.name }); await load();
     } catch (error: any) { toast.error(error.message); } finally { setLoading(false); }
   };
   const updateStatus = async (id: number, status: string) => {
@@ -120,6 +124,7 @@ export default function OutpatientClinics() {
     <Card><CardHeader><div className="flex flex-wrap items-center justify-between gap-2"><CardTitle className="flex items-center gap-2"><CalendarDays className="h-5 w-5 text-primary" /> كشف حجوزات {date}</CardTitle><span className="text-sm text-muted-foreground">يتم ترتيب الأرقام تلقائيًا لكل عيادة ولكل يوم</span></div></CardHeader><CardContent className="overflow-x-auto"><table className="w-full text-sm"><thead><tr className="border-b"><th className="p-2 text-right">الرقم</th><th className="p-2 text-right">العيادة / الطبيب</th><th className="p-2 text-right">اسم الحالة</th><th className="p-2 text-right">الوقت</th><th className="p-2 text-right">المصدر</th><th className="p-2 text-right">الحالة</th><th className="p-2 text-right no-print">إجراء</th></tr></thead><tbody>{filteredAppointments.sort((a,b) => a.queueNumber-b.queueNumber).map(a => <tr key={a.id} className="border-b hover:bg-muted/30"><td className="p-2"><Badge variant="outline" className="text-base">{a.queueNumber}</Badge></td><td className="p-2"><b>{a.clinicName}</b><span className="block text-xs text-muted-foreground">{clinics.find(c => c.id === a.clinicId)?.doctorName}</span></td><td className="p-2"><b>{a.patientName}</b><span className="block text-xs text-muted-foreground">{a.phone || "بدون هاتف"}</span></td><td className="p-2">{a.appointmentTime || "بدون موعد محدد"}</td><td className="p-2">{sourceLabels[a.source] ?? a.source}</td><td className="p-2"><Badge variant={a.status === "completed" ? "secondary" : a.status === "cancelled" ? "destructive" : "default"}>{statusLabels[a.status] ?? a.status}</Badge></td><td className="p-2 no-print"><Select value={a.status} onValueChange={value => updateStatus(a.id, value)}><SelectTrigger className="w-32 h-8"><SelectValue /></SelectTrigger><SelectContent>{Object.entries(statusLabels).map(([value,label]) => <SelectItem key={value} value={value}>{label}</SelectItem>)}</SelectContent></Select></td></tr>)}{filteredAppointments.length === 0 && <tr><td colSpan={7} className="p-10 text-center text-muted-foreground">لا توجد نتائج مطابقة للبحث</td></tr>}</tbody></table></CardContent></Card>
     <Dialog open={clinicDialog} onOpenChange={setClinicDialog}><DialogContent dir="rtl"><DialogHeader><DialogTitle>{editingClinic ? "تعديل العيادة" : "إضافة عيادة خارجية"}</DialogTitle></DialogHeader><div className="grid gap-3 sm:grid-cols-2"><Field label="اسم العيادة" value={clinicForm.name} onChange={v => setClinicForm({...clinicForm,name:v})} required /><Field label="اسم الطبيب" value={clinicForm.doctorName} onChange={v => setClinicForm({...clinicForm,doctorName:v})} required /><Field label="التخصص" value={clinicForm.specialty} onChange={v => setClinicForm({...clinicForm,specialty:v})} /><Field label="الغرفة" value={clinicForm.room} onChange={v => setClinicForm({...clinicForm,room:v})} /><Field label="هاتف الحجز" value={clinicForm.phone} onChange={v => setClinicForm({...clinicForm,phone:v})} /><Field label="السعة اليومية" type="number" value={clinicForm.dailyCapacity} onChange={v => setClinicForm({...clinicForm,dailyCapacity:Number(v)})} /><Field label="مدة الموعد بالدقائق" type="number" value={clinicForm.appointmentDuration} onChange={v => setClinicForm({...clinicForm,appointmentDuration:Number(v)})} /><label className="flex items-center gap-2 pt-7 text-sm"><input type="checkbox" checked={clinicForm.isOpen} onChange={e => setClinicForm({...clinicForm,isOpen:e.target.checked})} /> العيادة مفتوحة للحجز</label></div><DialogFooter><Button variant="outline" onClick={() => setClinicDialog(false)}>إلغاء</Button><Button onClick={saveClinic} disabled={loading}>حفظ العيادة</Button></DialogFooter></DialogContent></Dialog>
     <Dialog open={appointmentDialog} onOpenChange={setAppointmentDialog}><DialogContent dir="rtl"><DialogHeader><DialogTitle>حجز حالة في {selectedClinic?.name}</DialogTitle></DialogHeader><div className="rounded-lg bg-primary/10 p-3 text-sm">سيصدر للحالة رقم <b className="text-lg">{(selectedClinic?.appointments.at(-1)?.queueNumber ?? 0) + 1}</b> في كشف يوم {date}.</div><div className="grid gap-3 sm:grid-cols-2"><Field label="اسم الحالة" value={appointmentForm.patientName} onChange={v => setAppointmentForm({...appointmentForm,patientName:v})} required /><Field label="السن" value={appointmentForm.age} onChange={v => setAppointmentForm({...appointmentForm,age:v})} /><Field label="الهاتف" value={appointmentForm.phone} onChange={v => setAppointmentForm({...appointmentForm,phone:v})} /><Field label="الرقم القومي" value={appointmentForm.nationalId} onChange={v => setAppointmentForm({...appointmentForm,nationalId:v})} /><Field label="وقت الحجز" type="time" value={appointmentForm.appointmentTime} onChange={v => setAppointmentForm({...appointmentForm,appointmentTime:v})} /><div><Label>طريقة الحجز</Label><Select value={appointmentForm.source} onValueChange={v => setAppointmentForm({...appointmentForm,source:v})}><SelectTrigger><SelectValue /></SelectTrigger><SelectContent><SelectItem value="system">عن طريق النظام بالمستشفى</SelectItem><SelectItem value="external">حجز خارجي / هاتف / استقبال</SelectItem></SelectContent></Select></div><Field label="ملاحظات" value={appointmentForm.notes} onChange={v => setAppointmentForm({...appointmentForm,notes:v})} /></div><DialogFooter><Button variant="outline" onClick={() => setAppointmentDialog(false)}>إلغاء</Button><Button onClick={saveAppointment} disabled={loading}>تأكيد الحجز</Button></DialogFooter></DialogContent></Dialog>
+    <Dialog open={Boolean(shareData)} onOpenChange={open => !open && setShareData(null)}><DialogContent dir="rtl"><DialogHeader><DialogTitle>مشاركة متابعة المريض</DialogTitle></DialogHeader>{shareData && <div className="text-center space-y-3"><p>تم إنشاء الحجز في <b>{shareData.clinicName}</b> برقم <b className="text-2xl text-primary">{shareData.queueNumber}</b></p>{shareQr && <img src={shareQr} alt="QR Code" className="mx-auto w-48 h-48 border rounded-lg" />}<p className="text-xs break-all bg-muted p-2 rounded">{shareData.url}</p><div className="flex justify-center gap-2"><Button variant="outline" className="gap-2" onClick={() => { void navigator.clipboard?.writeText(shareData.url); toast.success("تم نسخ رابط المتابعة"); }}><Copy className="h-4 w-4" /> نسخ الرابط</Button><Button onClick={() => window.print()} className="gap-2"><Printer className="h-4 w-4" /> طباعة الإيصال</Button></div></div>}</DialogContent></Dialog>
   </div>;
 }
 function Field({ label, value, onChange, type = "text", required = false }: { label: string; value: any; onChange: (value: string) => void; type?: string; required?: boolean }) { return <div><Label>{label}{required ? " *" : ""}</Label><Input type={type} value={value ?? ""} onChange={e => onChange(e.target.value)} /></div>; }

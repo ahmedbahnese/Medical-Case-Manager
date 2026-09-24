@@ -2,8 +2,8 @@ import { sqliteTable, integer, text } from "drizzle-orm/sqlite-core";
 import { createInsertSchema } from "drizzle-zod";
 import { z } from "zod/v4";
 
-export const outpatientAppointmentSourceValues = ["system", "external"] as const;
-export const outpatientAppointmentStatusValues = ["waiting", "called", "in_service", "completed", "cancelled"] as const;
+export const outpatientAppointmentSourceValues = ["system", "external", "staff"] as const;
+export const outpatientAppointmentStatusValues = ["waiting", "called", "in_service", "completed", "cancelled", "no_show", "skipped"] as const;
 
 export const outpatientClinicsTable = sqliteTable("outpatient_clinics", {
   id: integer("id").primaryKey({ autoIncrement: true }),
@@ -32,6 +32,8 @@ export const outpatientAppointmentsTable = sqliteTable("outpatient_appointments"
   source: text("source").notNull().default("system"),
   status: text("status").notNull().default("waiting"),
   notes: text("notes"),
+  publicToken: text("public_token").unique(),
+  publicTokenExpiresAt: integer("public_token_expires_at", { mode: "timestamp_ms" }),
   createdAt: integer("created_at", { mode: "timestamp_ms" }).$defaultFn(() => new Date()).notNull(),
   updatedAt: integer("updated_at", { mode: "timestamp_ms" }).$defaultFn(() => new Date()).notNull(),
 });

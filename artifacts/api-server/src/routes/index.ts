@@ -14,12 +14,14 @@ import auditLogsRouter from "./audit-logs";
 import presenceRouter from "./presence";
 import callsRouter from "./calls";
 import outpatientRouter from "./outpatient";
+import publicOutpatientRouter from "./public-outpatient";
 
 const router: IRouter = Router();
 
 // ─── Public (no session required) ────────────────────────────────────────────
 router.use(healthRouter);
 router.use(authRouter);
+router.use(publicOutpatientRouter);
 
 // ─── Protected (valid session required for all routes below) ─────────────────
 router.use(requireAuth);

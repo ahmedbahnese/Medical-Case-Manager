@@ -15,7 +15,7 @@ export async function initDatabase(): Promise<void> {
       `CREATE TABLE IF NOT EXISTS backups (id INTEGER PRIMARY KEY AUTOINCREMENT, backup_name TEXT NOT NULL, backup_data TEXT NOT NULL, record_count INTEGER NOT NULL DEFAULT 0, created_at INTEGER NOT NULL DEFAULT (strftime('%s','now')*1000))`,
       `CREATE TABLE IF NOT EXISTS notifications (id INTEGER PRIMARY KEY AUTOINCREMENT, message TEXT NOT NULL, from_user TEXT NOT NULL, delivery TEXT NOT NULL DEFAULT 'announcement', tone TEXT NOT NULL DEFAULT 'single', tone_duration_ms INTEGER NOT NULL DEFAULT 180, speak INTEGER NOT NULL DEFAULT 1, speech_language TEXT NOT NULL DEFAULT 'auto', audience TEXT NOT NULL DEFAULT 'selected', recipients_json TEXT NOT NULL DEFAULT '[]', read_by_json TEXT NOT NULL DEFAULT '[]', created_at INTEGER NOT NULL DEFAULT (strftime('%s','now')*1000))`,
       `CREATE TABLE IF NOT EXISTS outpatient_clinics (id INTEGER PRIMARY KEY AUTOINCREMENT, name TEXT NOT NULL, specialty TEXT, doctor_name TEXT NOT NULL, room TEXT, phone TEXT, daily_capacity INTEGER NOT NULL DEFAULT 30, appointment_duration INTEGER NOT NULL DEFAULT 15, is_open INTEGER NOT NULL DEFAULT 1, created_at INTEGER NOT NULL DEFAULT (strftime('%s','now')*1000), updated_at INTEGER NOT NULL DEFAULT (strftime('%s','now')*1000))`,
-      `CREATE TABLE IF NOT EXISTS outpatient_appointments (id INTEGER PRIMARY KEY AUTOINCREMENT, clinic_id INTEGER NOT NULL, patient_name TEXT NOT NULL, age TEXT, phone TEXT, national_id TEXT, appointment_date TEXT NOT NULL, appointment_time TEXT, queue_number INTEGER NOT NULL, source TEXT NOT NULL DEFAULT 'system', status TEXT NOT NULL DEFAULT 'waiting', notes TEXT, created_at INTEGER NOT NULL DEFAULT (strftime('%s','now')*1000), updated_at INTEGER NOT NULL DEFAULT (strftime('%s','now')*1000))`,
+      `CREATE TABLE IF NOT EXISTS outpatient_appointments (id INTEGER PRIMARY KEY AUTOINCREMENT, clinic_id INTEGER NOT NULL, patient_name TEXT NOT NULL, age TEXT, phone TEXT, national_id TEXT, appointment_date TEXT NOT NULL, appointment_time TEXT, queue_number INTEGER NOT NULL, source TEXT NOT NULL DEFAULT 'system', status TEXT NOT NULL DEFAULT 'waiting', notes TEXT, public_token TEXT UNIQUE, public_token_expires_at INTEGER, created_at INTEGER NOT NULL DEFAULT (strftime('%s','now')*1000), updated_at INTEGER NOT NULL DEFAULT (strftime('%s','now')*1000))`,
     ];
     for (const statement of ddl) await db.run(sql.raw(statement));
 
@@ -38,6 +38,9 @@ export async function initDatabase(): Promise<void> {
     try { await db.run(sql.raw("ALTER TABLE notifications ADD COLUMN tone_duration_ms INTEGER NOT NULL DEFAULT 180")); } catch { /* already exists */ }
     try { await db.run(sql.raw("ALTER TABLE notifications ADD COLUMN speak INTEGER NOT NULL DEFAULT 1")); } catch { /* already exists */ }
     try { await db.run(sql.raw("ALTER TABLE notifications ADD COLUMN speech_language TEXT NOT NULL DEFAULT 'auto'")); } catch { /* already exists */ }
+    try { await db.run(sql.raw("ALTER TABLE outpatient_appointments ADD COLUMN public_token TEXT")); } catch { /* already exists */ }
+    try { await db.run(sql.raw("ALTER TABLE outpatient_appointments ADD COLUMN public_token_expires_at INTEGER")); } catch { /* already exists */ }
+    await db.run(sql.raw("CREATE UNIQUE INDEX IF NOT EXISTS idx_outpatient_public_token ON outpatient_appointments(public_token)"));
 
     const [{ value: deptCount }] = await db.select({ value: count() }).from(departmentsTable);
     if (Number(deptCount) === 0) {

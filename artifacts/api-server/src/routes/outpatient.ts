@@ -1,12 +1,14 @@
 import { Router } from "express";
+import { randomBytes } from "node:crypto";
 import { and, asc, desc, eq, sql } from "drizzle-orm";
 import { db, outpatientAppointmentsTable, outpatientClinicsTable } from "@workspace/db";
 import { requireAnyPageAccess, requireFounder, requirePageAccess, requireOutpatientRole } from "../middleware/auth";
+import { notifyPublicQueue } from "./public-outpatient";
 
 const router = Router();
 const PAGE = "/outpatient-clinics";
-const VALID_SOURCES = new Set(["system", "external"]);
-const VALID_STATUSES = new Set(["waiting", "called", "in_service", "completed", "cancelled"]);
+const VALID_SOURCES = new Set(["system", "external", "staff"]);
+const VALID_STATUSES = new Set(["waiting", "called", "in_service", "completed", "cancelled", "no_show", "skipped"]);
 
 function clinicPayload(body: any) {
   return {
@@ -67,11 +69,15 @@ router.post("/outpatient/appointments", requirePageAccess(PAGE, "edit"), require
   if (!clinicId || !String(body.patientName ?? "").trim() || !/^\d{4}-\d{2}-\d{2}$/.test(date)) { res.status(400).json({ error: "العيادة واسم الحالة وتاريخ الحجز مطلوبة" }); return; }
   const [clinic] = await db.select().from(outpatientClinicsTable).where(eq(outpatientClinicsTable.id, clinicId));
   if (!clinic) { res.status(404).json({ error: "العيادة غير موجودة" }); return; }
+  if (!clinic.isOpen) { res.status(409).json({ error: "الحجز متوقف لهذه العيادة" }); return; }
   const [{ maxQueue }] = await db.select({ maxQueue: sql<number>`coalesce(max(${outpatientAppointmentsTable.queueNumber}), 0)` }).from(outpatientAppointmentsTable).where(and(eq(outpatientAppointmentsTable.clinicId, clinicId), eq(outpatientAppointmentsTable.appointmentDate, date)));
   const queueNumber = Number(maxQueue ?? 0) + 1;
-  const [{ id }] = await db.insert(outpatientAppointmentsTable).values({ clinicId, patientName: String(body.patientName).trim(), age: body.age ? String(body.age) : null, phone: body.phone ? String(body.phone).trim() : null, nationalId: body.nationalId ? String(body.nationalId).trim() : null, appointmentDate: date, appointmentTime: body.appointmentTime ? String(body.appointmentTime) : null, queueNumber, source, status: "waiting", notes: body.notes ? String(body.notes).trim() : null, updatedAt: new Date() }).returning({ id: outpatientAppointmentsTable.id });
+  const publicToken = randomBytes(32).toString("base64url");
+  const expires = new Date(`${date}T23:59:59`);
+  expires.setDate(expires.getDate() + 1);
+  const [{ id }] = await db.insert(outpatientAppointmentsTable).values({ clinicId, patientName: String(body.patientName).trim(), age: body.age ? String(body.age) : null, phone: body.phone ? String(body.phone).trim() : null, nationalId: body.nationalId ? String(body.nationalId).trim() : null, appointmentDate: date, appointmentTime: body.appointmentTime ? String(body.appointmentTime) : null, queueNumber, source, status: "waiting", notes: body.notes ? String(body.notes).trim() : null, publicToken, publicTokenExpiresAt: expires, updatedAt: new Date() }).returning({ id: outpatientAppointmentsTable.id });
   const [appointment] = await db.select().from(outpatientAppointmentsTable).where(eq(outpatientAppointmentsTable.id, id));
-  res.status(201).json(appointment);
+  res.status(201).json({ ...appointment, publicUrl: `/q/${publicToken}` });
 });
 
 router.patch("/outpatient/clinics/:id/status", requirePageAccess(PAGE, "edit"), requireOutpatientRole(["reception"]), async (req, res) => {
@@ -90,6 +96,7 @@ router.post("/outpatient/clinics/:id/next", requirePageAccess(PAGE, "edit"), req
     .orderBy(asc(outpatientAppointmentsTable.queueNumber)).limit(1);
   if (!next) { res.status(404).json({ error: "لا توجد حالة تالية في الانتظار" }); return; }
   await db.update(outpatientAppointmentsTable).set({ status: "called", updatedAt: new Date() }).where(eq(outpatientAppointmentsTable.id, next.id));
+  await notifyPublicQueue(id, date);
   res.json({ ...next, status: "called" });
 });
 
@@ -102,6 +109,7 @@ router.patch("/outpatient/appointments/:id", requirePageAccess(PAGE, "edit"), re
   await db.update(outpatientAppointmentsTable).set(updates).where(eq(outpatientAppointmentsTable.id, id));
   const [appointment] = await db.select().from(outpatientAppointmentsTable).where(eq(outpatientAppointmentsTable.id, id));
   if (!appointment) { res.status(404).json({ error: "الحجز غير موجود" }); return; }
+  if (appointment) await notifyPublicQueue(appointment.clinicId, appointment.appointmentDate);
   res.json(appointment);
 });
 

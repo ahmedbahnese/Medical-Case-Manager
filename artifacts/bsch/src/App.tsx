@@ -24,6 +24,7 @@ import DischargeHistory from '@/pages/discharge-history';
 import AuditLog from '@/pages/audit-log';
 import QualityDashboard from '@/pages/quality-dashboard';
 import OutpatientClinics from '@/pages/outpatient-clinics';
+import PatientQueuePortal from '@/pages/patient-queue-portal';
 
 const queryClient = new QueryClient();
 
@@ -78,6 +79,7 @@ function Router() {
   return (
     <Switch>
       <Route path="/" component={Login} />
+      <Route path="/q/:token">{(params) => <PatientQueuePortal token={params.token} />}</Route>
 
       {/* Core */}
       <Route path="/dashboard"><ProtectedRoute component={Dashboard} pageHref="/dashboard" /></Route>
