@@ -22,6 +22,7 @@ import {
   Bell,
   Megaphone,
   Hospital,
+  Globe2,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Toaster } from "sonner";
@@ -92,6 +93,7 @@ const NAV_GROUPS = [
       { name: "إضافة حالة", href: "/add-case", icon: ListPlus },
       { name: "قوائم الانتظار", href: "/waiting-cases", icon: Users },
       { name: "العيادات الخارجية", href: "/outpatient-clinics", icon: Hospital },
+      { name: "موقع المستشفى والخدمات", href: "/hospital-site", icon: Globe2 },
       { name: "التنفس الصناعي", href: "/artificial-respiration", icon: Wind },
     ],
   },

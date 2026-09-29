@@ -121,6 +121,7 @@ const ALL_USER_PAGES = [
   { href: "/add-case",              label: "إضافة حالة" },
   { href: "/waiting-cases",         label: "قوائم الانتظار" },
   { href: "/outpatient-clinics",    label: "العيادات الخارجية" },
+  { href: "/hospital-site",         label: "موقع المستشفى والخدمات" },
   { href: "/artificial-respiration",label: "التنفس الصناعي" },
   { href: "/occupancy-report",      label: "بيان الإشغال" },
   { href: "/print-reports",         label: "التقرير اليومي" },
