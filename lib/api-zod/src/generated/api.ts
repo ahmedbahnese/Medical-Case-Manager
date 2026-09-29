@@ -377,6 +377,9 @@ export const GetWaitingCasesResponse = zod.array(GetWaitingCasesResponseItem)
 export const CreateWaitingCaseBody = zod.object({
   "patientName": zod.string(),
   "age": zod.string().optional(),
+  "address": zod.string().optional(),
+  "emergencyNumber": zod.string().optional(),
+  "fileNumber": zod.string().optional(),
   "diagnosis": zod.string().optional(),
   "notes": zod.string().optional(),
   "medicalReport": zod.string().optional(),
@@ -420,6 +423,9 @@ export const UpdateWaitingCaseParams = zod.object({
 export const UpdateWaitingCaseBody = zod.object({
   "patientName": zod.string().optional(),
   "age": zod.string().optional(),
+  "address": zod.string().optional(),
+  "emergencyNumber": zod.string().optional(),
+  "fileNumber": zod.string().optional(),
   "diagnosis": zod.string().optional(),
   "notes": zod.string().optional(),
   "medicalReport": zod.string().optional(),
@@ -516,4 +522,3 @@ export const CreateBackupResponse = zod.object({
   "recordCount": zod.number(),
   "createdAt": zod.coerce.date()
 })
-

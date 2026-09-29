@@ -66,6 +66,9 @@ router.post("/waiting-cases", requirePageAccess("/waiting-cases", "edit"), async
   const [{ id: newCaseId }] = await db.insert(waitingCasesTable).values({
     patientName: parsed.data.patientName,
     age: parsed.data.age ?? null,
+    address: (parsed.data as any).address ?? null,
+    emergencyNumber: (parsed.data as any).emergencyNumber ?? null,
+    fileNumber: (parsed.data as any).fileNumber ?? null,
     diagnosis: parsed.data.diagnosis ?? null,
     notes: (parsed.data as any).notes ?? null,
     parentPhone: parsed.data.parentPhone ?? null,

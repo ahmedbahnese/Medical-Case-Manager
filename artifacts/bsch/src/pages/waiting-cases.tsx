@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import {
   useGetWaitingCases, useUpdateWaitingCase, useDeleteWaitingCase,
   useCreateWaitingCase, useGetDepartments,
@@ -9,7 +9,7 @@ import { useQueryClient } from "@tanstack/react-query";
 import {
   Users, Clock, CheckCircle2, XCircle, Trash2, Plus, Printer,
   ChevronDown, ChevronUp, FileText, Edit2, FileSpreadsheet, FileDown,
-  LogOut, BookOpen
+  LogOut, BookOpen, Send
 } from "lucide-react";
 import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -31,6 +31,7 @@ import { useAppSettings } from "@/contexts/settings-context";
 import { ReportWatermark } from "@/components/report-watermark";
 import { toast } from "sonner";
 import { ConfirmDialog } from "@/components/confirm-dialog";
+import { apiGet, apiPost, apiDelete } from "@/lib/api";
 
 type Section = "reception" | "servo";
 
@@ -53,7 +54,7 @@ const RECEPTION_FILTERS = [
 ];
 
 const EMPTY_FORM = {
-  patientName: "", age: "", diagnosis: "", notes: "", parentPhone: "", nationalId: "",
+  patientName: "", age: "", address: "", emergencyNumber: "", fileNumber: "", diagnosis: "", notes: "", parentPhone: "", nationalId: "",
   careType: "intensive_care_high", artificialRespiration: "no",
   centralRoomRequired: false, centralRoomCode: "",
 };
@@ -164,6 +165,9 @@ function AddForm({ section, onSuccess }: { section: Section; onSuccess: () => vo
               <Label className="text-xs">رقم الهاتف</Label>
               <Input dir="ltr" value={form.parentPhone} onChange={e => f("parentPhone", e.target.value)} placeholder="01X..." />
             </div>
+            <div className="space-y-1"><Label className="text-xs">العنوان</Label><Input value={form.address} onChange={e => f("address", e.target.value)} /></div>
+            <div className="space-y-1"><Label className="text-xs">رقم الطوارئ</Label><Input dir="ltr" value={form.emergencyNumber} onChange={e => f("emergencyNumber", e.target.value)} /></div>
+            <div className="space-y-1"><Label className="text-xs">رقم الملف</Label><Input dir="ltr" value={form.fileNumber} onChange={e => f("fileNumber", e.target.value)} /></div>
             <div className="space-y-1">
               <Label className="text-xs">الرقم القومي للمريض / ولي الأمر</Label>
               <Input dir="ltr" value={form.nationalId} onChange={e => f("nationalId", e.target.value)} placeholder="14 رقماً" maxLength={14} />
@@ -251,6 +255,9 @@ function WaitingCaseActionDialog({
     diagnosis: waitingCase.diagnosis ?? "",
     notes: waitingCase.notes ?? "",
     parentPhone: waitingCase.parentPhone ?? "",
+    address: waitingCase.address ?? "",
+    emergencyNumber: waitingCase.emergencyNumber ?? "",
+    fileNumber: waitingCase.fileNumber ?? "",
     nationalId: waitingCase.nationalId ?? "",
     careType: waitingCase.careType ?? "intensive_care_high",
     artificialRespiration: waitingCase.artificialRespiration ?? "no",
@@ -268,6 +275,19 @@ function WaitingCaseActionDialog({
   const [reportFile, setReportFile] = useState<{ name: string; data: string } | null>(
     waitingCase.medicalReportData ? { name: waitingCase.medicalReportName ?? "تقرير محفوظ", data: waitingCase.medicalReportData } : null
   );
+  const [attachments, setAttachments] = useState<any[]>([]);
+  const [attachmentCategory, setAttachmentCategory] = useState("xray");
+  useEffect(() => { void apiGet<any[]>(`/api/waiting-cases/${waitingCase.id}/attachments`).then(setAttachments).catch(() => setAttachments([])); }, [waitingCase.id]);
+  const uploadAttachment = async (event: React.ChangeEvent<HTMLInputElement>) => {
+    const file = event.target.files?.[0];
+    if (!file) return;
+    if (file.size > 12 * 1024 * 1024) { toast.error("حجم الملف أكبر من 12MB"); return; }
+    const fileData = await new Promise<string>((resolve, reject) => { const reader = new FileReader(); reader.onload = () => resolve(String(reader.result)); reader.onerror = reject; reader.readAsDataURL(file); });
+    try { const created = await apiPost<any>(`/api/waiting-cases/${waitingCase.id}/attachments`, { category: attachmentCategory, fileName: file.name, mimeType: file.type, fileData }); setAttachments(items => [...items, created]); toast.success("تم رفع المرفق"); } catch (error: any) { toast.error(error.message || "فشل رفع المرفق"); }
+    event.target.value = "";
+  };
+  const removeAttachment = async (id: number) => { try { await apiDelete(`/api/waiting-case-attachments/${id}`); setAttachments(items => items.filter(item => item.id !== id)); } catch (error: any) { toast.error(error.message || "فشل حذف المرفق"); } };
+  const openAttachment = async (id: number) => { try { const file = await apiGet<any>(`/api/waiting-case-attachments/${id}/download`); const link = document.createElement("a"); link.href = file.fileData; link.download = file.fileName; link.target = "_blank"; link.click(); } catch (error: any) { toast.error(error.message || "تعذر فتح المرفق"); } };
 
   const isPending = update.isPending;
 
@@ -493,6 +513,11 @@ function WaitingCaseActionDialog({
                 {reportFile.data.startsWith("data:image/") ? <img src={reportFile.data} alt="ورقة الطوارئ" className="max-h-56 w-full object-contain rounded border bg-white" /> : <iframe title="معاينة ورقة الطوارئ" src={reportFile.data} className="h-56 w-full rounded border bg-white" />}
               </div>}
             </div>
+            <div className="space-y-2 border-t pt-3">
+              <Label className="text-xs">المرفقات المتعددة</Label>
+              <div className="flex gap-2 flex-wrap"><select className="h-9 rounded-md border bg-background px-2 text-sm" value={attachmentCategory} onChange={e => setAttachmentCategory(e.target.value)}><option value="xray">أشعة</option><option value="lab">تحاليل</option><option value="emergency_front">ورقة طوارئ أمام</option><option value="emergency_back">ورقة طوارئ خلف</option><option value="medical_report">تقرير طبي</option><option value="other">أخرى</option></select><Input type="file" accept=".pdf,.png,.jpg,.jpeg,.webp" onChange={uploadAttachment} className="max-w-xs" /></div>
+              <div className="space-y-1">{attachments.map(file => <div key={file.id} className="flex items-center justify-between gap-2 rounded border px-2 py-1 text-xs"><span className="truncate">{file.fileName}</span><div className="flex gap-1"><Button type="button" size="sm" variant="ghost" onClick={() => openAttachment(file.id)}>عرض/تحميل</Button><Button type="button" size="sm" variant="ghost" className="text-destructive" onClick={() => removeAttachment(file.id)}>حذف</Button></div></div>)}{attachments.length === 0 && <p className="text-xs text-muted-foreground">لا توجد مرفقات إضافية بعد</p>}</div>
+            </div>
           </div>
         </div>
 
@@ -616,6 +641,7 @@ function CasesTable({ cases, printCases, onAction, onDelete, isLoading, selected
                       onClick={() => onAction(c)}>
                       <Edit2 className="h-3 w-3" /> تعديل / إجراء
                     </Button>
+                    <Button size="sm" variant="outline" className="h-7 w-7 p-0" title="إرسال التقييم للمجموعتين" onClick={async e => { e.stopPropagation(); try { await apiPost(`/api/waiting-cases/${c.id}/assessment/send`, {}); toast.success("تم إرسال التقييم إلى القنوات المفعلة"); } catch (error: any) { toast.error(error.message || "فشل إرسال التقييم"); } }}><Send className="h-3.5 w-3.5" /></Button>
                     {isFounder && <ConfirmDialog
                       trigger={
                         <Button size="sm" variant="ghost" className="h-7 w-7 p-0 text-destructive hover:bg-destructive/10">

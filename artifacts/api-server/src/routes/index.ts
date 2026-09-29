@@ -15,6 +15,8 @@ import presenceRouter from "./presence";
 import callsRouter from "./calls";
 import outpatientRouter from "./outpatient";
 import publicOutpatientRouter from "./public-outpatient";
+import waitingAttachmentsRouter from "./waiting-attachments";
+import messagingRouter from "./messaging";
 
 const router: IRouter = Router();
 
@@ -22,6 +24,7 @@ const router: IRouter = Router();
 router.use(healthRouter);
 router.use(authRouter);
 router.use(publicOutpatientRouter);
+router.use(messagingRouter);
 
 // ─── Protected (valid session required for all routes below) ─────────────────
 router.use(requireAuth);
@@ -37,5 +40,6 @@ router.use(auditLogsRouter);
 router.use(presenceRouter);
 router.use(callsRouter);
 router.use(outpatientRouter);
+router.use(waitingAttachmentsRouter);
 
 export default router;

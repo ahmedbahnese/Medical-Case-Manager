@@ -8,6 +8,7 @@ import { Checkbox } from "@/components/ui/checkbox";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
+import { Textarea } from "@/components/ui/textarea";
 import { Label } from "@/components/ui/label";
 import { Separator } from "@/components/ui/separator";
 import { Badge } from "@/components/ui/badge";
@@ -73,6 +74,12 @@ interface SettingsData {
   theme_color?: string;
   named_passwords?: string;
   watermark_enabled?: string;
+  whatsapp_enabled?: string;
+  whatsapp_phone_number_id?: string;
+  whatsapp_group_id?: string;
+  telegram_enabled?: string;
+  telegram_chat_id?: string;
+  ai_assessment_template?: string;
 }
 
 interface Department {
@@ -157,6 +164,16 @@ export default function SettingsPage() {
   const [logoPreview, setLogoPreview] = useState<string | null>(null);
   const [themeColor, setThemeColor] = useState("#2563eb");
   const [watermarkEnabled, setWatermarkEnabled] = useState(true);
+  const [whatsappEnabled, setWhatsappEnabled] = useState(false);
+  const [whatsappPhoneId, setWhatsappPhoneId] = useState("");
+  const [whatsappGroupId, setWhatsappGroupId] = useState("");
+  const [telegramEnabled, setTelegramEnabled] = useState(false);
+  const [telegramChatId, setTelegramChatId] = useState("");
+  const [whatsappAccessToken, setWhatsappAccessToken] = useState("");
+  const [whatsappVerifyToken, setWhatsappVerifyToken] = useState("");
+  const [telegramBotToken, setTelegramBotToken] = useState("");
+  const [telegramWebhookSecret, setTelegramWebhookSecret] = useState("");
+  const [assessmentTemplate, setAssessmentTemplate] = useState("");
 
   // Supervisors
   const [supervisors, setSupervisors] = useState<string[]>([]);
@@ -211,6 +228,12 @@ export default function SettingsPage() {
       if (data.logo_base64) setLogoPreview(data.logo_base64);
       if (data.theme_color) setThemeColor(data.theme_color);
       if (data.watermark_enabled !== undefined) setWatermarkEnabled(data.watermark_enabled !== "false");
+      if (data.whatsapp_enabled !== undefined) setWhatsappEnabled(data.whatsapp_enabled === "true");
+      if (data.whatsapp_phone_number_id) setWhatsappPhoneId(data.whatsapp_phone_number_id);
+      if (data.whatsapp_group_id) setWhatsappGroupId(data.whatsapp_group_id);
+      if (data.telegram_enabled !== undefined) setTelegramEnabled(data.telegram_enabled === "true");
+      if (data.telegram_chat_id) setTelegramChatId(data.telegram_chat_id);
+      if (data.ai_assessment_template) setAssessmentTemplate(data.ai_assessment_template);
       if (data.supervisors) {
         try { setSupervisors(JSON.parse(data.supervisors)); } catch { setSupervisors([]); }
       }
@@ -471,6 +494,26 @@ export default function SettingsPage() {
               <Save className="h-4 w-4 ml-1" /> حفظ
             </Button>
           </div>
+        </CardContent>
+      </Card>
+
+      <Card className="border-primary/20">
+        <CardHeader className="pb-3"><CardTitle className="text-base">تكامل تقييمات الانتظار مع WhatsApp وTelegram</CardTitle><CardDescription className="text-xs">تُرسل الرسالة مباشرة إلى مجموعة الموظفين عند الضغط على إرسال من حالة الانتظار. أدخل الرموز السرية مرة واحدة ولا تُعرض بعد الحفظ.</CardDescription></CardHeader>
+        <CardContent className="space-y-4">
+          <div className="grid gap-3 sm:grid-cols-2">
+            <label className="flex items-center gap-2 text-sm"><Checkbox checked={whatsappEnabled} onCheckedChange={v => setWhatsappEnabled(!!v)} /> تفعيل WhatsApp الرسمي</label>
+            <label className="flex items-center gap-2 text-sm"><Checkbox checked={telegramEnabled} onCheckedChange={v => setTelegramEnabled(!!v)} /> تفعيل Telegram</label>
+            <div><Label>WhatsApp Phone Number ID</Label><Input dir="ltr" value={whatsappPhoneId} onChange={e => setWhatsappPhoneId(e.target.value)} /></div>
+            <div><Label>WhatsApp Group ID</Label><Input dir="ltr" value={whatsappGroupId} onChange={e => setWhatsappGroupId(e.target.value)} /></div>
+            <div><Label>Telegram Chat ID</Label><Input dir="ltr" value={telegramChatId} onChange={e => setTelegramChatId(e.target.value)} /></div>
+            <div><Label>WhatsApp Access Token</Label><Input type="password" dir="ltr" value={whatsappAccessToken} onChange={e => setWhatsappAccessToken(e.target.value)} placeholder="يُحفظ ولا يُعرض مرة أخرى" /></div>
+            <div><Label>WhatsApp Verify Token</Label><Input type="password" dir="ltr" value={whatsappVerifyToken} onChange={e => setWhatsappVerifyToken(e.target.value)} /></div>
+            <div><Label>Telegram Bot Token</Label><Input type="password" dir="ltr" value={telegramBotToken} onChange={e => setTelegramBotToken(e.target.value)} placeholder="يُحفظ ولا يُعرض مرة أخرى" /></div>
+            <div><Label>Telegram Webhook Secret</Label><Input type="password" dir="ltr" value={telegramWebhookSecret} onChange={e => setTelegramWebhookSecret(e.target.value)} /></div>
+          </div>
+          <div><Label>نص التقييم (اختياري)</Label><Textarea rows={7} value={assessmentTemplate} onChange={e => setAssessmentTemplate(e.target.value)} placeholder="استخدم المتغيرات: {{hospitalName}} {{patientName}} {{age}} {{address}} {{diagnosis}} {{transferSource}} {{phone}} {{nationalId}} {{careType}}" /></div>
+          <Button disabled={loading} onClick={async () => { await saveSetting("whatsapp_enabled", String(whatsappEnabled)); await saveSetting("whatsapp_phone_number_id", whatsappPhoneId); await saveSetting("whatsapp_group_id", whatsappGroupId); await saveSetting("telegram_enabled", String(telegramEnabled)); await saveSetting("telegram_chat_id", telegramChatId); await saveSetting("ai_assessment_template", assessmentTemplate); if (whatsappAccessToken) await saveSetting("whatsapp_access_token", whatsappAccessToken); if (whatsappVerifyToken) await saveSetting("whatsapp_verify_token", whatsappVerifyToken); if (telegramBotToken) await saveSetting("telegram_bot_token", telegramBotToken); if (telegramWebhookSecret) await saveSetting("telegram_webhook_secret", telegramWebhookSecret); setWhatsappAccessToken(""); setWhatsappVerifyToken(""); setTelegramBotToken(""); setTelegramWebhookSecret(""); }}><Save className="h-4 w-4 ml-1" /> حفظ إعدادات الرسائل</Button>
+          <p className="text-xs text-muted-foreground">يتم إدخال Access Token وBot Token من ملف إعداد آمن على جهاز المستشفى، ولا تظهر في الجداول أو الرسائل المرسلة للمرضى.</p>
         </CardContent>
       </Card>
 

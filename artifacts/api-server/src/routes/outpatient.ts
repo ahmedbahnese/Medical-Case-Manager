@@ -19,6 +19,9 @@ function clinicPayload(body: any) {
     phone: String(body.phone ?? "").trim() || null,
     dailyCapacity: Math.max(1, Number(body.dailyCapacity) || 30),
     appointmentDuration: Math.max(5, Number(body.appointmentDuration) || 15),
+    workingDays: JSON.stringify(Array.isArray(body.workingDays) ? body.workingDays : []),
+    workStart: /^\d{2}:\d{2}$/.test(String(body.workStart ?? "")) ? String(body.workStart) : "09:00",
+    workEnd: /^\d{2}:\d{2}$/.test(String(body.workEnd ?? "")) ? String(body.workEnd) : "14:00",
     isOpen: body.isOpen !== false,
     updatedAt: new Date(),
   };
@@ -70,6 +73,11 @@ router.post("/outpatient/appointments", requirePageAccess(PAGE, "edit"), require
   const [clinic] = await db.select().from(outpatientClinicsTable).where(eq(outpatientClinicsTable.id, clinicId));
   if (!clinic) { res.status(404).json({ error: "العيادة غير موجودة" }); return; }
   if (!clinic.isOpen) { res.status(409).json({ error: "الحجز متوقف لهذه العيادة" }); return; }
+  try {
+    const days = JSON.parse(clinic.workingDays || "[]") as number[];
+    const weekday = new Date(`${date}T12:00:00`).getDay();
+    if (days.length && !days.includes(weekday)) { res.status(409).json({ error: "هذا التاريخ ليس من أيام عمل العيادة" }); return; }
+  } catch { /* use legacy clinics without a schedule */ }
   const [{ maxQueue }] = await db.select({ maxQueue: sql<number>`coalesce(max(${outpatientAppointmentsTable.queueNumber}), 0)` }).from(outpatientAppointmentsTable).where(and(eq(outpatientAppointmentsTable.clinicId, clinicId), eq(outpatientAppointmentsTable.appointmentDate, date)));
   const queueNumber = Number(maxQueue ?? 0) + 1;
   const publicToken = randomBytes(32).toString("base64url");

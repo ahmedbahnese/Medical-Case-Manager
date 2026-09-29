@@ -8,3 +8,5 @@ export * from "./ovr-reports";
 export * from "./audit-logs";
 export * from "./notifications";
 export * from "./outpatient";
+export * from "./waiting-attachments";
+export * from "./messaging";

@@ -12,9 +12,10 @@ router.get("/settings", async (req, res): Promise<void> => {
   const rows = await db.select().from(settingsTable);
   const map: Record<string, string | null> = {};
   const publicKeys = new Set(["hospital_name", "logo_base64", "theme_color", "watermark_enabled", "supervisors"]);
+  const founderIntegrationKeys = new Set(["whatsapp_enabled", "whatsapp_phone_number_id", "whatsapp_business_account_id", "whatsapp_verify_token", "whatsapp_group_id", "telegram_enabled", "telegram_chat_id", "ai_assessment_template", "clinic_booking_template", "clinic_confirmation_template", "clinic_weekly_schedule"]);
   const isFounder = (await getCurrentUserAccess(req.headers.cookie)).isFounder;
   for (const row of rows) {
-    if (publicKeys.has(row.key) || (isFounder && row.key === "named_passwords")) {
+    if (publicKeys.has(row.key) || (isFounder && (row.key === "named_passwords" || founderIntegrationKeys.has(row.key)))) {
       map[row.key] = row.value;
     }
   }
@@ -31,7 +32,7 @@ router.post("/settings", requireFounder, async (req, res): Promise<void> => {
   }
 
   // Verify password for sensitive operations
-  const sensitiveKeys = ["hospital_name", "logo_base64", "theme", "login_password", "settings_password", "admin_users"];
+  const sensitiveKeys = ["hospital_name", "logo_base64", "theme", "login_password", "settings_password", "admin_users", "whatsapp_verify_token", "whatsapp_access_token", "telegram_bot_token"];
   if (sensitiveKeys.includes(key)) {
     if (password !== SETTINGS_PASSWORD) {
       res.status(401).json({ error: "كلمة مرور الإعدادات غير صحيحة" });
