@@ -80,6 +80,7 @@ interface SettingsData {
   telegram_enabled?: string;
   telegram_chat_id?: string;
   ai_assessment_template?: string;
+  assessment_auto_send?: string;
 }
 
 interface Department {
@@ -152,6 +153,20 @@ function setPageAccess(perms: PagePermission[], href: string, access: "none" | "
   return [...existing, { href, access }];
 }
 
+function orderedUserPages(perms: PagePermission[]): typeof ALL_USER_PAGES {
+  const byHref = new Map(ALL_USER_PAGES.map(page => [page.href, page]));
+  return [...perms.map(permission => byHref.get(permission.href)).filter(Boolean), ...ALL_USER_PAGES.filter(page => !perms.some(permission => permission.href === page.href))] as typeof ALL_USER_PAGES;
+}
+
+function movePage(perms: PagePermission[], href: string, direction: -1 | 1): PagePermission[] {
+  const next = [...perms];
+  const index = next.findIndex(permission => permission.href === href);
+  const target = index + direction;
+  if (index < 0 || target < 0 || target >= next.length) return next;
+  [next[index], next[target]] = [next[target], next[index]];
+  return next;
+}
+
 export default function SettingsPage() {
   const { refreshSettings } = useSettingsActions();
   const [unlocked, setUnlocked] = useState(false);
@@ -175,6 +190,7 @@ export default function SettingsPage() {
   const [telegramBotToken, setTelegramBotToken] = useState("");
   const [telegramWebhookSecret, setTelegramWebhookSecret] = useState("");
   const [assessmentTemplate, setAssessmentTemplate] = useState("");
+  const [assessmentAutoSend, setAssessmentAutoSend] = useState(false);
 
   // Supervisors
   const [supervisors, setSupervisors] = useState<string[]>([]);
@@ -235,6 +251,7 @@ export default function SettingsPage() {
       if (data.telegram_enabled !== undefined) setTelegramEnabled(data.telegram_enabled === "true");
       if (data.telegram_chat_id) setTelegramChatId(data.telegram_chat_id);
       if (data.ai_assessment_template) setAssessmentTemplate(data.ai_assessment_template);
+      if ((data as any).assessment_auto_send !== undefined) setAssessmentAutoSend((data as any).assessment_auto_send === "true");
       if (data.supervisors) {
         try { setSupervisors(JSON.parse(data.supervisors)); } catch { setSupervisors([]); }
       }
@@ -499,7 +516,7 @@ export default function SettingsPage() {
       </Card>
 
       <Card className="border-primary/20">
-        <CardHeader className="pb-3"><CardTitle className="text-base">تكامل تقييمات الانتظار مع WhatsApp وTelegram</CardTitle><CardDescription className="text-xs">تُرسل الرسالة مباشرة إلى مجموعة الموظفين عند الضغط على إرسال من حالة الانتظار. أدخل الرموز السرية مرة واحدة ولا تُعرض بعد الحفظ.</CardDescription></CardHeader>
+          <CardHeader className="pb-3"><CardTitle className="text-base">تكامل تقييمات الانتظار مع WhatsApp وTelegram</CardTitle><CardDescription className="text-xs">يمكن الإرسال يدويًا من قائمة الانتظار أو تلقائيًا عند إضافة حالة جديدة. أدخل الرموز السرية مرة واحدة ولا تُعرض بعد الحفظ.</CardDescription></CardHeader>
         <CardContent className="space-y-4">
           <div className="grid gap-3 sm:grid-cols-2">
             <label className="flex items-center gap-2 text-sm"><Checkbox checked={whatsappEnabled} onCheckedChange={v => setWhatsappEnabled(!!v)} /> تفعيل WhatsApp الرسمي</label>
@@ -512,8 +529,10 @@ export default function SettingsPage() {
             <div><Label>Telegram Bot Token</Label><Input type="password" dir="ltr" value={telegramBotToken} onChange={e => setTelegramBotToken(e.target.value)} placeholder="يُحفظ ولا يُعرض مرة أخرى" /></div>
             <div><Label>Telegram Webhook Secret</Label><Input type="password" dir="ltr" value={telegramWebhookSecret} onChange={e => setTelegramWebhookSecret(e.target.value)} /></div>
           </div>
+          <label className="flex items-center gap-2 rounded-md border bg-muted/20 p-3 text-sm"><Checkbox checked={assessmentAutoSend} onCheckedChange={v => setAssessmentAutoSend(!!v)} /> إرسال تقييم الحالة تلقائيًا إلى المجموعات عند إضافتها لقائمة الانتظار</label>
           <div><Label>نص التقييم (اختياري)</Label><Textarea rows={7} value={assessmentTemplate} onChange={e => setAssessmentTemplate(e.target.value)} placeholder="استخدم المتغيرات: {{hospitalName}} {{patientName}} {{age}} {{address}} {{diagnosis}} {{transferSource}} {{phone}} {{nationalId}} {{careType}}" /></div>
-          <Button disabled={loading} onClick={async () => { await saveSetting("whatsapp_enabled", String(whatsappEnabled)); await saveSetting("whatsapp_phone_number_id", whatsappPhoneId); await saveSetting("whatsapp_group_id", whatsappGroupId); await saveSetting("telegram_enabled", String(telegramEnabled)); await saveSetting("telegram_chat_id", telegramChatId); await saveSetting("ai_assessment_template", assessmentTemplate); if (whatsappAccessToken) await saveSetting("whatsapp_access_token", whatsappAccessToken); if (whatsappVerifyToken) await saveSetting("whatsapp_verify_token", whatsappVerifyToken); if (telegramBotToken) await saveSetting("telegram_bot_token", telegramBotToken); if (telegramWebhookSecret) await saveSetting("telegram_webhook_secret", telegramWebhookSecret); setWhatsappAccessToken(""); setWhatsappVerifyToken(""); setTelegramBotToken(""); setTelegramWebhookSecret(""); }}><Save className="h-4 w-4 ml-1" /> حفظ إعدادات الرسائل</Button>
+          <Button disabled={loading} onClick={async () => { await saveSetting("whatsapp_enabled", String(whatsappEnabled)); await saveSetting("whatsapp_phone_number_id", whatsappPhoneId); await saveSetting("whatsapp_group_id", whatsappGroupId); await saveSetting("telegram_enabled", String(telegramEnabled)); await saveSetting("telegram_chat_id", telegramChatId); await saveSetting("assessment_auto_send", String(assessmentAutoSend)); await saveSetting("ai_assessment_template", assessmentTemplate); if (whatsappAccessToken) await saveSetting("whatsapp_access_token", whatsappAccessToken); if (whatsappVerifyToken) await saveSetting("whatsapp_verify_token", whatsappVerifyToken); if (telegramBotToken) await saveSetting("telegram_bot_token", telegramBotToken); if (telegramWebhookSecret) await saveSetting("telegram_webhook_secret", telegramWebhookSecret); setWhatsappAccessToken(""); setWhatsappVerifyToken(""); setTelegramBotToken(""); setTelegramWebhookSecret(""); }}><Save className="h-4 w-4 ml-1" /> حفظ إعدادات الرسائل</Button>
+          <details className="rounded-md border p-3 text-xs"><summary className="cursor-pointer font-medium">خطوات الربط السريعة</summary><ol className="mt-2 list-decimal space-y-1 pr-5 text-muted-foreground"><li>شغّل عنوان HTTPS للنظام من جهاز المستشفى.</li><li>في Meta ضع Webhook URL على <code>/api/webhooks/whatsapp</code> واستخدم Verify Token المحفوظ هنا.</li><li>أنشئ Telegram Bot من BotFather، ضع Bot Token هنا، ثم استدعِ setWebhook إلى <code>/api/webhooks/telegram</code>.</li><li>أرسل رسالة اختبار ثم احفظ Group ID / Chat ID في الحقول أعلاه.</li></ol></details>
           <p className="text-xs text-muted-foreground">يتم إدخال Access Token وBot Token من ملف إعداد آمن على جهاز المستشفى، ولا تظهر في الجداول أو الرسائل المرسلة للمرضى.</p>
         </CardContent>
       </Card>
@@ -1047,12 +1066,14 @@ export default function SettingsPage() {
                           </div>
                         </div>
                         <div className="border rounded-md divide-y text-xs">
-                          {ALL_USER_PAGES.map(page => {
+                          {orderedUserPages(editUserPerms).map((page, pageIndex, pages) => {
                             const access = editUserPerms.find(p => p.href === page.href)?.access ?? "edit";
                             return (
                               <div key={page.href} className="flex items-center justify-between px-3 py-1.5">
                                 <span>{page.label}</span>
                                 <div className="flex gap-1">
+                                  <button type="button" className="rounded border px-1.5 text-[10px] disabled:opacity-30" disabled={pageIndex === 0} onClick={() => setEditUserPerms(p => movePage(p, page.href, -1))} title="تحريك لأعلى">↑</button>
+                                  <button type="button" className="rounded border px-1.5 text-[10px] disabled:opacity-30" disabled={pageIndex === pages.length - 1} onClick={() => setEditUserPerms(p => movePage(p, page.href, 1))} title="تحريك لأسفل">↓</button>
                                   {(["none", "view", "edit"] as const).map(level => (
                                     <button key={level} type="button"
                                       className={`text-[10px] px-2 py-0.5 rounded border transition-colors ${access === level ? ACCESS_ACTIVE_CLASS[level] : "border-border text-muted-foreground hover:border-primary/40"}`}
@@ -1164,12 +1185,14 @@ export default function SettingsPage() {
                 </div>
               </div>
               <div className="border rounded-md divide-y text-xs">
-                {ALL_USER_PAGES.map(page => {
+                {orderedUserPages(newNpPagePerms).map((page, pageIndex, pages) => {
                   const access = newNpPagePerms.find(p => p.href === page.href)?.access ?? "edit";
                   return (
                     <div key={page.href} className="flex items-center justify-between px-3 py-1.5">
                       <span>{page.label}</span>
                       <div className="flex gap-1">
+                        <button type="button" className="rounded border px-1.5 text-[10px] disabled:opacity-30" disabled={pageIndex === 0} onClick={() => setNewNpPagePerms(p => movePage(p, page.href, -1))} title="تحريك لأعلى">↑</button>
+                        <button type="button" className="rounded border px-1.5 text-[10px] disabled:opacity-30" disabled={pageIndex === pages.length - 1} onClick={() => setNewNpPagePerms(p => movePage(p, page.href, 1))} title="تحريك لأسفل">↓</button>
                         {(["none", "view", "edit"] as const).map(level => (
                           <button key={level} type="button"
                             className={`text-[10px] px-2 py-0.5 rounded border transition-colors ${access === level ? ACCESS_ACTIVE_CLASS[level] : "border-border text-muted-foreground hover:border-primary/40"}`}

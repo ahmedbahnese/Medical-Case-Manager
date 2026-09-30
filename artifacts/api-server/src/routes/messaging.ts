@@ -40,14 +40,19 @@ async function sendTelegram(text: string) {
   return response.json();
 }
 
-router.post("/waiting-cases/:id/assessment/send", requirePageAccess("/waiting-cases", "edit"), async (req, res) => {
-  const id = Number(req.params.id);
-  const [caseItem] = await db.select().from(waitingCasesTable).where(eq(waitingCasesTable.id, id));
-  if (!caseItem) { res.status(404).json({ error: "الحالة غير موجودة" }); return; }
+export async function sendAssessmentToConfiguredChannels(caseItem: any) {
   const text = await assessmentText(caseItem);
   const results: Record<string, unknown> = { text };
   try { results.whatsapp = await sendWhatsApp(text); } catch (error: any) { results.whatsappError = error.message; }
   try { results.telegram = await sendTelegram(text); } catch (error: any) { results.telegramError = error.message; }
+  return results;
+}
+
+router.post("/waiting-cases/:id/assessment/send", requirePageAccess("/waiting-cases", "edit"), async (req, res) => {
+  const id = Number(req.params.id);
+  const [caseItem] = await db.select().from(waitingCasesTable).where(eq(waitingCasesTable.id, id));
+  if (!caseItem) { res.status(404).json({ error: "الحالة غير موجودة" }); return; }
+  const results = await sendAssessmentToConfiguredChannels(caseItem);
   if (!results.whatsapp && !results.telegram) { res.status(502).json({ error: "فشل الإرسال إلى القنوات", details: results }); return; }
   res.json(results);
 });

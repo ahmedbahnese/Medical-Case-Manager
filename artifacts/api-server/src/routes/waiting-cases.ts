@@ -1,6 +1,6 @@
 import { Router, type IRouter } from "express";
 import { eq, and, ne, SQL } from "drizzle-orm";
-import { db, waitingCasesTable, medicalCasesTable, departmentsTable } from "@workspace/db";
+import { db, waitingCasesTable, medicalCasesTable, departmentsTable, settingsTable } from "@workspace/db";
 import {
   GetWaitingCasesQueryParams,
   CreateWaitingCaseBody,
@@ -10,6 +10,7 @@ import {
 } from "@workspace/api-zod";
 import { logAction } from "./audit-logs";
 import { getCurrentUserName, requireFounder, requirePageAccess } from "../middleware/auth";
+import { sendAssessmentToConfiguredChannels } from "./messaging";
 
 const router: IRouter = Router();
 
@@ -87,6 +88,9 @@ router.post("/waiting-cases", requirePageAccess("/waiting-cases", "edit"), async
   const [newCase] = await db.select().from(waitingCasesTable).where(eq(waitingCasesTable.id, newCaseId));
 
   await logAction("إضافة لقائمة الانتظار", "waiting_case", newCase.id, newCase.patientName, `القسم: ${newCase.section}`, getCurrentUserName(req.headers.cookie));
+
+  const autoSend = await db.select({ value: settingsTable.value }).from(settingsTable).where(eq(settingsTable.key, "assessment_auto_send")).limit(1);
+  if (autoSend[0]?.value === "true") void sendAssessmentToConfiguredChannels(newCase).catch(() => undefined);
 
   res.status(201).json(newCase);
 });

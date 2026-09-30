@@ -228,8 +228,9 @@ export function Layout({ children }: { children: ReactNode }) {
 
   const canOpenPresence = isFounder || getPageAccess("/open-accounts") !== "none";
 
+  const userPageOrder = new Map(pagePermissions.map((permission, index) => [permission.href, index]));
   const filteredGroups = NAV_GROUPS
-    .map(g => ({ ...g, items: g.items.filter(isItemVisible) }))
+    .map(g => ({ ...g, items: g.items.filter(isItemVisible).sort((a, b) => (userPageOrder.get(a.href) ?? 9999) - (userPageOrder.get(b.href) ?? 9999)) }))
     .filter(g => g.items.length > 0);
 
   const allNav = filteredGroups.flatMap(g => g.items);
