@@ -122,6 +122,7 @@ const ALL_USER_PAGES = [
   { href: "/add-case",              label: "إضافة حالة" },
   { href: "/waiting-cases",         label: "قوائم الانتظار" },
   { href: "/outpatient-clinics",    label: "العيادات الخارجية" },
+  { href: "/outpatient-reports",    label: "تقارير حجوزات العيادات" },
   { href: "/hospital-site",         label: "موقع المستشفى والخدمات" },
   { href: "/artificial-respiration",label: "التنفس الصناعي" },
   { href: "/occupancy-report",      label: "بيان الإشغال" },
@@ -190,6 +191,7 @@ export default function SettingsPage() {
   const [telegramBotToken, setTelegramBotToken] = useState("");
   const [telegramWebhookSecret, setTelegramWebhookSecret] = useState("");
   const [assessmentTemplate, setAssessmentTemplate] = useState("");
+  const [outpatientTemplates, setOutpatientTemplates] = useState<{ templateKey: string; name: string; body: string; enabled: boolean }[]>([]);
   const [assessmentAutoSend, setAssessmentAutoSend] = useState(false);
 
   // Supervisors
@@ -260,6 +262,7 @@ export default function SettingsPage() {
       }
     }).catch(() => {});
     loadDepartments();
+    apiGet<any[]>('/api/outpatient/templates').then(setOutpatientTemplates).catch(() => {});
   }, [unlocked]);
 
   const handleSelectUpdatePackage = async () => {
@@ -534,6 +537,23 @@ export default function SettingsPage() {
           <Button disabled={loading} onClick={async () => { await saveSetting("whatsapp_enabled", String(whatsappEnabled)); await saveSetting("whatsapp_phone_number_id", whatsappPhoneId); await saveSetting("whatsapp_group_id", whatsappGroupId); await saveSetting("telegram_enabled", String(telegramEnabled)); await saveSetting("telegram_chat_id", telegramChatId); await saveSetting("assessment_auto_send", String(assessmentAutoSend)); await saveSetting("ai_assessment_template", assessmentTemplate); if (whatsappAccessToken) await saveSetting("whatsapp_access_token", whatsappAccessToken); if (whatsappVerifyToken) await saveSetting("whatsapp_verify_token", whatsappVerifyToken); if (telegramBotToken) await saveSetting("telegram_bot_token", telegramBotToken); if (telegramWebhookSecret) await saveSetting("telegram_webhook_secret", telegramWebhookSecret); setWhatsappAccessToken(""); setWhatsappVerifyToken(""); setTelegramBotToken(""); setTelegramWebhookSecret(""); }}><Save className="h-4 w-4 ml-1" /> حفظ إعدادات الرسائل</Button>
           <details className="rounded-md border p-3 text-xs"><summary className="cursor-pointer font-medium">خطوات الربط السريعة</summary><ol className="mt-2 list-decimal space-y-1 pr-5 text-muted-foreground"><li>شغّل عنوان HTTPS للنظام من جهاز المستشفى.</li><li>في Meta ضع Webhook URL على <code>/api/webhooks/whatsapp</code> واستخدم Verify Token المحفوظ هنا.</li><li>أنشئ Telegram Bot من BotFather، ضع Bot Token هنا، ثم استدعِ setWebhook إلى <code>/api/webhooks/telegram</code>.</li><li>أرسل رسالة اختبار ثم احفظ Group ID / Chat ID في الحقول أعلاه.</li></ol></details>
           <p className="text-xs text-muted-foreground">يتم إدخال Access Token وBot Token من ملف إعداد آمن على جهاز المستشفى، ولا تظهر في الجداول أو الرسائل المرسلة للمرضى.</p>
+        </CardContent>
+      </Card>
+
+      <Card className="border-primary/20">
+        <CardHeader><CardTitle className="text-base">قوالب رسائل العيادات الخارجية</CardTitle><CardDescription className="text-xs">عدّل الرسائل التي تستخدمها القنوات. لا يتم تأكيد الحجز تلقائيًا؛ القالب يستخدم بعد مراجعة الموظف.</CardDescription></CardHeader>
+        <CardContent className="space-y-3">
+          <p className="text-xs text-muted-foreground">المتغيرات: <code dir="ltr">{"{{patientName}} {{clinicName}} {{clinicDays}} {{workingHours}} {{queueNumber}} {{trackingLink}} {{hospitalName}} {{appointmentDate}}"}</code></p>
+          {outpatientTemplates.map(template => (
+            <div key={template.templateKey} className="rounded-md border p-3 space-y-2">
+              <div className="font-medium text-sm">{template.name}</div>
+              <Textarea rows={3} value={template.body} onChange={e => setOutpatientTemplates(items => items.map(item => item.templateKey === template.templateKey ? { ...item, body: e.target.value } : item))} />
+              <div className="flex gap-2">
+                <Button size="sm" onClick={async () => { await apiPost(`/api/outpatient/templates/preview`, { body: template.body, values: { patientName: "مثال", clinicName: "عيادة الأطفال", hospitalName: hospitalName, queueNumber: "12", appointmentDate: "اليوم" } }).then((result: any) => toast.info(result.text)); }} variant="outline">معاينة</Button>
+                <Button size="sm" onClick={async () => { await apiPost(`/api/outpatient/templates/${template.templateKey}`, { body: template.body, enabled: template.enabled }); toast.success("تم حفظ القالب"); }}><Save className="h-4 w-4 ml-1" />حفظ</Button>
+              </div>
+            </div>
+          ))}
         </CardContent>
       </Card>
 

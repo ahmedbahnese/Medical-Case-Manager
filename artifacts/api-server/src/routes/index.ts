@@ -17,6 +17,7 @@ import outpatientRouter from "./outpatient";
 import publicOutpatientRouter from "./public-outpatient";
 import waitingAttachmentsRouter from "./waiting-attachments";
 import messagingRouter from "./messaging";
+import outpatientAdvancedRouter from "./outpatient-advanced";
 
 const router: IRouter = Router();
 
@@ -40,6 +41,7 @@ router.use(auditLogsRouter);
 router.use(presenceRouter);
 router.use(callsRouter);
 router.use(outpatientRouter);
+router.use(outpatientAdvancedRouter);
 router.use(waitingAttachmentsRouter);
 
 export default router;

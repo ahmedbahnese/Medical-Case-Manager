@@ -34,6 +34,8 @@ export const outpatientAppointmentsTable = sqliteTable("outpatient_appointments"
   queueNumber: integer("queue_number").notNull(),
   source: text("source").notNull().default("system"),
   status: text("status").notNull().default("waiting"),
+  calledAt: integer("called_at", { mode: "timestamp_ms" }),
+  completedAt: integer("completed_at", { mode: "timestamp_ms" }),
   notes: text("notes"),
   publicToken: text("public_token").unique(),
   publicTokenExpiresAt: integer("public_token_expires_at", { mode: "timestamp_ms" }),

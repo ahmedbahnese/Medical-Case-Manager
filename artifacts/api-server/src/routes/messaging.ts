@@ -1,6 +1,6 @@
 import { Router } from "express";
 import { eq } from "drizzle-orm";
-import { db, inboundMessagesTable, settingsTable, waitingCasesTable } from "@workspace/db";
+import { db, inboundMessagesTable, outpatientBookingRequestsTable, outpatientClinicsTable, settingsTable, waitingCasesTable } from "@workspace/db";
 import { requirePageAccess } from "../middleware/auth";
 
 const router = Router();
@@ -40,6 +40,17 @@ async function sendTelegram(text: string) {
   return response.json();
 }
 
+function extractBookingRequest(text: string, clinics: any[]) {
+  const lower = text.toLocaleLowerCase();
+  const clinic = clinics.find(c => lower.includes(String(c.name).toLocaleLowerCase()) || (c.specialty && lower.includes(String(c.specialty).toLocaleLowerCase())));
+  const phone = text.match(/(?:01|\+?20\s?1)\d[\s-]?\d{8,}/)?.[0]?.replace(/[\s-]/g, "") ?? null;
+  const age = text.match(/(?:العمر|السن)\s*[:：]?\s*(\d+)/)?.[1] ?? null;
+  const name = text.match(/(?:الاسم|اسمي)\s*[:：]?\s*([^،,\n]+)/)?.[1]?.trim() ?? null;
+  const extracted = { patientName: name, age, phone, clinicId: clinic?.id ?? null, clinicName: clinic?.name ?? null, serviceType: null, requestedDay: text.match(/(الأحد|الاثنين|الثلاثاء|الأربعاء|الخميس|الجمعة|السبت)/)?.[1] ?? null };
+  const missingFields = Object.entries(extracted).filter(([key, value]) => ["patientName", "phone", "clinicId"].includes(key) && !value).map(([key]) => key);
+  return { extracted, missingFields };
+}
+
 export async function sendAssessmentToConfiguredChannels(caseItem: any) {
   const text = await assessmentText(caseItem);
   const results: Record<string, unknown> = { text };
@@ -70,7 +81,11 @@ router.post("/webhooks/whatsapp", async (req, res) => {
   const payload = req.body ?? {};
   const messages = payload.entry?.flatMap((entry: any) => entry.changes ?? []).flatMap((change: any) => change.value?.messages ?? []) ?? [];
   for (const message of messages) {
-    await db.insert(inboundMessagesTable).values({ channel: "whatsapp", externalMessageId: message.id ?? null, senderId: message.from ?? "unknown", senderName: payload.entry?.[0]?.changes?.[0]?.value?.contacts?.[0]?.profile?.name ?? null, body: message.text?.body ?? null, rawPayload: JSON.stringify(message) }).onConflictDoNothing();
+    const body = message.text?.body ?? "";
+    const [inbound] = await db.insert(inboundMessagesTable).values({ channel: "whatsapp", externalMessageId: message.id ?? null, senderId: message.from ?? "unknown", senderName: payload.entry?.[0]?.changes?.[0]?.value?.contacts?.[0]?.profile?.name ?? null, body, rawPayload: JSON.stringify(message), status: "processed" }).onConflictDoNothing().returning();
+    const result = extractBookingRequest(body, await db.select().from(outpatientClinicsTable));
+    await db.insert(outpatientBookingRequestsTable).values({ channel: "whatsapp", senderId: message.from ?? null, rawText: body, extractedJson: JSON.stringify(result.extracted), missingFieldsJson: JSON.stringify(result.missingFields), status: result.missingFields.length ? "needs_data" : "needs_review" });
+    if (inbound) await db.update(inboundMessagesTable).set({ status: result.missingFields.length ? "needs_data" : "needs_review" }).where(eq(inboundMessagesTable.id, inbound.id));
   }
 });
 
@@ -79,7 +94,13 @@ router.post("/webhooks/telegram", async (req, res) => {
   if (secret && req.header("X-Telegram-Bot-Api-Secret-Token") !== secret) { res.sendStatus(403); return; }
   res.sendStatus(200);
   const message = req.body?.message;
-  if (message) await db.insert(inboundMessagesTable).values({ channel: "telegram", externalMessageId: String(req.body.update_id ?? ""), senderId: String(message.from?.id ?? "unknown"), senderName: message.from?.first_name ?? null, body: message.text ?? null, rawPayload: JSON.stringify(req.body) }).onConflictDoNothing();
+  if (message) {
+    const body = message.text ?? "";
+    const [inbound] = await db.insert(inboundMessagesTable).values({ channel: "telegram", externalMessageId: String(req.body.update_id ?? ""), senderId: String(message.from?.id ?? "unknown"), senderName: message.from?.first_name ?? null, body, rawPayload: JSON.stringify(req.body), status: "processed" }).onConflictDoNothing().returning();
+    const result = extractBookingRequest(body, await db.select().from(outpatientClinicsTable));
+    await db.insert(outpatientBookingRequestsTable).values({ channel: "telegram", senderId: String(message.from?.id ?? "unknown"), rawText: body, extractedJson: JSON.stringify(result.extracted), missingFieldsJson: JSON.stringify(result.missingFields), status: result.missingFields.length ? "needs_data" : "needs_review" });
+    if (inbound) await db.update(inboundMessagesTable).set({ status: result.missingFields.length ? "needs_data" : "needs_review" }).where(eq(inboundMessagesTable.id, inbound.id));
+  }
 });
 
 export default router;

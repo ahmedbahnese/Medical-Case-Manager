@@ -24,6 +24,7 @@ import DischargeHistory from '@/pages/discharge-history';
 import AuditLog from '@/pages/audit-log';
 import QualityDashboard from '@/pages/quality-dashboard';
 import OutpatientClinics from '@/pages/outpatient-clinics';
+import OutpatientReports from '@/pages/outpatient-reports';
 import PatientQueuePortal from '@/pages/patient-queue-portal';
 import HospitalSite from '@/pages/hospital-site';
 
@@ -90,6 +91,7 @@ function Router() {
       <Route path="/case/:id"><ProtectedRoute component={CaseDetail} /></Route>
       <Route path="/waiting-cases"><ProtectedRoute component={WaitingCases} pageHref="/waiting-cases" /></Route>
       <Route path="/outpatient-clinics"><ProtectedRoute component={OutpatientClinics} pageHref="/outpatient-clinics" /></Route>
+      <Route path="/outpatient-reports"><ProtectedRoute component={OutpatientReports} pageHref="/outpatient-reports" /></Route>
       <Route path="/artificial-respiration"><ProtectedRoute component={RespirationList} pageHref="/artificial-respiration" /></Route>
 
       {/* Import */}
